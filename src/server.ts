@@ -4,8 +4,8 @@ import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
 
 // Server configuration for local development and Railway deployment
-export const PORT = parseInt(process.env.PORT || "3000", 10);
-export const HOST = process.env.HOST || "0.0.0.0";
+export const PORT = process.env.PORT || 3000;
+export const HOST = "0.0.0.0";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -48,11 +48,11 @@ function isH3SwallowedErrorBody(body: string): boolean {
   }
 }
 
-const handler = {
+export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
-      const serverEntry = await getServerEntry();
-      const response = await serverEntry.fetch(request, env, ctx);
+      const handler = await getServerEntry();
+      const response = await handler.fetch(request, env, ctx);
       return await normalizeCatastrophicSsrResponse(response);
     } catch (error) {
       console.error(error);
@@ -63,16 +63,4 @@ const handler = {
     }
   },
 };
-
-export default handler;
-
-// For Railway Node.js deployment: start HTTP server
-if (typeof globalThis !== "undefined" && !globalThis.fetch) {
-  const server = Bun.serve({
-    port: PORT,
-    hostname: HOST,
-    fetch: handler.fetch,
-  });
-  console.log(`Server running on http://${HOST}:${PORT}`);
-}
 
