@@ -1,0 +1,477 @@
+import { createServerFn } from "@tanstack/react-start";
+import { getRequest } from "@tanstack/react-start/server";
+import { z } from "zod";
+import { normalizeKePhone, isValidKePhone } from "@/lib/billing-helpers";
+
+export type PortalPackage = {
+  id: string;
+  name: string;
+  kind: "hotspot" | "pppoe";
+  price_kes: number;
+  duration_hours: number;
+  speed_down_mbps: number;
+  speed_up_mbps: number;
+  device_limit: number;
+};
+
+export type PortalTenantSettings = {
+  tenant_id: string;
+  business_name: string;
+  portal_title: string | null;
+  portal_subtitle: string | null;
+  brand_color: string;
+  accent_color: string;
+  theme_preset: "midnight" | "obsidian" | "sapphire" | "light";
+  announcement_text: string | null;
+  card_style: "pill" | "modern" | "minimal";
+  logo_url: string | null;
+  support_phone: string | null;
+  support_email: string | null;
+  terms_url: string | null;
+};
+
+export const getPortal = createServerFn({ method: "GET" })
+  .inputValidator((input: unknown) => z.object({ slug: z.string().min(1).max(80) }).parse(input))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    // First fetch tenant by slug
+    const { data: tenantRow } = await supabaseAdmin
+      .from("tenants")
+      .select("id, name")
+      .eq("slug", data.slug)
+      .eq("is_active", true)
+      .maybeSingle();
+
+    if (!tenantRow) return { tenant: null, packages: [] as PortalPackage[] };
+
+    const [{ data: settingsRow }, { data: packages }] = await Promise.all([
+      supabaseAdmin
+        .from("tenant_settings")
+        .select(
+          "portal_title, portal_subtitle, brand_color, accent_color, theme_preset, announcement_text, card_style, logo_url, support_phone, support_email, terms_url",
+        )
+        .eq("tenant_id", tenantRow.id)
+        .maybeSingle(),
+      supabaseAdmin
+        .from("packages")
+        .select("*")
+        .eq("tenant_id", tenantRow.id)
+        .eq("is_active", true)
+        .eq("kind", "hotspot")
+        .order("price_kes", { ascending: true }),
+    ]);
+
+    return {
+      tenant: {
+        tenant_id: tenantRow.id,
+        business_name: tenantRow.name,
+        portal_title: settingsRow?.portal_title ?? null,
+        portal_subtitle: settingsRow?.portal_subtitle ?? null,
+        brand_color: settingsRow?.brand_color ?? "#00A8E8",
+        accent_color: settingsRow?.accent_color ?? "#f97316",
+        theme_preset:
+          (settingsRow?.theme_preset as "midnight" | "obsidian" | "sapphire" | "light") ??
+          "midnight",
+        announcement_text: settingsRow?.announcement_text ?? null,
+        card_style: (settingsRow?.card_style as "pill" | "modern" | "minimal") ?? "pill",
+        logo_url: settingsRow?.logo_url ?? null,
+        support_phone: settingsRow?.support_phone ?? null,
+        support_email: settingsRow?.support_email ?? null,
+        terms_url: settingsRow?.terms_url ?? null,
+      } as PortalTenantSettings,
+      packages: (packages ?? []) as PortalPackage[],
+    };
+  });
+
+export const startPortalPurchase = createServerFn({ method: "POST" })
+  .inputValidator((input: unknown) =>
+    z
+      .object({
+        slug: z.string().min(1).max(80),
+        packageId: z.string().uuid(),
+        phone: z.string().min(9).max(20),
+        routerId: z.string().uuid().optional().nullable(),
+        mac: z.string().optional().nullable(),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data }) => {
+    const phone = normalizeKePhone(data.phone);
+    if (!isValidKePhone(phone)) {
+      throw new Error("Enter a valid Safaricom phone number, e.g. 0712345678 or 0112345678");
+    }
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: tenant } = await supabaseAdmin
+      .from("tenants")
+      .select(
+        "id, slug, is_active, subscription_status, trial_end_at, subscription_end_at, mpesa_shortcode, mpesa_shortcode_kind, mpesa_account_ref",
+      )
+      .eq("slug", data.slug)
+      .maybeSingle();
+    if (!tenant || !tenant.is_active) throw new Error("This hotspot is not available right now");
+
+    // Enforce billing check: If tenant's trial or subscription is expired, block customer STK Push
+    const { computeBillingState } = await import("@/lib/subscription");
+    const billing = computeBillingState({
+      subscription_status: tenant.subscription_status,
+      trial_end_at: tenant.trial_end_at,
+      subscription_end_at: tenant.subscription_end_at,
+    });
+    if (!billing.isEntitled) {
+      throw new Error("This hotspot service is temporarily suspended due to subscription expiry.");
+    }
+
+    const { data: pkg } = await supabaseAdmin
+      .from("packages")
+      .select("id, name, price_kes, tenant_id, is_active")
+      .eq("id", data.packageId)
+      .eq("tenant_id", tenant.id)
+      .maybeSingle();
+    if (!pkg || !pkg.is_active) throw new Error("That package is no longer available");
+
+    const origin = new URL(getRequest().url).origin;
+    const { resolveCallbackUrl } = await import("@/lib/mpesa.server");
+    const { stkPush } = await import("@/services/mpesa");
+    const callbackUrl = await resolveCallbackUrl(origin);
+
+    // Dynamic routing: customer Wi-Fi payments go to Tenant's M-Pesa Till/Paybill if saved
+    if (!tenant.mpesa_shortcode) {
+      throw new Error("This hotspot is not configured for payments. Please contact the owner.");
+    }
+    const isTill = tenant.mpesa_shortcode_kind === "till";
+    const push = await stkPush({
+      phone,
+      amount: pkg.price_kes,
+      accountReference: tenant.mpesa_account_ref || tenant.slug,
+      description: "Internet",
+      callbackUrl,
+      partyB: isTill ? undefined : tenant.mpesa_shortcode,
+      tillNumber: isTill ? tenant.mpesa_shortcode : undefined,
+      transactionType: isTill ? "CustomerBuyGoodsOnline" : "CustomerPayBillOnline",
+    });
+
+    await supabaseAdmin.from("transactions").insert({
+      tenant_id: tenant.id,
+      package_id: pkg.id,
+      kind: "customer_payment",
+      status: "pending",
+      phone,
+      amount_kes: pkg.price_kes,
+      checkout_request_id: push.checkoutRequestId,
+      raw: {
+        merchant_request_id: push.merchantRequestId,
+        response_code: push.responseCode,
+        source: "portal",
+        router_id: data.routerId ?? null,
+        mac: data.mac ?? null,
+        business_shortcode: tenant.mpesa_shortcode ?? null,
+      },
+    });
+
+    return {
+      checkoutRequestId: push.checkoutRequestId,
+      message: push.customerMessage,
+      amount: pkg.price_kes,
+    };
+  });
+
+export const getPortalPurchase = createServerFn({ method: "POST" })
+  .inputValidator((input: unknown) =>
+    z.object({ checkoutRequestId: z.string().min(4) }).parse(input),
+  )
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: txn } = await supabaseAdmin
+      .from("transactions")
+      .select("id, status, failure_reason, mpesa_receipt, voucher_id")
+      .eq("checkout_request_id", data.checkoutRequestId)
+      .eq("kind", "customer_payment")
+      .maybeSingle();
+    if (!txn) return { status: "pending" as const, code: null, receipt: null, failureReason: null };
+
+    if (txn.status === "pending") {
+      try {
+        const { stkPushQuery } = await import("@/lib/mpesa.server");
+        const queryRes = await stkPushQuery(data.checkoutRequestId, supabaseAdmin);
+
+        if (queryRes.resultCode !== "pending") {
+          const success = queryRes.resultCode === "0";
+          const receipt =
+            queryRes.raw?.CallbackMetadata?.Item?.find(
+              (i: Record<string, unknown>) => i.Name === "MpesaReceiptNumber",
+            )?.Value ?? null;
+
+          await supabaseAdmin
+            .from("transactions")
+            .update({
+              status: success ? "success" : "failed",
+              mpesa_receipt: receipt ? String(receipt) : null,
+              failure_reason: success ? null : queryRes.resultDesc,
+            })
+            .eq("checkout_request_id", data.checkoutRequestId);
+
+          if (success) {
+            const { activateCustomerPackage } = await import("@/lib/payments.functions");
+            await activateCustomerPackage(supabaseAdmin, txn.id, receipt ? String(receipt) : null);
+
+            // Re-fetch to get the newly created voucher_id
+            const { data: freshTxn } = await supabaseAdmin
+              .from("transactions")
+              .select("status, failure_reason, mpesa_receipt, voucher_id")
+              .eq("id", txn.id)
+              .maybeSingle();
+
+            if (freshTxn) {
+              let code: string | null = null;
+              if (freshTxn.voucher_id) {
+                const { data: v } = await supabaseAdmin
+                  .from("vouchers")
+                  .select("code")
+                  .eq("id", freshTxn.voucher_id)
+                  .maybeSingle();
+                code = v?.code ?? null;
+              }
+              return {
+                status: "success" as const,
+                code,
+                receipt: freshTxn.mpesa_receipt,
+                failureReason: null,
+              };
+            }
+          }
+
+          return {
+            status: success ? ("success" as const) : ("failed" as const),
+            code: null,
+            receipt: receipt ? String(receipt) : null,
+            failureReason: success ? null : queryRes.resultDesc,
+          };
+        }
+      } catch (err) {
+        // Ignore Daraja query errors to allow polling to continue
+      }
+    }
+
+    let code: string | null = null;
+    if (txn.voucher_id) {
+      const { data: v } = await supabaseAdmin
+        .from("vouchers")
+        .select("code")
+        .eq("id", txn.voucher_id)
+        .maybeSingle();
+      code = v?.code ?? null;
+    }
+    return {
+      status: txn.status as "pending" | "success" | "failed" | "cancelled",
+      code,
+      receipt: txn.mpesa_receipt,
+      failureReason: txn.failure_reason,
+    };
+  });
+
+export const redeemPortalVoucher = createServerFn({ method: "POST" })
+  .inputValidator((input: unknown) =>
+    z
+      .object({
+        slug: z.string().min(1).max(80),
+        code: z.string().min(3).max(30),
+        routerId: z.string().uuid().nullable().optional(),
+        mac: z.string().nullable().optional(),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: tenant } = await supabaseAdmin
+      .from("tenants")
+      .select("id, name, is_active")
+      .eq("slug", data.slug)
+      .maybeSingle();
+
+    if (!tenant || !tenant.is_active) {
+      throw new Error("This hotspot portal is currently unavailable.");
+    }
+
+    const cleanCode = data.code.trim().toUpperCase();
+
+    const { data: voucher, error } = await supabaseAdmin
+      .from("vouchers")
+      .select(
+        "id, code, status, expires_at, activated_at, package_id, phone, router_id, packages (id, name, duration_hours, speed_down_mbps, speed_up_mbps, device_limit, kind)",
+      )
+      .eq("tenant_id", tenant.id)
+      .ilike("code", cleanCode)
+      .maybeSingle();
+
+    if (error || !voucher) {
+      throw new Error("Invalid voucher code. Please check and try again.");
+    }
+
+    if (voucher.status === "expired") {
+      throw new Error("This voucher code has expired.");
+    }
+
+    const pkg = Array.isArray(voucher.packages) ? voucher.packages[0] : voucher.packages;
+    const durationHours = pkg?.duration_hours ?? 24;
+
+    const targetRouterId = data.routerId || voucher.router_id || null;
+    const mac = data.mac || null;
+
+    // If unused, activate it now
+    if (voucher.status === "unused") {
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + durationHours * 3_600_000).toISOString();
+
+      // Find or create customer associated with this voucher
+      let customerId: string | null = null;
+      const { data: existingCustomer } = await supabaseAdmin
+        .from("customers")
+        .select("id")
+        .eq("tenant_id", tenant.id)
+        .eq("username", voucher.code)
+        .maybeSingle();
+
+      if (existingCustomer) {
+        customerId = existingCustomer.id;
+        await supabaseAdmin
+          .from("customers")
+          .update({
+            package_id: voucher.package_id,
+            router_id: targetRouterId,
+            mac_address: mac,
+            expires_at: expiresAt,
+            status: "active",
+          })
+          .eq("id", customerId);
+      } else {
+        const { data: newCustomer } = await supabaseAdmin
+          .from("customers")
+          .insert({
+            tenant_id: tenant.id,
+            full_name: `Voucher User ${voucher.code}`,
+            phone: voucher.phone || "254700000000",
+            kind: pkg?.kind ?? "hotspot",
+            package_id: voucher.package_id,
+            router_id: targetRouterId,
+            username: voucher.code,
+            mac_address: mac,
+            expires_at: expiresAt,
+            status: "active",
+          })
+          .select("id")
+          .maybeSingle();
+        customerId = newCustomer?.id ?? null;
+      }
+
+      await supabaseAdmin
+        .from("vouchers")
+        .update({
+          status: "active",
+          activated_at: now.toISOString(),
+          expires_at: expiresAt,
+          router_id: targetRouterId,
+        })
+        .eq("id", voucher.id);
+
+      // Enqueue MikroTik commands for the activated voucher
+      if (targetRouterId) {
+        const { enqueueRouterCommands } = await import("@/lib/agent-commands.server");
+
+        if (pkg?.kind === "pppoe") {
+          await enqueueRouterCommands([
+            {
+              tenantId: tenant.id,
+              routerId: targetRouterId,
+              action: "pppoe.create_user",
+              payload: {
+                username: voucher.code,
+                password: voucher.code,
+                profile: pkg?.name ?? "emmatech-pppoe-prof",
+                comment: `Voucher ${voucher.code}`,
+              },
+            },
+          ]);
+        } else {
+          await enqueueRouterCommands([
+            {
+              tenantId: tenant.id,
+              routerId: targetRouterId,
+              action: "hotspot.create_user",
+              payload: {
+                username: voucher.code,
+                password: voucher.code,
+                profile: pkg?.name ?? "default",
+                limit_uptime_hours: durationHours,
+                rate_limit: `${pkg?.speed_up_mbps ?? 5}M/${pkg?.speed_down_mbps ?? 5}M`,
+                shared_users: pkg?.device_limit ?? 1,
+              },
+            },
+          ]);
+        }
+      }
+
+      await supabaseAdmin.from("audit_logs").insert({
+        tenant_id: tenant.id,
+        action: "portal.voucher_redeemed",
+        entity_type: "voucher",
+        entity_id: voucher.id,
+        metadata: { code: voucher.code, durationHours, mac },
+      });
+
+      return {
+        success: true,
+        code: voucher.code,
+        status: "active",
+        expiresAt,
+        packageName: pkg?.name ?? "Wi-Fi Plan",
+        durationHours,
+      };
+    }
+
+    // If already active, re-push MikroTik configuration just in case
+    if (voucher.status === "active" && targetRouterId) {
+      const { enqueueRouterCommands } = await import("@/lib/agent-commands.server");
+
+      if (pkg?.kind === "pppoe") {
+        await enqueueRouterCommands([
+          {
+            tenantId: tenant.id,
+            routerId: targetRouterId,
+            action: "pppoe.create_user",
+            payload: {
+              username: voucher.code,
+              password: voucher.code,
+              profile: pkg?.name ?? "emmatech-pppoe-prof",
+              comment: `Voucher ${voucher.code} (Re-push)`,
+            },
+          },
+        ]);
+      } else {
+        await enqueueRouterCommands([
+          {
+            tenantId: tenant.id,
+            routerId: targetRouterId,
+            action: "hotspot.create_user",
+            payload: {
+              username: voucher.code,
+              password: voucher.code,
+              profile: pkg?.name ?? "default",
+              limit_uptime_hours: durationHours,
+              rate_limit: `${pkg?.speed_up_mbps ?? 5}M/${pkg?.speed_down_mbps ?? 5}M`,
+              shared_users: pkg?.device_limit ?? 1,
+            },
+          },
+        ]);
+      }
+    }
+
+    return {
+      success: true,
+      code: voucher.code,
+      status: voucher.status,
+      expiresAt: voucher.expires_at,
+      packageName: pkg?.name ?? "Wi-Fi Plan",
+      durationHours,
+    };
+  });
