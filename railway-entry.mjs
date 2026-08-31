@@ -1,6 +1,6 @@
 import { createServer } from "http";
 import { fileURLToPath } from "url";
-import { dirname, join } from "path";
+import { dirname } from "path";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -20,30 +20,54 @@ const server = createServer(async (req, res) => {
       `http://${req.headers.host || `${HOST}:${PORT}`}`
     );
 
+    // Build request body
+    let body = null;
+    if (!["GET", "HEAD"].includes(req.method)) {
+      body = await new Promise((resolve) => {
+        const chunks = [];
+        req.on("data", (chunk) => chunks.push(chunk));
+        req.on("end", () => resolve(Buffer.concat(chunks)));
+      });
+    }
+
     const fetchRequest = new Request(url, {
       method: req.method,
       headers: req.headers,
-      body: ["GET", "HEAD"].includes(req.method) ? null : req,
+      body: body ? body : undefined,
     });
 
-    // Call the Cloudflare handler
-    const response = await handler.fetch(fetchRequest, {}, {});
+    // Call the Cloudflare handler with proper env and context
+    const env = process.env;
+    const context = {
+      waitUntil: (promise) => promise,
+    };
+
+    const response = await handler.fetch(fetchRequest, env, context);
 
     // Send response
     res.writeHead(response.status, Object.fromEntries(response.headers));
+    
     if (response.body) {
-      res.end(await response.text());
-    } else {
-      res.end();
+      const reader = response.body.getReader();
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          res.write(value);
+        }
+      } finally {
+        reader.releaseLock();
+      }
     }
+    res.end();
   } catch (error) {
     console.error("Server error:", error);
-    res.writeHead(500, { "content-type": "text/html" });
+    res.writeHead(500, { "content-type": "text/html; charset=utf-8" });
     res.end("<h1>500 Internal Server Error</h1>");
   }
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`🚀 Server listening on http://${HOST}:${PORT}`);
+  console.log(`➜ Listening on: http://${HOST}:${PORT}/ (all interfaces)`);
 });
 
