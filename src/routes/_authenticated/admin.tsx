@@ -22,7 +22,8 @@ export const Route = createFileRoute("/_authenticated/admin")({
       { title: "Platform admin · Wifi Billing" },
       {
         name: "description",
-        content: "Platform owner view of every ISP business, trial and subscription on Wifi Billing.",
+        content:
+          "Platform owner view of every ISP business, trial and subscription on Wifi Billing.",
       },
       { property: "og:title", content: "Platform admin · Wifi Billing" },
       { property: "og:description", content: "Manage every ISP business on the platform." },

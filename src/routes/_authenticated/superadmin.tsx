@@ -532,17 +532,24 @@ function SuperAdminPage() {
             )}
           </div>
 
-          <AlertDialog open={!!tenantToDelete} onOpenChange={(open) => !open && setTenantToDelete(null)}>
+          <AlertDialog
+            open={!!tenantToDelete}
+            onOpenChange={(open) => !open && setTenantToDelete(null)}
+          >
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>Permanently delete business?</AlertDialogTitle>
                 <AlertDialogDescription>
-                  Are you sure you want to permanently delete this suspended business? This action cannot be undone and will remove all associated data, customers, and routers.
+                  Are you sure you want to permanently delete this suspended business? This action
+                  cannot be undone and will remove all associated data, customers, and routers.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={confirmDeleteTenant} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                <AlertDialogAction
+                  onClick={confirmDeleteTenant}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
                   Delete Business
                 </AlertDialogAction>
               </AlertDialogFooter>

@@ -270,17 +270,25 @@ function DevicesPage() {
         </Card>
       </div>
 
-      <AlertDialog open={!!deviceToDelete} onOpenChange={(open) => !open && setDeviceToDelete(null)}>
+      <AlertDialog
+        open={!!deviceToDelete}
+        onOpenChange={(open) => !open && setDeviceToDelete(null)}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this device binding?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will remove the device from the network. The device will be disconnected and will need to authenticate via the captive portal next time it connects. This action cannot be undone.
+              This will remove the device from the network. The device will be disconnected and will
+              need to authenticate via the captive portal next time it connects. This action cannot
+              be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            <AlertDialogAction
+              onClick={confirmDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
               Delete Device
             </AlertDialogAction>
           </AlertDialogFooter>

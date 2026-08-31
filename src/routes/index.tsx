@@ -430,8 +430,8 @@ function Landing() {
               Engineered for Scale & Reliability
             </h2>
             <p className="mt-4 text-muted-foreground text-lg">
-              Wifi Billing replaces manual Winbox scripts, WhatsApp payment confirmations, and expired
-              subscriber friction with absolute automation.
+              Wifi Billing replaces manual Winbox scripts, WhatsApp payment confirmations, and
+              expired subscriber friction with absolute automation.
             </p>
           </div>
 
@@ -457,7 +457,9 @@ function Landing() {
         <section className="relative border-y border-border/60 bg-gradient-to-b from-card/30 to-card/60 py-24 z-20">
           <div className="mx-auto max-w-7xl px-6">
             <div className="text-center max-w-2xl mx-auto mb-16">
-              <h2 className="text-3xl font-bold sm:text-4xl font-display">How Wifi Billing Works</h2>
+              <h2 className="text-3xl font-bold sm:text-4xl font-display">
+                How Wifi Billing Works
+              </h2>
               <p className="mt-3 text-muted-foreground">
                 Four simple steps from zero to fully automated ISP billing.
               </p>
@@ -492,8 +494,8 @@ function Landing() {
               Ready to Automate Your ISP?
             </h2>
             <p className="mt-4 text-muted-foreground text-lg max-w-xl mx-auto">
-              Join Kenyan ISPs running their networks effortlessly with Wifi Billing. {trial} days free,
-              then KES {price.toLocaleString()} / month.
+              Join Kenyan ISPs running their networks effortlessly with Wifi Billing. {trial} days
+              free, then KES {price.toLocaleString()} / month.
             </p>
             <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
               <Button
