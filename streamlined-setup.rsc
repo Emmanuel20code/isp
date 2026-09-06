@@ -144,9 +144,9 @@
   :local hsDir "hotspot"
   :if ([:len [/file find name="flash"]] > 0) do={ :set hsDir "flash/hotspot" }
   :if ([:len [/ip hotspot profile find name="billing_hsprof"]] = 0) do={
-    /ip hotspot profile add name="billing_hsprof" hotspot-address=10.10.0.1 dns-name="hotspot.local" html-directory=$hsDir login-by=http-chap,http-pap,mac-cookie,cookie split-user-domain=no http-cookie-lifetime=1d use-radius=no ssl-certificate=none
+    /ip hotspot profile add name="billing_hsprof" hotspot-address=10.10.0.1 dns-name="hotspot.local" html-directory=$hsDir login-by=http-chap,http-pap,cookie split-user-domain=no http-cookie-lifetime=1d use-radius=no ssl-certificate=none
   } else={
-    /ip hotspot profile set [find name="billing_hsprof"] hotspot-address=10.10.0.1 dns-name="hotspot.local" html-directory=$hsDir login-by=http-chap,http-pap,mac-cookie,cookie split-user-domain=no http-cookie-lifetime=1d use-radius=no ssl-certificate=none
+    /ip hotspot profile set [find name="billing_hsprof"] hotspot-address=10.10.0.1 dns-name="hotspot.local" html-directory=$hsDir login-by=http-chap,http-pap,cookie split-user-domain=no http-cookie-lifetime=1d use-radius=no ssl-certificate=none
   }
 } on-error={}
 
@@ -155,13 +155,13 @@
   :local existingHs false
   :foreach h in=[/ip hotspot find interface="hotspot-bridge"] do={
     :set existingHs true
-    /ip hotspot set $h profile="billing_hsprof" disabled=no
+    /ip hotspot set $h profile="billing_hsprof" addresses-per-mac=1 disabled=no
   }
   :if (!$existingHs) do={
     :if ([:len [/ip hotspot find name="wfb-hotspot"]] = 0) do={
-      /ip hotspot add name="wfb-hotspot" interface="hotspot-bridge" profile="billing_hsprof" address-pool="hs-pool" disabled=no
+      /ip hotspot add name="wfb-hotspot" interface="hotspot-bridge" profile="billing_hsprof" address-pool="hs-pool" addresses-per-mac=1 disabled=no
     } else={
-      /ip hotspot set [find name="wfb-hotspot"] interface="hotspot-bridge" profile="billing_hsprof" disabled=no
+      /ip hotspot set [find name="wfb-hotspot"] interface="hotspot-bridge" profile="billing_hsprof" addresses-per-mac=1 disabled=no
     }
   }
 } on-error={}

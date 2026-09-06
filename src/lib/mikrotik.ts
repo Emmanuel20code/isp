@@ -336,9 +336,9 @@ add address=10.10.0.1/24 interface=hotspot-bridge
 :log info "WiFiBilling: Performing Hotspot profile coupling verification..."
 :local hsExists [/ip hotspot find where name=hotspot1]
 :if ([:len $hsExists] = 0) do={
-    /ip hotspot add name=hotspot1 interface=hotspot-bridge profile=hsprof1 address-pool=hotspot addresses-per-mac=5 disabled=no
+    /ip hotspot add name=hotspot1 interface=hotspot-bridge profile=hsprof1 address-pool=hotspot addresses-per-mac=1 disabled=no
 } else={
-    /ip hotspot set [find where name=hotspot1] interface=hotspot-bridge profile=hsprof1 address-pool=hotspot disabled=no
+    /ip hotspot set [find where name=hotspot1] interface=hotspot-bridge profile=hsprof1 address-pool=hotspot addresses-per-mac=1 disabled=no
 }
 
 # ─── WALLED-GARDEN IP ───────────────────────────────────────────────────
@@ -944,13 +944,13 @@ export function generateNetworkConfigurationScript(params: ScriptParams): string
 } on-error={};
 
 :do {
-  # Force all existing hotspot profiles to disable SSL and use a local domain name
-  /ip hotspot profile set [find] hotspot-address=10.10.0.1 dns-name="hotspot.lan" html-directory="hotspot" login-by=http-chap,http-pap,mac-cookie,cookie split-user-domain=no http-cookie-lifetime=1d use-radius=no ssl-certificate=none;
+  # Force all existing hotspot profiles to disable SSL, disable trial uptime, and use a local domain name
+  /ip hotspot profile set [find] hotspot-address=10.10.0.1 dns-name="hotspot.lan" html-directory="hotspot" login-by=http-chap,http-pap,cookie trial-uptime-limit=0s split-user-domain=no http-cookie-lifetime=1d use-radius=no ssl-certificate=none;
   
   :if ([:len [/ip hotspot profile find name="billing_hsprof"]] = 0) do={
-    /ip hotspot profile add name="billing_hsprof" hotspot-address=10.10.0.1 dns-name="hotspot.lan" html-directory="hotspot" login-by=http-chap,http-pap,mac-cookie,cookie split-user-domain=no http-cookie-lifetime=1d use-radius=no ssl-certificate=none;
+    /ip hotspot profile add name="billing_hsprof" hotspot-address=10.10.0.1 dns-name="hotspot.lan" html-directory="hotspot" login-by=http-chap,http-pap,cookie trial-uptime-limit=0s split-user-domain=no http-cookie-lifetime=1d use-radius=no ssl-certificate=none;
   } else={
-    /ip hotspot profile set [find name="billing_hsprof"] hotspot-address=10.10.0.1 dns-name="hotspot.lan" html-directory="hotspot" login-by=http-chap,http-pap,mac-cookie,cookie split-user-domain=no http-cookie-lifetime=1d use-radius=no ssl-certificate=none;
+    /ip hotspot profile set [find name="billing_hsprof"] hotspot-address=10.10.0.1 dns-name="hotspot.lan" html-directory="hotspot" login-by=http-chap,http-pap,cookie trial-uptime-limit=0s split-user-domain=no http-cookie-lifetime=1d use-radius=no ssl-certificate=none;
   };
 } on-error={};
 
