@@ -1027,6 +1027,32 @@ export async function activateCustomerPackage(
       ip: ipAddress,
     },
   });
+
+  // 6. Trigger OX Alpha Helper Agent for backend communication
+  try {
+    await db.from("ai_action_logs").insert({
+      agent: "ox-alpha",
+      action: "Trigger Helper: User Activation Sync",
+      tool: "mikrotik_backend_sync",
+      input: {
+        action: "backend.activation_sync",
+        tenantId: txn.tenant_id,
+        routerId,
+        customerId,
+        packageId: pkg.id,
+        voucherCode: voucher.code,
+        mac: macAddress,
+        hours,
+      },
+      status: "completed",
+      result: { message: "OX Alpha helper triggered successfully for backend sync" },
+      tenant_id: txn.tenant_id,
+    });
+    console.log(`[OX Alpha] Helper agent triggered for transaction ${txn.id}`);
+  } catch (oxErr) {
+    console.warn(`[OX Alpha] Failed to trigger helper agent:`, oxErr);
+  }
+
   console.log(
     `[Activation] Successfully completed activation and audit logging for transaction ${txnId}`,
   );
