@@ -583,7 +583,7 @@ export const triggerGithubPush = createServerFn({ method: "POST" })
     try {
       // 1. Initialize Git repository if not present
       if (!isGitRepo) {
-        logOutput += "[Git] Initializing new repository...\n";
+        logOutput += "[Git] Initializing local repository...\n";
         execSync("git init", { cwd: rootDir });
       }
 
@@ -595,11 +595,45 @@ export const triggerGithubPush = createServerFn({ method: "POST" })
         console.warn("Could not set git config locally:", err);
       }
 
-      // 3. Stage changes
-      logOutput += "[Git] Staging files...\n";
-      execSync("git add .", { cwd: rootDir });
+      const cleanRepo = repo
+        .replace(/^(https:\/\/github\.com\/|git@github\.com:)/, "")
+        .replace(/\.git$/, "");
+      const authUrl = `https://x-access-token:${token}@github.com/${cleanRepo}.git`;
 
-      // 4. Commit changes if any
+      // 3. Fetch remote branch if it exists to preserve lineage and prevent non-fast-forward rejection
+      let remoteBranchSynced = false;
+      try {
+        logOutput += `[Git] Checking remote branch ${branch}...\n`;
+        execSync(`git fetch "${authUrl}" ${branch}`, {
+          stdio: "pipe",
+          cwd: rootDir,
+          env: { ...process.env },
+        });
+        remoteBranchSynced = true;
+        logOutput += `[Git] Found remote branch ${branch}.\n`;
+      } catch {
+        logOutput += `[Git] Remote branch ${branch} not found or initial repository.\n`;
+      }
+
+      if (remoteBranchSynced) {
+        try {
+          execSync(`git update-ref refs/heads/${branch} FETCH_HEAD`, { cwd: rootDir });
+          execSync(`git symbolic-ref HEAD refs/heads/${branch}`, { cwd: rootDir });
+          execSync("git reset --mixed FETCH_HEAD", { cwd: rootDir });
+        } catch (alignErr) {
+          console.warn("[triggerGithubPush] Align with FETCH_HEAD notice:", alignErr);
+        }
+      } else {
+        try {
+          execSync(`git checkout -B ${branch}`, { cwd: rootDir });
+        } catch {}
+      }
+
+      // 4. Stage all current files
+      logOutput += "[Git] Staging files...\n";
+      execSync("git add -A", { cwd: rootDir });
+
+      // 5. Commit changes if any detected
       const status = execSync("git status --porcelain", { cwd: rootDir }).toString().trim();
       if (status) {
         logOutput += "[Git] Changes detected. Creating commit...\n";
@@ -607,7 +641,7 @@ export const triggerGithubPush = createServerFn({ method: "POST" })
           cwd: rootDir,
         });
       } else {
-        // If it's a freshly initialized repo, we might need a commit anyway
+        // If repo has 0 commits, make initial commit
         const commitCount = execSync("git rev-list --all --count || echo 0", { cwd: rootDir })
           .toString()
           .trim();
@@ -617,14 +651,9 @@ export const triggerGithubPush = createServerFn({ method: "POST" })
             cwd: rootDir,
           });
         } else {
-          logOutput += "[Git] No changes to commit, using existing commits.\n";
+          logOutput += "[Git] No uncommitted changes detected. Codebase matches repository.\n";
         }
       }
-
-      const cleanRepo = repo
-        .replace(/^(https:\/\/github\.com\/|git@github\.com:)/, "")
-        .replace(/\.git$/, "");
-      const authUrl = `https://x-access-token:${token}@github.com/${cleanRepo}.git`;
 
       const forceFlag = data.forcePush ? "--force" : "";
       logOutput += `[Git] Pushing to repository: ${cleanRepo} (branch: ${branch})...\n`;
@@ -647,7 +676,7 @@ export const triggerGithubPush = createServerFn({ method: "POST" })
       } catch (err: any) {
         const errMsg = err.stderr?.toString() || err.message || "Unknown error";
         const sanitizedMsg = errMsg
-          .replace(token, "ghp_••••••••••••")
+          .replace(new RegExp(token, "g"), "ghp_••••••••••••")
           .replace(/x-access-token:[^@]+@/g, "x-access-token:••••@");
 
         console.error("[triggerGithubPush] Push failed sanitized:", sanitizedMsg);
