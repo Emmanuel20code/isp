@@ -132,8 +132,7 @@ export const toggleDeviceStatus = createServerFn({ method: "POST" })
     if (fetchErr || !customer) throw new Error("Device not found");
 
     // Database enum 'customer_status' supports: 'active', 'disabled', 'expired'
-    const targetStatus: "active" | "disabled" =
-      data.status === "active" ? "active" : "disabled";
+    const targetStatus: "active" | "disabled" = data.status === "active" ? "active" : "disabled";
 
     const { error } = await supabase
       .from("customers")

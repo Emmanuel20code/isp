@@ -499,7 +499,10 @@ function TransactionsPage() {
                   <div className="flex items-center gap-2">
                     <CardTitle className="text-base font-semibold">Ledger Entries</CardTitle>
                     {dateFilter === "today" && (
-                      <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[10px]">
+                      <Badge
+                        variant="outline"
+                        className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[10px]"
+                      >
                         Today's View: {currency} {filteredRevenue.toLocaleString()}
                       </Badge>
                     )}
