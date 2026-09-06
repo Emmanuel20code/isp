@@ -145,7 +145,7 @@ export const toggleDeviceStatus = createServerFn({ method: "POST" })
 
     if (customer.mac_address) {
       const targetRouterIds: string[] = [];
-      if (customer.router_id) {
+      if (targetStatus === "active" && customer.router_id) {
         targetRouterIds.push(customer.router_id);
       } else {
         const { data: allRouters } = await supabase

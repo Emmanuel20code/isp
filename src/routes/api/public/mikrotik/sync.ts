@@ -273,10 +273,26 @@ async function handleSyncRequest(request: Request): Promise<Response> {
         .trim()
         .toUpperCase();
       if (mac) {
-        rscLines.push(`:log info "WiFiBilling: Unbinding MAC ${mac}...";`);
+        rscLines.push(`:log info "WiFiBilling: Unbinding MAC ${mac} (forcing captive portal)...";`);
         rscLines.push(
           `:do { /ip hotspot ip-binding remove [find mac-address="${mac}"]; } on-error={};`,
         );
+        rscLines.push(`:do {`);
+        rscLines.push(`  :foreach h in=[/ip hotspot host find mac-address="${mac}"] do={`);
+        rscLines.push(`    :local hip [/ip hotspot host get $h address];`);
+        rscLines.push(`    :if ([:len $hip] > 0) do={`);
+        rscLines.push(`      :do { /ip firewall connection remove [find src-address~$hip]; } on-error={};`);
+        rscLines.push(`      :do { /ip firewall connection remove [find dst-address~$hip]; } on-error={};`);
+        rscLines.push(`    };`);
+        rscLines.push(`  };`);
+        rscLines.push(`  :foreach l in=[/ip dhcp-server lease find mac-address="${mac}"] do={`);
+        rscLines.push(`    :local lip [/ip dhcp-server lease get $l address];`);
+        rscLines.push(`    :if ([:len $lip] > 0) do={`);
+        rscLines.push(`      :do { /ip firewall connection remove [find src-address~$lip]; } on-error={};`);
+        rscLines.push(`      :do { /ip firewall connection remove [find dst-address~$lip]; } on-error={};`);
+        rscLines.push(`    };`);
+        rscLines.push(`  };`);
+        rscLines.push(`} on-error={};`);
         rscLines.push(
           `:do { /ip hotspot active remove [find mac-address="${mac}"]; } on-error={};`,
         );
