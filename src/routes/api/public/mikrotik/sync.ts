@@ -264,6 +264,9 @@ async function handleSyncRequest(request: Request): Promise<Response> {
           `  /ip hotspot ip-binding set [find mac-address="${mac}"] type=bypassed comment="${comment}";`,
         );
         rscLines.push(`};`);
+        rscLines.push(`:do { /ip hotspot active remove [find mac-address="${mac}"]; } on-error={};`);
+        rscLines.push(`:do { /ip hotspot cookie remove [find mac-address="${mac}"]; } on-error={};`);
+        rscLines.push(`:do { /ip hotspot host remove [find mac-address="${mac}"]; } on-error={};`);
       }
     } else if (cmd.action === "hotspot.unbind_mac") {
       const mac = String(p.mac || "")

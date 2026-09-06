@@ -131,9 +131,13 @@ export const toggleDeviceStatus = createServerFn({ method: "POST" })
 
     if (fetchErr || !customer) throw new Error("Device not found");
 
+    // Database enum 'customer_status' supports: 'active', 'disabled', 'expired'
+    const targetStatus: "active" | "disabled" =
+      data.status === "active" ? "active" : "disabled";
+
     const { error } = await supabase
       .from("customers")
-      .update({ status: data.status as never })
+      .update({ status: targetStatus })
       .eq("id", data.id)
       .eq("tenant_id", tenantId);
 
@@ -157,7 +161,7 @@ export const toggleDeviceStatus = createServerFn({ method: "POST" })
           targetRouterIds.map((rId) => ({
             tenantId,
             routerId: rId,
-            action: data.status === "active" ? "hotspot.bind_mac" : "hotspot.unbind_mac",
+            action: targetStatus === "active" ? "hotspot.bind_mac" : "hotspot.unbind_mac",
             payload: {
               mac: customer.mac_address,
               comment: `emmatech-device:${data.id}`,

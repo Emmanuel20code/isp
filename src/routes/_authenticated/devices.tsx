@@ -102,13 +102,13 @@ function DevicesPage() {
 
   async function handleToggleStatus(id: string, currentStatus: string) {
     setUpdatingId(id);
-    const newStatus = currentStatus === "active" ? "suspended" : "active";
+    const newStatus = currentStatus === "active" ? "disabled" : "active";
     try {
       await callToggleStatus({ data: { id, status: newStatus } });
       toast.success(newStatus === "active" ? "Device activated" : "Device suspended");
       queryClient.invalidateQueries({ queryKey: ["devices"] });
     } catch (err) {
-      toast.error("Failed to update status");
+      toast.error(err instanceof Error ? err.message : "Failed to update status");
     } finally {
       setUpdatingId(null);
     }
@@ -167,7 +167,7 @@ function DevicesPage() {
                 mac_address: string;
                 routers?: { name: string };
               }) => (
-                <Card key={device.id} className={device.status === "suspended" ? "opacity-75" : ""}>
+                <Card key={device.id} className={device.status !== "active" ? "opacity-75" : ""}>
                   <CardContent className="p-5">
                     <div className="flex flex-wrap items-center justify-between gap-4">
                       <div>
@@ -248,6 +248,12 @@ function DevicesPage() {
                   className="uppercase font-mono"
                   required
                 />
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  <strong>Tip for Phones:</strong> Android & iPhones use a &ldquo;Randomized
+                  MAC&rdquo; by default for each Wi-Fi network. In phone Wi-Fi settings, set MAC
+                  type to <em>&ldquo;Use device MAC&rdquo;</em>, or enter the Wi-Fi specific
+                  randomized MAC shown in your connection details.
+                </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="name">Device Name</Label>
