@@ -205,10 +205,9 @@ export async function runBackgroundMaintenance(force = false): Promise<{
               commandsToQueue.push({
                 tenantId: c.tenant_id,
                 routerId: rid,
-                action: "pppoe.set_enabled",
+                action: "pppoe.delete_user",
                 payload: {
                   username: c.username,
-                  enabled: false,
                 },
               });
             } else {

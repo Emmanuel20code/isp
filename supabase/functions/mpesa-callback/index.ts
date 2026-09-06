@@ -150,10 +150,6 @@ serve(async (req: Request) => {
       const newStatus = isSuccess ? "success" : "failed";
       const receiptNumber = mpesaReceipt ?? txn.mpesa_receipt;
 
-      console.log(
-        `[PAYMENT_FLOW][1/5] Callback received: CheckoutRequestID=${checkoutRequestId}, ResultCode=${resultCode}, ResultDesc="${resultDesc}", Receipt=${receiptNumber || "none"}`,
-      );
-
       // Update the transaction record immediately in the database
       const rawObj = typeof txn.raw === "object" && txn.raw ? txn.raw : {};
       const updatedRaw = {
@@ -174,11 +170,9 @@ serve(async (req: Request) => {
         .eq("id", txn.id);
 
       if (updateError) {
-        console.error("[PAYMENT_FLOW][2/5] Error updating transaction status:", updateError);
+        console.error("[mpesa-callback] Error updating transaction status:", updateError);
       } else {
-        console.log(
-          `[PAYMENT_FLOW][2/5] Database updated: Transaction ${txn.id} status updated to: ${newStatus} (Receipt: ${receiptNumber || "none"})`,
-        );
+        console.log(`[mpesa-callback] Transaction ${txn.id} status updated to: ${newStatus}`);
       }
 
       // If Payment was Successful, trigger captive portal access grant & activate customer package immediately
@@ -423,15 +417,8 @@ async function grantCaptivePortalAccess(
         activated_at: new Date().toISOString(),
       });
 
-      console.log(
-        `[PAYMENT_FLOW][2/5] Database updated: Voucher ${voucher.code} created, Customer ${customerId} activated, Session initialized.`,
-      );
-
       // 3. Enqueue MikroTik router user provisioning commands using RouterManager
       if (routerId) {
-        console.log(
-          `[PAYMENT_FLOW][3/5] RouterOS request sending: Enqueuing provisioning command for router ${routerId}, user=${code}, kind=${pkg.kind ?? "hotspot"}, MAC=${macAddress || "none"}`,
-        );
         if (pkg.kind === "pppoe") {
           await routerManager.provisionPPPoEUser({
             tenantId: txn.tenant_id,
@@ -454,9 +441,6 @@ async function grantCaptivePortalAccess(
             comment: `M-Pesa ${txn.phone} - ${pkg.name}`,
           });
         }
-        console.log(
-          `[PAYMENT_FLOW][4/5] Router response: Provisioning command successfully enqueued in router_commands for router ${routerId}`,
-        );
       }
     }
 

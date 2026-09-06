@@ -130,9 +130,6 @@ export function usePaymentStatus(
         });
       }
       setIsInternetGranted(true);
-      console.log(
-        `[PAYMENT_FLOW][5/5] Frontend polling detected authorization: User authorized, code=${code || voucherId}, receipt=${receipt || "none"}`,
-      );
       toast.success("Payment successful! Internet access authorized.");
     };
 

@@ -943,10 +943,6 @@ export async function activateCustomerPackage(
     })
     .eq("id", txn.id);
 
-  console.log(
-    `[PAYMENT_FLOW][2/5] Database updated: Transaction ${txn.id} linked, Customer ${customerId} activated, Voucher ${voucher.code} issued (Expires ${expiresAt})`,
-  );
-
   // 4. Enqueue Router Commands for target router
   const targetRouterIds = routerId
     ? [routerId]
@@ -960,10 +956,12 @@ export async function activateCustomerPackage(
     );
   } else {
     const routerManager = new RouterManagementService(db);
+    const { MikroTikApiManager } = await import("@/lib/mikrotik-api.server");
+    const mikrotikApi = new MikroTikApiManager(db);
 
     for (const rId of targetRouterIds) {
       console.log(
-        `[PAYMENT_FLOW][3/5] RouterOS request sending: Triggering provisioning on router ${rId} for user ${code} (Kind: ${pkg.kind || "hotspot"}, MAC: ${macAddress || "none"}, IP: ${ipAddress || "none"})`,
+        `[Activation] Enqueuing provisioning command for router: ${rId}, code: ${voucher.code}, MAC: ${macAddress}, IP: ${ipAddress}`,
       );
       try {
         if (pkg.kind === "pppoe") {
@@ -974,7 +972,6 @@ export async function activateCustomerPackage(
             password: pppPassword,
             kind: "pppoe",
             profile: pkg.name ?? "emmatech-pppoe-prof",
-            rateLimit: `${pkg.speed_up_mbps ?? 10}M/${pkg.speed_down_mbps ?? 10}M`,
             comment: `M-Pesa ${txn.phone} - Renewal`,
           });
         } else {
@@ -994,11 +991,11 @@ export async function activateCustomerPackage(
           });
         }
         console.log(
-          `[PAYMENT_FLOW][4/5] Router provisioning successfully completed for router ${rId}`,
+          `[Activation] Successfully enqueued router provisioning command for router ${rId}`,
         );
       } catch (cmdErr) {
         console.error(
-          `[PAYMENT_FLOW][4/5] CRITICAL ERROR: Failed router provisioning on router ${rId}:`,
+          `[Activation] CRITICAL: Failed to enqueue command for router ${rId}:`,
           cmdErr,
         );
         throw cmdErr;
@@ -1022,6 +1019,6 @@ export async function activateCustomerPackage(
     },
   });
   console.log(
-    `[PAYMENT_FLOW] Activation workflow completed successfully for transaction ${txnId} (Voucher: ${voucher.code})`,
+    `[Activation] Successfully completed activation and audit logging for transaction ${txnId}`,
   );
 }

@@ -254,16 +254,13 @@ export function CaptivePortalView({
   const handleAutoConnect = useCallback(() => {
     if (!activeVoucherCode) return;
 
-    console.log(
-      `[PAYMENT_FLOW][5/5] Frontend redirect: Auto-login initiated for voucher: ${activeVoucherCode}`,
-    );
-
-    // Safely determine the primary login URL
+    // Safely determine the login URL, but strictly avoid .local domains due to mDNS resolution bugs on Android/Apple
     const loginUrl =
       redirectParams.linkLoginOnly ||
       redirectParams.linkLogin ||
       (redirectParams.ip ? `http://${redirectParams.ip.replace(/\.\d+$/, ".1")}/login` : null);
 
+    // Candidates for common router IPs if not provided by redirect
     const candidates = [
       loginUrl,
       "http://10.10.0.1/login",
@@ -272,111 +269,65 @@ export function CaptivePortalView({
       "http://login.wifibilling.site/login",
     ].filter(Boolean) as string[];
 
-    // Rewrite hotspot.local if present
+    // Forcibly rewrite hotspot.local to the default IP to avoid name resolution failures
     const finalizedCandidates = candidates.map((url) =>
       url.includes("hotspot.local") ? url.replace("hotspot.local", "10.10.0.1") : url,
     );
 
     setAutoConnectAttempted(true);
-    setAutoConnectStatus("Activating Internet Access on Router...");
+    setAutoConnectStatus("Establishing Internet Access...");
 
-    // Create a background iframe to isolate login POST from main window navigation
-    let iframe = document.getElementById("mikrotik-auth-frame") as HTMLIFrameElement | null;
-    if (!iframe) {
-      iframe = document.createElement("iframe");
-      iframe.id = "mikrotik-auth-frame";
-      iframe.name = "mikrotik-auth-frame";
-      iframe.style.display = "none";
-      iframe.style.width = "0";
-      iframe.style.height = "0";
-      iframe.style.border = "none";
-      document.body.appendChild(iframe);
-    }
-
-    // Submit login requests to candidate gateway URLs in background
+    // Submit to ALL candidates (hidden forms)
     finalizedCandidates.forEach((url, index) => {
       setTimeout(() => {
-        // Method 1: Background iframe form submission
+        const form = document.createElement("form");
+        form.method = "POST";
+        form.action = url;
+        form.style.display = "none";
+
+        const usernameInput = document.createElement("input");
+        usernameInput.type = "hidden";
+        usernameInput.name = "username";
+        usernameInput.value = activeVoucherCode;
+        form.appendChild(usernameInput);
+
+        const passwordInput = document.createElement("input");
+        passwordInput.type = "hidden";
+        passwordInput.name = "password";
+        passwordInput.value = activeVoucherCode;
+        form.appendChild(passwordInput);
+
+        if (redirectParams.linkOrig) {
+          const dstInput = document.createElement("input");
+          dstInput.type = "hidden";
+          dstInput.name = "dst";
+          dstInput.value = redirectParams.linkOrig;
+          form.appendChild(dstInput);
+        }
+
+        document.body.appendChild(form);
         try {
-          const form = document.createElement("form");
-          form.method = "POST";
-          form.action = url;
-          form.target = "mikrotik-auth-frame";
-          form.style.display = "none";
-
-          const usernameInput = document.createElement("input");
-          usernameInput.type = "hidden";
-          usernameInput.name = "username";
-          usernameInput.value = activeVoucherCode;
-          form.appendChild(usernameInput);
-
-          const passwordInput = document.createElement("input");
-          passwordInput.type = "hidden";
-          passwordInput.name = "password";
-          passwordInput.value = activeVoucherCode;
-          form.appendChild(passwordInput);
-
-          if (redirectParams.linkOrig) {
-            const dstInput = document.createElement("input");
-            dstInput.type = "hidden";
-            dstInput.name = "dst";
-            dstInput.value = redirectParams.linkOrig;
-            form.appendChild(dstInput);
-          }
-
-          document.body.appendChild(form);
           form.submit();
-          setTimeout(() => {
-            try {
-              document.body.removeChild(form);
-            } catch {
-              // ignore cleanup error
-            }
-          }, 1000);
-        } catch {
-          // ignore form submission error
+        } catch (e) {
+          // Ignore failures for specific candidates
         }
-
-        // Method 2: Parallel fetch with no-cors to trigger router login handler
-        try {
-          const formData = new URLSearchParams();
-          formData.append("username", activeVoucherCode);
-          formData.append("password", activeVoucherCode);
-          if (redirectParams.linkOrig) {
-            formData.append("dst", redirectParams.linkOrig);
-          }
-          fetch(url, {
-            method: "POST",
-            mode: "no-cors",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: formData.toString(),
-          }).catch(() => {});
-        } catch {
-          // ignore fetch error
-        }
-      }, index * 150);
+      }, index * 200);
     });
 
-    // Step 5: Frontend redirect & auto-refresh
+    // After a short delay, show a redirecting status
     setTimeout(() => {
       if (mounted.current) {
-        setAutoConnectStatus("Internet Authorized! Connected.");
-        console.log(
-          `[PAYMENT_FLOW][5/5] Frontend redirect: Connection confirmed. LinkOrig=${redirectParams.linkOrig || "none"}`,
-        );
-
+        setAutoConnectStatus("Connected! Redirecting...");
+        // If we have an original destination, try to go there after 3 seconds as a fallback
         if (redirectParams.linkOrig) {
           setTimeout(() => {
             if (mounted.current) {
-              console.log(
-                `[PAYMENT_FLOW][5/5] Frontend redirecting browser to ${redirectParams.linkOrig}`,
-              );
               window.location.href = redirectParams.linkOrig!;
             }
-          }, 1500);
+          }, 3000);
         }
       }
-    }, 1800);
+    }, 2000);
   }, [activeVoucherCode, redirectParams]);
 
   useEffect(() => {

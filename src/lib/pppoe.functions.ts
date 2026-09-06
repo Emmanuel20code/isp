@@ -3,40 +3,11 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { enqueueRouterCommands } from "@/lib/agent-commands.server";
 import { startOfMonthUtc, startOfTodayUtc } from "@/lib/billing-helpers";
 import { computeRouterStatus } from "@/lib/mikrotik";
-import { getTenantRoutersForDropdown } from "@/lib/network.functions";
-
-export { getTenantRoutersForDropdown };
-
-async function resolveTenantId(supabase: any, userId: string): Promise<string> {
-  const { data: member } = await supabase
-    .from("tenant_members")
-    .select("tenant_id")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (member?.tenant_id) return member.tenant_id as string;
-
-  const { data: tenant } = await supabase
-    .from("tenants")
-    .select("id")
-    .limit(1)
-    .maybeSingle();
-
-  if (!tenant?.id) {
-    throw new Error("No business tenant found for your account.");
-  }
-
-  return tenant.id as string;
-}
 
 export const getPPPoEStats = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { supabase, userId } = context;
-    const tenantId = await resolveTenantId(supabase, userId).catch(() => null);
-    if (!tenantId) {
-      return { total: 0, active: 0, expired: 0, suspended: 0, online: 0, incomeToday: 0, incomeMonth: 0, routers: [] };
-    }
+    const { supabase, tenantId } = context;
 
     const dayStart = startOfTodayUtc().toISOString();
     const monthStart = startOfMonthUtc().toISOString();
@@ -72,10 +43,10 @@ export const getPPPoEStats = createServerFn({ method: "GET" })
         .select("id", { count: "exact", head: true })
         .eq("tenant_id", tenantId)
         .eq("kind", "pppoe")
-        .eq("status", "disabled"),
+        .eq("status", "suspended"),
       supabase
         .from("routers")
-        .select("id, name, status, last_seen_at, active_pppoe_users, public_ip, ros_version, onboarded_at, is_disabled, model")
+        .select("id, name, status, last_seen_at, active_pppoe_users, public_ip, ros_version, onboarded_at, is_disabled, model, lan_subnet")
         .eq("tenant_id", tenantId)
         .order("created_at", { ascending: false }),
       // Only get transactions for PPPoE customers
@@ -122,13 +93,10 @@ export const getPPPoEStats = createServerFn({ method: "GET" })
 export const getPPPoERouters = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { supabase, userId } = context;
-    const tenantId = await resolveTenantId(supabase, userId).catch(() => null);
-    if (!tenantId) return [];
-
+    const { supabase, tenantId } = context;
     const { data: routers } = await supabase
       .from("routers")
-      .select("id, name, status, last_seen_at, active_pppoe_users, public_ip, ros_version, onboarded_at, is_disabled, model")
+      .select("id, name, status, last_seen_at, active_pppoe_users, public_ip, ros_version, onboarded_at, is_disabled, model, lan_subnet")
       .eq("tenant_id", tenantId)
       .order("created_at", { ascending: false });
 
@@ -141,10 +109,7 @@ export const getPPPoERouters = createServerFn({ method: "GET" })
 export const getPPPoECustomers = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { supabase, userId } = context;
-    const tenantId = await resolveTenantId(supabase, userId).catch(() => null);
-    if (!tenantId) return [];
-
+    const { supabase, tenantId } = context;
     const { data } = await supabase
       .from("customers")
       .select(
@@ -168,53 +133,28 @@ export type PPPoECustomerInput = {
   username: string;
   password?: string | null;
   package_id?: string | null;
-  router_id: string; // Strictly required
+  router_id?: string | null;
   status?: string | null;
   expires_at?: string | null;
 };
 
 export const savePPPoECustomer = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((input: any) => {
-    const d = input?.data !== undefined ? input.data : input;
-    return (d || {}) as PPPoECustomerInput;
-  })
+  .validator((data: PPPoECustomerInput) => data)
   .handler(async ({ context, data }) => {
-    const { supabase, userId } = context;
-    const tenantId = await resolveTenantId(supabase, userId);
-    const inputData = data || ({} as PPPoECustomerInput);
-    const isNew = !inputData.id;
+    const { supabase, tenantId } = context;
+    const isNew = !data.id;
 
-    const cleanPackageId =
-      inputData.package_id && inputData.package_id !== "none" && String(inputData.package_id).trim() !== ""
-        ? String(inputData.package_id)
-        : null;
-
-    const cleanRouterId =
-      inputData.router_id && inputData.router_id !== "none" && String(inputData.router_id).trim() !== ""
-        ? String(inputData.router_id)
-        : null;
-
-    if (!cleanRouterId) {
-      throw new Error("A target MikroTik router must be selected to manage this PPPoE customer.");
-    }
-
-    let calculatedExpiry = inputData.expires_at;
+    let calculatedExpiry = data.expires_at;
     let pkg: { name: string; duration_hours: number; speed_up_mbps: number; speed_down_mbps: number } | null = null;
 
-    if (cleanPackageId) {
-      const { data: pkgData, error: pkgErr } = await supabase
+    if (data.package_id) {
+      const { data: pkgData } = await supabase
         .from("packages")
         .select("name, duration_hours, speed_up_mbps, speed_down_mbps")
-        .eq("id", cleanPackageId)
-        .maybeSingle();
-
-      if (pkgErr) {
-        console.warn("Failed to fetch package details:", pkgErr.message);
-      } else {
-        pkg = pkgData;
-      }
-
+        .eq("id", data.package_id)
+        .single();
+      pkg = pkgData;
       if (!calculatedExpiry && pkg?.duration_hours) {
         calculatedExpiry = new Date(Date.now() + pkg.duration_hours * 3600 * 1000).toISOString();
       }
@@ -222,58 +162,46 @@ export const savePPPoECustomer = createServerFn({ method: "POST" })
 
     const payload = {
       tenant_id: tenantId,
-      full_name: inputData.full_name || "",
-      phone: inputData.phone || "",
+      full_name: data.full_name,
+      phone: data.phone,
       kind: "pppoe",
-      username: inputData.username || "",
-      password: inputData.password || inputData.username || "",
-      package_id: cleanPackageId,
-      router_id: cleanRouterId,
-      status: inputData.status || "active",
+      username: data.username,
+      password: data.password || data.username,
+      package_id: data.package_id || null,
+      router_id: data.router_id || null,
+      status: data.status || "active",
       expires_at: calculatedExpiry || null,
     };
 
-    let customerId = inputData.id;
+    let customerId = data.id;
 
     if (isNew) {
       const { data: newCust, error } = await supabase
         .from("customers")
         .insert(payload)
         .select("id")
-        .maybeSingle();
-
-      if (error) {
-        throw new Error(error.message || "Failed to create customer in database.");
-      }
-      if (!newCust || !newCust.id) {
-        throw new Error("Customer creation returned no record from database.");
-      }
+        .single();
+      if (error) throw error;
       customerId = newCust.id;
     } else {
-      const { error } = await supabase
-        .from("customers")
-        .update(payload)
-        .eq("id", inputData.id);
-
-      if (error) {
-        throw new Error(error.message || "Failed to update customer in database.");
-      }
+      const { error } = await supabase.from("customers").update(payload).eq("id", data.id);
+      if (error) throw error;
     }
 
     // Sync with router
-    if (cleanRouterId) {
+    if (data.router_id) {
       await enqueueRouterCommands([
         {
           tenantId,
-          routerId: cleanRouterId,
+          routerId: data.router_id,
           action: "pppoe.create_user",
           payload: {
-            username: inputData.username,
-            password: inputData.password || inputData.username,
+            username: data.username,
+            password: data.password || data.username,
             profile: pkg?.name || "default",
             rate_limit: pkg ? `${pkg.speed_up_mbps || 10}M/${pkg.speed_down_mbps || 10}M` : undefined,
-            disabled: (inputData.status || "active") !== "active",
-            comment: `PPPoE: ${inputData.full_name} (${inputData.phone})`,
+            disabled: (data.status || "active") !== "active",
+            comment: `PPPoE: ${data.full_name} (${data.phone})`,
           },
         },
       ]);
@@ -284,26 +212,21 @@ export const savePPPoECustomer = createServerFn({ method: "POST" })
 
 export const suspendPPPoECustomer = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((input: any) => {
-    const d = input?.data !== undefined ? input.data : input;
-    return (d || {}) as { id: string; status: string };
-  })
+  .validator((data: { id: string; status: string }) => data)
   .handler(async ({ context, data }) => {
-    const { supabase, userId } = context;
-    const tenantId = await resolveTenantId(supabase, userId);
-    if (!data?.id) throw new Error("Customer ID is required");
-
+    const { supabase, tenantId } = context;
     const { data: customer } = await supabase
       .from("customers")
       .select("*")
       .eq("id", data.id)
-      .maybeSingle();
+      .single();
 
     if (!customer) throw new Error("Customer not found");
 
     await supabase.from("customers").update({ status: data.status }).eq("id", data.id);
 
     if (customer.router_id) {
+      // On MikroTik, we either disable the user or change profile to 'expired'
       await enqueueRouterCommands([
         {
           tenantId,
@@ -323,21 +246,16 @@ export const suspendPPPoECustomer = createServerFn({ method: "POST" })
 
 export const resetPPPoEPassword = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((input: any) => {
-    const d = input?.data !== undefined ? input.data : input;
-    return (d || {}) as { id: string; password?: string };
-  })
+  .validator((data: { id: string; password?: string }) => data)
   .handler(async ({ context, data }) => {
-    const { supabase, userId } = context;
-    const tenantId = await resolveTenantId(supabase, userId);
-    if (!data?.id) throw new Error("Customer ID is required");
+    const { supabase, tenantId } = context;
     const password = data.password || Math.random().toString(36).slice(-8);
 
     const { data: customer } = await supabase
       .from("customers")
       .select("*")
       .eq("id", data.id)
-      .maybeSingle();
+      .single();
     if (!customer) throw new Error("Customer not found");
 
     await supabase.from("customers").update({ password }).eq("id", data.id);
@@ -361,15 +279,9 @@ export const resetPPPoEPassword = createServerFn({ method: "POST" })
 
 export const syncPPPoERouter = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((input: any) => {
-    const d = input?.data !== undefined ? input.data : input;
-    return (d || {}) as { routerId: string };
-  })
+  .validator((data: { routerId: string }) => data)
   .handler(async ({ context, data }) => {
-    const { supabase, userId } = context;
-    const tenantId = await resolveTenantId(supabase, userId);
-    if (!data?.routerId) throw new Error("Router ID is required");
-
+    const { supabase, tenantId } = context;
     const { data: customers } = await supabase
       .from("customers")
       .select("*, packages(name)")
@@ -379,64 +291,28 @@ export const syncPPPoERouter = createServerFn({ method: "POST" })
 
     if (!customers || customers.length === 0) return { success: true, synced: 0 };
 
-    const commands = [
-      {
-        tenantId,
-        routerId: data.routerId,
-        action: "pppoe.setup_pool",
-        payload: {
-          activePool: "PPPOE ACTIVE POOL",
-          activeRange: "10.0.0.2-10.9.255.255,10.11.0.1-10.255.255.254",
-          capacity: "16M+",
-          localAddress: "10.0.0.1",
-        },
+    const commands = customers.map((c) => ({
+      tenantId,
+      routerId: data.routerId,
+      action: "pppoe.create_user",
+      payload: {
+        username: c.username,
+        password: c.password,
+        profile: c.packages?.name || "default",
+        disabled: c.status !== "active",
+        comment: `Sync: ${c.id}`,
       },
-      ...customers.map((c) => ({
-        tenantId,
-        routerId: data.routerId,
-        action: "pppoe.create_user",
-        payload: {
-          username: c.username,
-          password: c.password,
-          profile: c.packages?.name || "default",
-          disabled: c.status !== "active",
-          comment: `Sync: ${c.id}`,
-        },
-      })),
-    ];
+    }));
 
     await enqueueRouterCommands(commands);
 
     return { success: true, synced: commands.length };
   });
 
-export const deployMillionPPPoEPool = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .validator((input: any) => {
-    const d = input?.data !== undefined ? input.data : input;
-    return (d || {}) as { routerId: string };
-  })
-  .handler(async ({ context, data }) => {
-    const { supabase, userId } = context;
-    const tenantId = await resolveTenantId(supabase, userId);
-    if (!data?.routerId) throw new Error("Router ID is required");
-
-    const { RouterManagementService } = await import("@/lib/router-management.server");
-    const service = new RouterManagementService(supabase);
-    await service.setupHighCapacityPPPoEPool(tenantId, data.routerId);
-
-    return {
-      success: true,
-      message: "High-capacity PPPoE IP pool (16,711,676 active + 1,048,574 expired IPs) deployed to router.",
-    };
-  });
-
 export const getPPPoEActiveSessions = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { supabase, userId } = context;
-    const tenantId = await resolveTenantId(supabase, userId).catch(() => null);
-    if (!tenantId) return [];
+    const { supabase, tenantId } = context;
 
     // Fetch customers marked as active with PPPoE
     const { data: activeCustomers } = await supabase

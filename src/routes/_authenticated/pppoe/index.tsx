@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { AppShell } from "@/components/AppShell";
 import { getMyContext } from "@/lib/tenancy.functions";
 import {
@@ -13,9 +13,8 @@ import {
   suspendPPPoECustomer,
   resetPPPoEPassword,
   syncPPPoERouter,
-  deployMillionPPPoEPool,
 } from "@/lib/pppoe.functions";
-import { getPackages, listNetwork, deployHighCapacityHotspotPool } from "@/lib/network.functions";
+import { getPackages } from "@/lib/network.functions";
 import {
   Users,
   Activity,
@@ -38,13 +37,6 @@ import {
   Check,
   Globe,
   Dices,
-  Layers,
-  Server,
-  Terminal,
-  Network,
-  Database,
-  Cpu,
-  Wifi,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -129,7 +121,6 @@ function PPPoEManager() {
   const fetchContext = useServerFn(getMyContext);
   const fetchStats = useServerFn(getPPPoEStats);
   const fetchRouters = useServerFn(getPPPoERouters);
-  const fetchNetwork = useServerFn(listNetwork);
   const fetchCustomers = useServerFn(getPPPoECustomers);
   const fetchSessions = useServerFn(getPPPoEActiveSessions);
   const fetchPackages = useServerFn(getPackages);
@@ -137,82 +128,27 @@ function PPPoEManager() {
   const suspendCustomer = useServerFn(suspendPPPoECustomer);
   const resetPassword = useServerFn(resetPPPoEPassword);
   const syncRouter = useServerFn(syncPPPoERouter);
-  const deployPoolFn = useServerFn(deployMillionPPPoEPool);
-  const deployHotspotPoolFn = useServerFn(deployHighCapacityHotspotPool);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<CustomerItem | null>(null);
   const [generatedPassword, setGeneratedPassword] = useState("");
-  const [selectedPackage, setSelectedPackage] = useState<string>("");
-  const [selectedRouter, setSelectedRouter] = useState<string>("");
   const [isSaving, setIsSaving] = useState(false);
   const [isSyncing, setIsSyncing] = useState<string | null>(null);
-  const [isDeployingPool, setIsDeployingPool] = useState<string | null>(null);
-  const [isDeployingHotspotPool, setIsDeployingHotspotPool] = useState<string | null>(null);
-  const [selectedPoolRouter, setSelectedPoolRouter] = useState<string>("");
-  const [copiedPoolScript, setCopiedPoolScript] = useState(false);
-  const [copiedHotspotScript, setCopiedHotspotScript] = useState(false);
-  const [poolScriptMode, setPoolScriptMode] = useState<"hotspot" | "pppoe" | "dual">("hotspot");
   const [searchTerm, setSearchTerm] = useState("");
   const [copiedLink, setCopiedLink] = useState(false);
 
   const context = useQuery({ queryKey: ["my-context"], queryFn: () => fetchContext() });
   const stats = useQuery({ queryKey: ["pppoe-stats"], queryFn: () => fetchStats() });
-  const network = useQuery({ queryKey: ["network"], queryFn: () => fetchNetwork() });
   const routers = useQuery({ queryKey: ["pppoe-routers"], queryFn: () => fetchRouters() });
   const customers = useQuery({ queryKey: ["pppoe-customers"], queryFn: () => fetchCustomers() });
   const sessions = useQuery({ queryKey: ["pppoe-sessions"], queryFn: () => fetchSessions() });
   const packages = useQuery({ queryKey: ["packages"], queryFn: () => fetchPackages() });
 
   const routerList = useMemo(() => {
-    if (network.data?.routers && network.data.routers.length > 0) {
-      return network.data.routers as RouterItem[];
-    }
     if (routers.data && routers.data.length > 0) return routers.data as RouterItem[];
     if (stats.data?.routers && stats.data.routers.length > 0) return stats.data.routers as RouterItem[];
     return [] as RouterItem[];
-  }, [network.data?.routers, routers.data, stats.data?.routers]);
-
-  const pppPackages = useMemo(() => {
-    if (!packages.data) return [];
-    return (packages.data as { id: string; name: string; price_kes: number; type?: string }[]).filter(
-      (p) => !p.type || p.type === "pppoe" || p.type === "both",
-    );
-  }, [packages.data]);
-
-  useEffect(() => {
-    if (!selectedPackage && pppPackages.length > 0) {
-      setSelectedPackage(pppPackages[0].id);
-    }
-  }, [pppPackages, selectedPackage]);
-
-  useEffect(() => {
-    if (!selectedRouter && routerList.length > 0) {
-      setSelectedRouter(routerList[0].id);
-    }
-  }, [routerList, selectedRouter]);
-
-  useEffect(() => {
-    if (!selectedPoolRouter && routerList.length > 0) {
-      setSelectedPoolRouter(routerList[0].id);
-    }
-  }, [routerList, selectedPoolRouter]);
-
-  const openAddModal = () => {
-    setEditingCustomer(null);
-    setGeneratedPassword("");
-    setSelectedPackage(pppPackages[0]?.id || "");
-    setSelectedRouter(routerList[0]?.id || "");
-    setIsModalOpen(true);
-  };
-
-  const openEditModal = (customer: CustomerItem) => {
-    setEditingCustomer(customer);
-    setGeneratedPassword("");
-    setSelectedPackage(customer.package_id || pppPackages[0]?.id || "");
-    setSelectedRouter(customer.router_id || routerList[0]?.id || "");
-    setIsModalOpen(true);
-  };
+  }, [routers.data, stats.data?.routers]);
 
   const filteredCustomers = useMemo(() => {
     if (!customers.data) return [];
@@ -240,29 +176,19 @@ function PPPoEManager() {
     setIsSaving(true);
     const formData = new FormData(e.currentTarget);
     const passwordVal = (formData.get("password") as string) || generatedPassword || editingCustomer?.password || null;
-    const formRouterId = (formData.get("router_id") as string) || selectedRouter;
-    const formPackageId = (formData.get("package_id") as string) || selectedPackage;
-
-    const router_id = formRouterId && formRouterId !== "none" ? formRouterId : "";
-    if (!router_id) {
-      toast.error("Please select an onboarded router to manage this PPPoE customer.");
-      setIsSaving(false);
-      return;
-    }
-
     const data = {
       id: editingCustomer?.id,
       full_name: String(formData.get("full_name") || ""),
       phone: String(formData.get("phone") || ""),
       username: String(formData.get("username") || ""),
       password: passwordVal,
-      package_id: formPackageId && formPackageId !== "none" ? formPackageId : null,
-      router_id,
+      package_id: (formData.get("package_id") as string) || null,
+      router_id: (formData.get("router_id") as string) || null,
       status: editingCustomer?.status || "active",
     };
 
     try {
-      await saveCustomer({ data });
+      await saveCustomer(data);
       toast.success(editingCustomer ? "Customer updated" : "Customer added & provisioned on MikroTik");
       queryClient.invalidateQueries({ queryKey: ["pppoe-customers"] });
       queryClient.invalidateQueries({ queryKey: ["pppoe-stats"] });
@@ -280,7 +206,7 @@ function PPPoEManager() {
   const handleSuspend = async (id: string, currentStatus: string) => {
     const newStatus = currentStatus === "active" ? "suspended" : "active";
     try {
-      await suspendCustomer({ data: { id, status: newStatus } });
+      await suspendCustomer({ id, status: newStatus });
       toast.success(`Customer ${newStatus === "active" ? "activated" : "suspended"}`);
       queryClient.invalidateQueries({ queryKey: ["pppoe-customers"] });
       queryClient.invalidateQueries({ queryKey: ["pppoe-stats"] });
@@ -291,7 +217,7 @@ function PPPoEManager() {
 
   const handleResetPassword = async (id: string) => {
     try {
-      const res = await resetPassword({ data: { id } });
+      const res = await resetPassword({ id });
       toast.success(`Password reset successfully. New password: ${res.password}`);
       queryClient.invalidateQueries({ queryKey: ["pppoe-customers"] });
     } catch (err: unknown) {
@@ -302,7 +228,7 @@ function PPPoEManager() {
   const handleSync = async (routerId: string) => {
     setIsSyncing(routerId);
     try {
-      const res = await syncRouter({ data: { routerId } });
+      const res = await syncRouter({ routerId });
       toast.success(`Successfully queued ${res.synced} synchronization commands`);
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Sync failed");
@@ -311,148 +237,12 @@ function PPPoEManager() {
     }
   };
 
-  const handleDeployPool = async (routerId: string) => {
-    if (!routerId) {
-      toast.error("Please select a target MikroTik router.");
-      return;
-    }
-    setIsDeployingPool(routerId);
-    try {
-      const res = await deployPoolFn({ data: { routerId } });
-      toast.success(res?.message || "16M+ PPPoE IP Pool deployed successfully!");
-      queryClient.invalidateQueries({ queryKey: ["pppoe-routers"] });
-      queryClient.invalidateQueries({ queryKey: ["pppoe-stats"] });
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to deploy PPPoE IP pool to router.");
-    } finally {
-      setIsDeployingPool(null);
-    }
-  };
-
-  const handleDeployHotspotPool = async (routerId: string) => {
-    if (!routerId) {
-      toast.error("Please select a target MikroTik router.");
-      return;
-    }
-    setIsDeployingHotspotPool(routerId);
-    try {
-      const res = await deployHotspotPoolFn({ data: { routerId } });
-      toast.success(res?.message || "65K+ Hotspot IP Pool deployed successfully!");
-      queryClient.invalidateQueries({ queryKey: ["pppoe-routers"] });
-      queryClient.invalidateQueries({ queryKey: ["network"] });
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to deploy Hotspot IP pool to router.");
-    } finally {
-      setIsDeployingHotspotPool(null);
-    }
-  };
-
-  const handleDeployBothPools = async (routerId: string) => {
-    if (!routerId) {
-      toast.error("Please select a target MikroTik router.");
-      return;
-    }
-    setIsDeployingPool(routerId);
-    setIsDeployingHotspotPool(routerId);
-    try {
-      await deployHotspotPoolFn({ data: { routerId } });
-      await deployPoolFn({ data: { routerId } });
-      toast.success("Complete Carrier Stack (65K+ Hotspot + 16.7M+ PPPoE) deployed successfully!");
-      queryClient.invalidateQueries({ queryKey: ["pppoe-routers"] });
-      queryClient.invalidateQueries({ queryKey: ["network"] });
-      queryClient.invalidateQueries({ queryKey: ["pppoe-stats"] });
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to deploy full carrier stack.");
-    } finally {
-      setIsDeployingPool(null);
-      setIsDeployingHotspotPool(null);
-    }
-  };
-
-  const poolTerminalScript = `# MikroTik High-Capacity PPPoE Pool Setup (16,711,676 Active + 1,048,574 Expired Subscribers)
-:log info "WiFiBilling: Configuring High-Capacity PPPoE Pool (16M+ connections)...";
-/ip pool add name="PPPOE ACTIVE POOL" ranges=10.0.0.2-10.9.255.255,10.11.0.1-10.255.255.254 comment="WiFiBilling 16M+ Active Subscribers Pool";
-/ip pool add name="expired_pppoe_pool" ranges=172.16.0.2-172.31.255.254 comment="WiFiBilling 1M+ Expired Subscribers Pool";
-/ppp profile set [find name="default"] local-address=10.0.0.1 remote-address="PPPOE ACTIVE POOL" dns-server=8.8.8.8,1.1.1.1;
-/ip firewall nat add chain=srcnat action=masquerade src-address=10.0.0.0/8 comment="PPPOE NAT";
-/ip firewall nat add chain=srcnat action=masquerade src-address=172.16.0.0/12 comment="EXPIRED PPPOE NAT";
-:log info "WiFiBilling: High-Capacity PPPoE Pool (16M+ active & 1M+ expired) successfully configured.";`;
-
-  const hotspotTerminalScript = `# MikroTik High-Capacity Hotspot Pool Setup (65,525 Concurrent Devices on 10.10.0.0/16)
-:log info "WiFiBilling: Configuring High-Capacity Hotspot Pool (65K+ hosts)...";
-:do {
-  :local hasGw false;
-  :foreach i in=[/ip address find] do={
-    :local addrVal [/ip address get $i address];
-    :if ([:pick $addrVal 0 9] = "10.10.0.1") do={
-      /ip address set $i address=10.10.0.1/16;
-      :set hasGw true;
-    };
-  };
-  :if (!$hasGw) do={
-    /ip address add address=10.10.0.1/16 interface="br-hotspot" comment="WiFiBilling Hotspot Gateway";
-  };
-} on-error={};
-:do {
-  :if ([:len [/ip pool find name="hs-pool"]] = 0) do={
-    /ip pool add name="hs-pool" ranges=10.10.0.10-10.10.255.254 comment="WiFiBilling 65K+ Hotspot Pool";
-  } else={
-    /ip pool set [find name="hs-pool"] ranges=10.10.0.10-10.10.255.254;
-  };
-  :if ([:len [/ip pool find name="hotspot"]] > 0) do={
-    /ip pool set [find name="hotspot"] ranges=10.10.0.10-10.10.255.254;
-  };
-} on-error={};
-:do {
-  :if ([:len [/ip dhcp-server network find address="10.10.0.0/16"]] = 0) do={
-    /ip dhcp-server network add address=10.10.0.0/16 gateway=10.10.0.1 netmask=16 dns-server=10.10.0.1 comment="WiFiBilling Hotspot Network (65K+)";
-  } else={
-    /ip dhcp-server network set [find address="10.10.0.0/16"] gateway=10.10.0.1 netmask=16 dns-server=10.10.0.1;
-  };
-} on-error={};
-:do {
-  /ip dhcp-server set [find address-pool="hs-pool"] lease-time=30m;
-  /ip dhcp-server set [find address-pool="hotspot"] lease-time=30m;
-} on-error={};
-:do {
-  :if ([:len [/ip firewall nat find where comment="WiFiBilling Hotspot NAT"]] = 0) do={
-    /ip firewall nat add chain=srcnat action=masquerade src-address=10.10.0.0/16 comment="WiFiBilling Hotspot NAT";
-  } else={
-    /ip firewall nat set [find comment="WiFiBilling Hotspot NAT"] src-address=10.10.0.0/16;
-  };
-} on-error={};
-:log info "WiFiBilling: High-Capacity Hotspot Pool (65,525 hosts on 10.10.0.0/16) successfully configured.";`;
-
-  const dualTerminalScript = `# ==============================================================================
-# Complete Carrier Stack: 65K+ Hotspot (10.10.0.0/16) + 16.7M+ PPPoE (10.0.0.0/8)
-# Zero subnet conflicts: PPPoE safely bypasses 10.10.0.0/16 reserved for Hotspot
-# ==============================================================================
-` + hotspotTerminalScript + `\n\n` + poolTerminalScript;
-
-  const copyScriptByMode = (mode: "hotspot" | "pppoe" | "dual") => {
-    const text =
-      mode === "hotspot"
-        ? hotspotTerminalScript
-        : mode === "pppoe"
-          ? poolTerminalScript
-          : dualTerminalScript;
-    navigator.clipboard.writeText(text);
-    if (mode === "hotspot") {
-      setCopiedHotspotScript(true);
-      setTimeout(() => setCopiedHotspotScript(false), 2500);
-    } else {
-      setCopiedPoolScript(true);
-      setTimeout(() => setCopiedPoolScript(false), 2500);
-    }
-    toast.success(`RouterOS ${mode.toUpperCase()} commands copied to clipboard!`);
-  };
-
-  const copyPoolScript = () => copyScriptByMode("pppoe");
-  const copyHotspotScript = () => copyScriptByMode("hotspot");
-
   if (context.isPending) return null;
   const tenant = context.data.tenant;
   if (!tenant) return null;
+
+  const pppPackages =
+    (packages.data as PackageItem[] | undefined)?.filter((p) => p.kind === "pppoe") || [];
 
   const portalUrl = typeof window !== "undefined"
     ? `${window.location.origin}/portal/${tenant.slug}?tab=pppoe`
@@ -487,7 +277,11 @@ function PPPoEManager() {
             </Button>
             <Button
               className="gap-2"
-              onClick={openAddModal}
+              onClick={() => {
+                setEditingCustomer(null);
+                setGeneratedPassword("");
+                setIsModalOpen(true);
+              }}
             >
               <Plus className="size-4" /> Add PPPoE Customer
             </Button>
@@ -545,9 +339,6 @@ function PPPoEManager() {
             </TabsTrigger>
             <TabsTrigger value="routers" className="gap-2">
               <Router className="size-3.5" /> Routers ({routerList.length})
-            </TabsTrigger>
-            <TabsTrigger value="pools" className="gap-2">
-              <Layers className="size-3.5" /> IP Pools (16M+)
             </TabsTrigger>
           </TabsList>
 
@@ -705,102 +496,6 @@ function PPPoEManager() {
                   </div>
                 </CardContent>
               </Card>
-
-              {/* High-Capacity PPPoE IP Pool (16M+ Scale) Card */}
-              <Card className="md:col-span-2 border-primary/20 bg-gradient-to-r from-primary/5 via-background to-background">
-                <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-2 gap-2">
-                  <div className="flex items-center gap-2.5">
-                    <div className="rounded-lg bg-primary/10 p-2 text-primary">
-                      <Layers className="size-5" />
-                    </div>
-                    <div>
-                      <CardTitle className="text-base font-display font-bold flex items-center gap-2">
-                        High-Capacity PPPoE IP Pool (16 Million+ Connections)
-                        <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/30">
-                          Carrier Grade Scale
-                        </Badge>
-                      </CardTitle>
-                      <CardDescription className="text-xs">
-                        Class A Subnet allocation enabling up to 16,711,676 active subscriber connections with zero IP exhaustion
-                      </CardDescription>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-xs h-8 gap-1.5"
-                      onClick={copyPoolScript}
-                    >
-                      {copiedPoolScript ? <Check className="size-3.5 text-emerald-600" /> : <Copy className="size-3.5" />}
-                      Copy Script
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4 pt-2">
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div className="p-3 rounded-lg border bg-background/60 space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-muted-foreground font-medium">Active Subscribers Pool</span>
-                        <Badge variant="success" className="text-[10px]">16.7M Hosts</Badge>
-                      </div>
-                      <p className="font-mono text-xs font-semibold text-foreground">10.0.0.2 - 10.255.255.254</p>
-                      <p className="text-[11px] text-muted-foreground">Gateway: 10.0.0.1 (/32 point-to-point)</p>
-                    </div>
-
-                    <div className="p-3 rounded-lg border bg-background/60 space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-muted-foreground font-medium">Expired Subscribers Pool</span>
-                        <Badge variant="secondary" className="text-[10px]">1.05M Hosts</Badge>
-                      </div>
-                      <p className="font-mono text-xs font-semibold text-foreground">172.16.0.2 - 172.31.255.254</p>
-                      <p className="text-[11px] text-muted-foreground">Walled-Garden Redirect Subnet</p>
-                    </div>
-
-                    <div className="p-3 rounded-lg border bg-background/60 space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-muted-foreground font-medium">Firewall NAT</span>
-                        <Badge variant="outline" className="text-[10px]">Masquerade</Badge>
-                      </div>
-                      <p className="font-mono text-xs font-semibold text-foreground">10.0.0.0/8 & 172.16.0.0/12</p>
-                      <p className="text-[11px] text-muted-foreground">Protected 10.10.0.0/16 hotspot space</p>
-                    </div>
-                  </div>
-
-                  {routerList.length > 0 && (
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2 border-t text-xs">
-                      <div className="flex items-center gap-2">
-                        <span className="text-muted-foreground">Target Router:</span>
-                        <Select value={selectedPoolRouter} onValueChange={setSelectedPoolRouter}>
-                          <SelectTrigger className="h-8 text-xs w-[200px]">
-                            <SelectValue placeholder="Select router" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {routerList.map((r: RouterItem) => (
-                              <SelectItem key={r.id} value={r.id}>
-                                {r.name} ({r.public_ip || "Agent"})
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <Button
-                        size="sm"
-                        className="h-8 text-xs gap-1.5 font-medium"
-                        onClick={() => handleDeployPool(selectedPoolRouter)}
-                        disabled={!selectedPoolRouter || isDeployingPool === selectedPoolRouter}
-                      >
-                        {isDeployingPool === selectedPoolRouter ? (
-                          <Loader2 className="size-3.5 animate-spin" />
-                        ) : (
-                          <Zap className="size-3.5" />
-                        )}
-                        Deploy 16M+ Pool to Router
-                      </Button>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
             </div>
           </TabsContent>
 
@@ -907,7 +602,13 @@ function PPPoEManager() {
                                   </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end" className="w-44">
-                                  <DropdownMenuItem onClick={() => openEditModal(c)}>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setEditingCustomer(c);
+                                      setGeneratedPassword("");
+                                      setIsModalOpen(true);
+                                    }}
+                                  >
                                     <Pencil className="mr-2 size-3.5" /> Edit Details
                                   </DropdownMenuItem>
                                   <DropdownMenuItem onClick={() => handleResetPassword(c.id)}>
@@ -1139,404 +840,6 @@ function PPPoEManager() {
               </CardContent>
             </Card>
           </TabsContent>
-
-          <TabsContent value="pools" className="space-y-6">
-            {/* Header / Intro */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div>
-                <h2 className="text-xl font-display font-bold">Carrier-Scale IP Pool Architecture</h2>
-                <p className="text-xs text-muted-foreground">
-                  Unified high-capacity provisioning for 65K+ Hotspot guest clients and 16.7M+ PPPoE fiber/wireless subscribers.
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5 text-xs h-8"
-                  onClick={() => copyScriptByMode(poolScriptMode)}
-                >
-                  {(poolScriptMode === "hotspot" ? copiedHotspotScript : copiedPoolScript) ? (
-                    <Check className="size-3.5 text-emerald-600" />
-                  ) : (
-                    <Copy className="size-3.5" />
-                  )}
-                  Copy {poolScriptMode.toUpperCase()} Commands
-                </Button>
-              </div>
-            </div>
-
-            {/* Spec Cards Grid */}
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              {/* Hotspot Card */}
-              <Card className="border-sky-500/30 bg-sky-500/5">
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <Badge variant="outline" className="text-[10px] bg-sky-500/10 text-sky-600 border-sky-500/30">
-                      Hotspot Guest WiFi
-                    </Badge>
-                    <Wifi className="size-4 text-sky-500" />
-                  </div>
-                  <CardTitle className="text-lg font-bold mt-2">65,525 Devices</CardTitle>
-                  <CardDescription className="text-xs">Class B Subnet (10.10.0.0/16)</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-2 text-xs pt-0">
-                  <div className="rounded bg-background/80 p-2.5 space-y-1 font-mono text-[11px] border">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Pool Name:</span>
-                      <span className="font-semibold text-foreground">hs-pool</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Pool Range:</span>
-                      <span className="font-semibold text-sky-600">10.10.0.10 - 10.10.255.254</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Gateway:</span>
-                      <span className="font-semibold text-foreground">10.10.0.1/16</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">DHCP Lease:</span>
-                      <span className="font-semibold text-foreground">30m (Fast Recycle)</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Isolation:</span>
-                      <span className="text-emerald-500 font-semibold">Horizon 1 (Anti-Storm)</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">NAT:</span>
-                      <span className="text-foreground">10.10.0.0/16 masquerade</span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* PPPoE Active Card */}
-              <Card className="border-emerald-500/30 bg-emerald-500/5">
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <Badge variant="success" className="text-[10px]">Active PPPoE</Badge>
-                    <Network className="size-4 text-emerald-500" />
-                  </div>
-                  <CardTitle className="text-lg font-bold mt-2">16,711,676 IPs</CardTitle>
-                  <CardDescription className="text-xs">Class A Subnet (10.0.0.0/8)</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-2 text-xs pt-0">
-                  <div className="rounded bg-background/80 p-2.5 space-y-1 font-mono text-[11px] border">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Pool Name:</span>
-                      <span className="font-semibold text-foreground">PPPOE ACTIVE POOL</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Block A:</span>
-                      <span className="font-semibold text-emerald-600">10.0.0.2 - 10.9.255.255</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Block B:</span>
-                      <span className="font-semibold text-emerald-600">10.11.0.1 - 10.255.255.254</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Gateway:</span>
-                      <span className="font-semibold text-foreground">10.0.0.1</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Addressing:</span>
-                      <span className="font-semibold text-emerald-600">/32 Point-to-Point</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Hotspot Safe:</span>
-                      <span className="text-sky-500 font-semibold">10.10.0.0/16 skipped</span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* PPPoE Expired Card */}
-              <Card className="border-rose-500/30 bg-rose-500/5">
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <Badge variant="destructive" className="text-[10px]">Expired PPPoE</Badge>
-                    <ShieldAlert className="size-4 text-rose-500" />
-                  </div>
-                  <CardTitle className="text-lg font-bold mt-2">1,048,574 IPs</CardTitle>
-                  <CardDescription className="text-xs">Class B Subnet (172.16.0.0/12)</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-2 text-xs pt-0">
-                  <div className="rounded bg-background/80 p-2.5 space-y-1 font-mono text-[11px] border">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Pool Name:</span>
-                      <span className="font-semibold text-foreground">expired_pppoe_pool</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Ranges:</span>
-                      <span className="font-semibold text-rose-600">172.16.0.2 - 172.31.255.254</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Gateway:</span>
-                      <span className="font-semibold text-foreground">172.16.0.1</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Action:</span>
-                      <span className="font-semibold text-foreground">Walled Garden Portal</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">M-Pesa:</span>
-                      <span className="text-emerald-500 font-semibold">Always Allowed</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">NAT:</span>
-                      <span className="text-foreground">172.16.0.0/12 masquerade</span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Total Carrier Scale & Zero Storms Card */}
-              <Card className="border-primary/30 bg-primary/5">
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/30">
-                      Total Coexistence
-                    </Badge>
-                    <Database className="size-4 text-primary" />
-                  </div>
-                  <CardTitle className="text-lg font-bold mt-2">17.8 Million+</CardTitle>
-                  <CardDescription className="text-xs">Hotspot + PPPoE Combined</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-2 text-xs pt-0">
-                  <div className="rounded bg-background/80 p-2.5 space-y-1 font-mono text-[11px] border">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Hotspot Cap:</span>
-                      <span className="font-semibold text-sky-500">65,525 Hosts</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Active PPPoE:</span>
-                      <span className="font-semibold text-emerald-500">16,711,676 Hosts</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Expired PPPoE:</span>
-                      <span className="font-semibold text-rose-500">1,048,574 Hosts</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Subnet Clash:</span>
-                      <span className="font-semibold text-emerald-600">0% (100% Segregated)</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">DNS Forward:</span>
-                      <span className="font-semibold text-foreground">8.8.8.8, 1.1.1.1</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">RouterOS:</span>
-                      <span className="font-semibold text-foreground">v6.x & v7.x Ready</span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Architecture Explainer Card */}
-            <Card className="border-border bg-card/60">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base font-display font-bold flex items-center gap-2">
-                  <Cpu className="size-4 text-primary" />
-                  Network Topology: Why Hotspot is /16 (65K) and PPPoE is /8 (16.7M)
-                </CardTitle>
-                <CardDescription className="text-xs">
-                  Engineering justification behind subnet sizing, broadcast isolation, and zero-conflict IP routing
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3 text-xs text-muted-foreground">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div className="p-3 rounded-lg border bg-background/50 space-y-1.5">
-                    <div className="flex items-center gap-1.5 font-semibold text-foreground text-sm">
-                      <Wifi className="size-4 text-sky-500" />
-                      Hotspot Layer-2 Broadcast Boundary (10.10.0.0/16)
-                    </div>
-                    <p>
-                      Guest Hotspots operate over Ethernet and Wi-Fi where broadcast packets (ARP, DHCP discoveries, mDNS) are flooded to all wireless radios. Placing a full <code className="font-mono text-foreground">/8</code> on a wireless bridge causes severe <strong>broadcast storms</strong> that overwhelm access point CPUs and degrade radio airtime.
-                    </p>
-                    <p>
-                      A <code className="font-mono text-foreground">/16</code> network provides an immense capacity of <strong>65,525 simultaneous guest devices</strong> with a <strong>30-minute DHCP lease</strong> for rapid recycling, while keeping broadcast domain bounds strictly managed.
-                    </p>
-                  </div>
-
-                  <div className="p-3 rounded-lg border bg-background/50 space-y-1.5">
-                    <div className="flex items-center gap-1.5 font-semibold text-foreground text-sm">
-                      <Layers className="size-4 text-emerald-500" />
-                      PPPoE Layer-3 Point-to-Point Virtual Tunnels (10.0.0.0/8)
-                    </div>
-                    <p>
-                      PPPoE encapsulates subscriber traffic into virtual point-to-point tunnels with dedicated <code className="font-mono text-foreground">/32</code> host routes. Because no Layer-2 broadcast packet can leak across separate PPP interfaces, there is <strong>zero broadcast storm risk</strong> regardless of subnet size.
-                    </p>
-                    <p>
-                      The carrier pool spans <strong>16,711,676 active subscriber addresses</strong> while systematically omitting the <code className="font-mono text-foreground">10.10.0.0/16</code> range, guaranteeing that Hotspot and PPPoE run harmoniously on the same MikroTik router.
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Router Deployment Card */}
-            <Card className="bg-card/50">
-              <CardHeader>
-                <CardTitle className="text-base font-display font-bold flex items-center gap-2">
-                  <Server className="size-4 text-primary" />
-                  Deploy High-Capacity IP Pools to MikroTik Router
-                </CardTitle>
-                <CardDescription className="text-xs">
-                  Provisions IP pools, DHCP networks, PPP profiles, and firewall NAT rules directly via API or sync queue.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {routerList.length === 0 ? (
-                  <div className="text-center py-6 text-sm text-muted-foreground">
-                    <p>No routers connected yet. Onboard a MikroTik router first to deploy high-capacity pools.</p>
-                  </div>
-                ) : (
-                  <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 p-4 rounded-lg border bg-background/40">
-                    <div className="space-y-1">
-                      <p className="font-semibold text-sm">Select Target Router</p>
-                      <p className="text-xs text-muted-foreground">
-                        Pool will be deployed to <code className="text-xs font-mono">/ip pool</code>, <code className="text-xs font-mono">/ip dhcp-server</code>, <code className="text-xs font-mono">/ppp profile</code>, and <code className="text-xs font-mono">/ip firewall nat</code>
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2.5">
-                      <Select value={selectedPoolRouter} onValueChange={setSelectedPoolRouter}>
-                        <SelectTrigger className="h-9 text-xs w-[200px]">
-                          <SelectValue placeholder="Choose router" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {routerList.map((r: RouterItem) => (
-                            <SelectItem key={r.id} value={r.id}>
-                              {r.name} ({r.public_ip || "Agent"})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-9 text-xs gap-1.5 font-medium border-sky-500/30 hover:bg-sky-500/10 text-sky-600 dark:text-sky-400"
-                        onClick={() => handleDeployHotspotPool(selectedPoolRouter)}
-                        disabled={!selectedPoolRouter || isDeployingHotspotPool === selectedPoolRouter}
-                      >
-                        {isDeployingHotspotPool === selectedPoolRouter ? (
-                          <Loader2 className="size-3.5 animate-spin" />
-                        ) : (
-                          <Wifi className="size-3.5" />
-                        )}
-                        Deploy 65K+ Hotspot
-                      </Button>
-
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-9 text-xs gap-1.5 font-medium border-emerald-500/30 hover:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                        onClick={() => handleDeployPool(selectedPoolRouter)}
-                        disabled={!selectedPoolRouter || isDeployingPool === selectedPoolRouter}
-                      >
-                        {isDeployingPool === selectedPoolRouter ? (
-                          <Loader2 className="size-3.5 animate-spin" />
-                        ) : (
-                          <Network className="size-3.5" />
-                        )}
-                        Deploy 16M+ PPPoE
-                      </Button>
-
-                      <Button
-                        size="sm"
-                        className="h-9 text-xs gap-1.5 font-medium bg-primary text-primary-foreground"
-                        onClick={() => handleDeployBothPools(selectedPoolRouter)}
-                        disabled={
-                          !selectedPoolRouter ||
-                          isDeployingPool === selectedPoolRouter ||
-                          isDeployingHotspotPool === selectedPoolRouter
-                        }
-                      >
-                        {isDeployingPool === selectedPoolRouter || isDeployingHotspotPool === selectedPoolRouter ? (
-                          <Loader2 className="size-3.5 animate-spin" />
-                        ) : (
-                          <Zap className="size-3.5" />
-                        )}
-                        Deploy Both (Full Carrier Stack)
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Terminal Script & Manual Configuration */}
-            <Card className="bg-card/50">
-              <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between pb-3 gap-3">
-                <div>
-                  <CardTitle className="text-base font-display font-bold flex items-center gap-2">
-                    <Terminal className="size-4 text-primary" />
-                    MikroTik Terminal / WinBox Commands
-                  </CardTitle>
-                  <CardDescription className="text-xs">
-                    Paste these commands directly into WinBox Terminal or SSH session if configuring manually
-                  </CardDescription>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="flex rounded-lg border bg-muted/30 p-0.5 text-xs">
-                    <button
-                      type="button"
-                      className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
-                        poolScriptMode === "hotspot" ? "bg-background shadow-xs text-foreground" : "text-muted-foreground"
-                      }`}
-                      onClick={() => setPoolScriptMode("hotspot")}
-                    >
-                      Hotspot (65K+)
-                    </button>
-                    <button
-                      type="button"
-                      className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
-                        poolScriptMode === "pppoe" ? "bg-background shadow-xs text-foreground" : "text-muted-foreground"
-                      }`}
-                      onClick={() => setPoolScriptMode("pppoe")}
-                    >
-                      PPPoE (16.7M+)
-                    </button>
-                    <button
-                      type="button"
-                      className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors ${
-                        poolScriptMode === "dual" ? "bg-background shadow-xs text-foreground" : "text-muted-foreground"
-                      }`}
-                      onClick={() => setPoolScriptMode("dual")}
-                    >
-                      Dual Carrier Stack
-                    </button>
-                  </div>
-
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-xs h-8 gap-1.5"
-                    onClick={() => copyScriptByMode(poolScriptMode)}
-                  >
-                    {(poolScriptMode === "hotspot" ? copiedHotspotScript : copiedPoolScript) ? (
-                      <Check className="size-3.5 text-emerald-600" />
-                    ) : (
-                      <Copy className="size-3.5" />
-                    )}
-                    Copy Commands
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="relative rounded-lg bg-zinc-950 p-4 font-mono text-xs text-emerald-400 overflow-x-auto border border-zinc-800 max-h-96">
-                  <pre className="whitespace-pre">
-                    {poolScriptMode === "hotspot"
-                      ? hotspotTerminalScript
-                      : poolScriptMode === "pppoe"
-                        ? poolTerminalScript
-                        : dualTerminalScript}
-                  </pre>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
         </Tabs>
 
         {/* Modal: Add or Edit PPPoE Customer */}
@@ -1557,7 +860,7 @@ function PPPoEManager() {
                   <Input
                     id="full_name"
                     name="full_name"
-                    defaultValue={editingCustomer?.full_name || ""}
+                    defaultValue={editingCustomer?.full_name}
                     required
                     placeholder="e.g. John Doe"
                   />
@@ -1567,7 +870,7 @@ function PPPoEManager() {
                   <Input
                     id="phone"
                     name="phone"
-                    defaultValue={editingCustomer?.phone || ""}
+                    defaultValue={editingCustomer?.phone}
                     required
                     placeholder="0712345678"
                   />
@@ -1578,7 +881,7 @@ function PPPoEManager() {
                     <Input
                       id="username"
                       name="username"
-                      defaultValue={editingCustomer?.username || ""}
+                      defaultValue={editingCustomer?.username}
                       required
                       placeholder="john.doe"
                     />
@@ -1597,7 +900,8 @@ function PPPoEManager() {
                     <Input
                       id="password"
                       name="password"
-                      value={generatedPassword}
+                      value={generatedPassword || undefined}
+                      defaultValue={generatedPassword ? undefined : (editingCustomer?.password || undefined)}
                       onChange={(e) => setGeneratedPassword(e.target.value)}
                       placeholder={editingCustomer ? "Leave blank to keep" : "••••••••"}
                       required={!editingCustomer && !generatedPassword}
@@ -1606,7 +910,7 @@ function PPPoEManager() {
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="package_id">Assigned PPPoE Package</Label>
-                  <Select name="package_id" value={selectedPackage} onValueChange={setSelectedPackage}>
+                  <Select name="package_id" defaultValue={editingCustomer?.package_id || (pppPackages[0]?.id || undefined)}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select a PPPoE package" />
                     </SelectTrigger>
@@ -1629,8 +933,7 @@ function PPPoEManager() {
                   <Label htmlFor="router_id">Target Router</Label>
                   <Select
                     name="router_id"
-                    value={selectedRouter}
-                    onValueChange={setSelectedRouter}
+                    defaultValue={editingCustomer?.router_id || (routerList.length === 1 ? routerList[0].id : undefined)}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select a router" />

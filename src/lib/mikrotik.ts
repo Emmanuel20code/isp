@@ -304,10 +304,10 @@ export function generateModularScript(type: string, params: ScriptParams): strin
 
 # ─── GATEWAY IP ─────────────────────────────────────────────────────────
 /ip address
-add address=10.10.0.1/16 interface=hotspot-bridge
-# ─── POOL (High-Capacity 65,525 Hosts) ──────────────────────────────────
-:foreach i in=[/ip pool find where name=hotspot] do={ /ip pool remove $i }
-/ip pool add name=hotspot ranges=10.10.0.10-10.10.255.254 comment="WiFiBilling High-Capacity Hotspot Pool (65K+)"
+add address=10.10.0.1/24 interface=hotspot-bridge
+# ─── POOL ───────────────────────────────────────────────────────────────
+:foreach i in=[/ip pool find where name=hotspot] do={ /ip pool remove \$i }
+/ip pool add name=hotspot ranges=10.10.0.10-10.10.0.254
 # ─── HOTSPOT PROFILE (dns-name, hotspot-address, per-mac) ───────────────
 :local hsDir "hotspot"
 :if ([:len [/file find name="flash"]] > 0) do={ :set hsDir "flash/hotspot" }
@@ -328,10 +328,9 @@ add address=10.10.0.1/16 interface=hotspot-bridge
 /ip hotspot add name=hotspot1 interface=hotspot-bridge profile=hsprof1 address-pool=hotspot addresses-per-mac=1 disabled=no
 # ---------- DHCP-SERVER on hotspot-bridge ----------
 :foreach i in=[/ip dhcp-server find where name="hotspot-dhcp"] do={ /ip dhcp-server remove $i }
-/ip dhcp-server add name="hotspot-dhcp" interface=hotspot-bridge address-pool=hotspot lease-time=30m disabled=no
-:foreach j in=[/ip dhcp-server network find address="10.10.0.0/16"] do={ /ip dhcp-server network remove $j }
+/ip dhcp-server add name="hotspot-dhcp" interface=hotspot-bridge address-pool=hotspot lease-time=1h disabled=no
 :foreach j in=[/ip dhcp-server network find address="10.10.0.0/24"] do={ /ip dhcp-server network remove $j }
-/ip dhcp-server network add address=10.10.0.0/16 gateway=10.10.0.1 netmask=16 dns-server=8.8.8.8,8.8.4.4 comment="WiFiBilling high-capacity hotspot network"
+/ip dhcp-server network add address=10.10.0.0/24 gateway=10.10.0.1 dns-server=8.8.8.8,8.8.4.4 comment="hotspot network"
 
 # ─── HOTSPOT COUPLING & HEALTH CHECK VALIDATION ─────────────────────────
 :log info "WiFiBilling: Performing Hotspot profile coupling verification..."
@@ -580,33 +579,14 @@ add chain=prerouting action=change-ttl new-ttl=increment:2 passthrough=yes comme
 # Add PPPoE server
 /interface pppoe-server server
 add service-name="pppoe_billing" interface=hotspot-bridge default-profile=default disabled=no one-session-per-host=yes
-# ─── HIGH-CAPACITY PPPOE IP POOLS (16M+ ACTIVE & 1M+ EXPIRED CAPACITY) ───────────
-# Remove existing pool named "PPPOE ACTIVE POOL" then add high-capacity range (16,711,676 IPs)
+# Remove existing pool named "PPPOE ACTIVE POOL" then add fresh
 /ip pool
-:foreach p in=[find where name="PPPOE ACTIVE POOL"] do={ remove $p }
-add name="PPPOE ACTIVE POOL" ranges=10.0.0.2-10.9.255.255,10.11.0.1-10.255.255.254 comment="WiFiBilling 16M+ Active Subscribers Pool"
-# Remove existing pool named "expired_pppoe_pool" then add high-capacity expired pool (1,048,574 IPs)
+:foreach p in=[find where name="PPPOE ACTIVE POOL"] do={ remove \$p }
+add name="PPPOE ACTIVE POOL" ranges=10.10.10.10-10.10.10.254
+# Remove existing pool named "expired_pppoe_pool" then add fresh
 /ip pool
-:foreach p in=[find where name="expired_pppoe_pool"] do={ remove $p }
-add name="expired_pppoe_pool" ranges=172.16.0.2-172.31.255.254 comment="WiFiBilling 1M+ Expired Subscribers Pool"
-
-# Configure default PPP profile with gateway 10.0.0.1 and 16M+ active pool
-/ppp profile set [find name=default] local-address=10.0.0.1 remote-address="PPPOE ACTIVE POOL" dns-server=8.8.8.8,1.1.1.1
-
-# Ensure NAT masquerade rule for entire PPPoE active subnet (10.0.0.0/8 supports all 16M+ connections)
-:if ([:len [/ip firewall nat find where comment="PPPOE NAT"]] = 0) do={
-    /ip firewall nat add chain=srcnat action=masquerade src-address=10.0.0.0/8 comment="PPPOE NAT"
-} else={
-    /ip firewall nat set [find comment="PPPOE NAT"] src-address=10.0.0.0/8
-}
-
-# Ensure NAT masquerade for expired walled-garden subscribers (172.16.0.0/12 supports 1M+ connections)
-:if ([:len [/ip firewall nat find where comment="EXPIRED PPPOE NAT"]] = 0) do={
-    /ip firewall nat add chain=srcnat action=masquerade src-address=172.16.0.0/12 comment="EXPIRED PPPOE NAT"
-} else={
-    /ip firewall nat set [find comment="EXPIRED PPPOE NAT"] src-address=172.16.0.0/12
-}
-
+:foreach p in=[find where name="expired_pppoe_pool"] do={ remove \$p }
+add name="expired_pppoe_pool" ranges=10.10.20.10-10.10.20.254
 :log info "PPPoE configuration applied successfully."
 `;
 
@@ -823,81 +803,51 @@ export function generateNetworkConfigurationScript(params: ScriptParams): string
   };
 } on-error={};
 
-# 3. IP Address & IP Pool Allocation for Hotspot (High-Capacity 10.10.0.1/16 - 65,525 Clients)
+# 3. IP Address & IP Pool Allocation for Hotspot (10.10.0.1/24)
 :do {
   :local hasGw false;
   :foreach i in=[/ip address find] do={
     :local addrVal [/ip address get $i address];
     :if ([:pick $addrVal 0 9] = "10.10.0.1") do={
-      /ip address set $i address=10.10.0.1/16;
       :set hasGw true;
     };
   };
   :if (!$hasGw) do={
-    /ip address add address=10.10.0.1/16 interface="br-hotspot" comment="WiFiBilling Hotspot Gateway";
+    /ip address add address=10.10.0.1/24 interface="br-hotspot" comment="WiFiBilling Hotspot Gateway";
   };
 } on-error={};
 
 :do {
   :if ([:len [/ip pool find name="hs-pool"]] = 0) do={
-    /ip pool add name="hs-pool" ranges=10.10.0.10-10.10.255.254 comment="WiFiBilling 65K+ Hotspot Pool";
-  } else={
-    /ip pool set [find name="hs-pool"] ranges=10.10.0.10-10.10.255.254;
+    /ip pool add name="hs-pool" ranges=10.10.0.10-10.10.0.254;
   };
 } on-error={};
 
-# 4. DHCP Server Configuration for Hotspot (30m Lease Time for High Turnover)
+# 4. DHCP Server Configuration for Hotspot
 :do {
   :if ([:len [/ip dhcp-server find name="Hotspot_Gateway"]] = 0) do={
-    /ip dhcp-server add name="Hotspot_Gateway" interface="br-hotspot" address-pool="hs-pool" disabled=no lease-time=30m;
-  } else={
-    /ip dhcp-server set [find name="Hotspot_Gateway"] lease-time=30m address-pool="hs-pool";
+    /ip dhcp-server add name="Hotspot_Gateway" interface="br-hotspot" address-pool="hs-pool" disabled=no lease-time=1h;
   };
 } on-error={};
 
 :do {
-  :if ([:len [/ip dhcp-server network find address="10.10.0.0/16"]] = 0) do={
-    /ip dhcp-server network add address=10.10.0.0/16 gateway=10.10.0.1 netmask=16 dns-server=10.10.0.1 comment="WiFiBilling Hotspot Network (65K+)";
+  :if ([:len [/ip dhcp-server network find address="10.10.0.0/24"]] = 0) do={
+    /ip dhcp-server network add address=10.10.0.0/24 gateway=10.10.0.1 dns-server=10.10.0.1 comment="WiFiBilling Hotspot Network";
   } else={
-    /ip dhcp-server network set [find address="10.10.0.0/16"] dns-server=10.10.0.1 gateway=10.10.0.1 netmask=16;
+    /ip dhcp-server network set [find address="10.10.0.0/24"] dns-server=10.10.0.1 gateway=10.10.0.1;
   };
 } on-error={};
 
-# 5. PPPoE Server Configuration on br-hotspot (Supporting 16M+ Connections)
+# 5. PPPoE Server Configuration on br-hotspot (Supporting All Routers)
 :do {
-  :if ([:len [/ip pool find name="PPPOE ACTIVE POOL"]] = 0) do={
-    /ip pool add name="PPPOE ACTIVE POOL" ranges=10.0.0.2-10.9.255.255,10.11.0.1-10.255.255.254 comment="WiFiBilling 16M+ Active Subscribers Pool";
-  } else={
-    /ip pool set [find name="PPPOE ACTIVE POOL"] ranges=10.0.0.2-10.9.255.255,10.11.0.1-10.255.255.254;
-  };
-  :if ([:len [/ip pool find name="expired_pppoe_pool"]] = 0) do={
-    /ip pool add name="expired_pppoe_pool" ranges=172.16.0.2-172.31.255.254 comment="WiFiBilling 1M+ Expired Subscribers Pool";
-  } else={
-    /ip pool set [find name="expired_pppoe_pool"] ranges=172.16.0.2-172.31.255.254;
-  };
   :if ([:len [/ip pool find name="wfb-ppp-pool"]] = 0) do={
-    /ip pool add name="wfb-ppp-pool" ranges=10.0.0.2-10.9.255.255,10.11.0.1-10.255.255.254;
-  } else={
-    /ip pool set [find name="wfb-ppp-pool"] ranges=10.0.0.2-10.9.255.255,10.11.0.1-10.255.255.254;
+    /ip pool add name="wfb-ppp-pool" ranges=10.10.10.10-10.10.10.254;
   };
   :if ([:len [/ppp profile find name="wfb-ppp-prof"]] = 0) do={
-    /ppp profile add name="wfb-ppp-prof" local-address=10.0.0.1 remote-address="PPPOE ACTIVE POOL" dns-server=8.8.8.8,1.1.1.1 comment="WiFiBilling PPPoE Profile";
-  } else={
-    /ppp profile set [find name="wfb-ppp-prof"] local-address=10.0.0.1 remote-address="PPPOE ACTIVE POOL";
+    /ppp profile add name="wfb-ppp-prof" local-address=10.10.10.1 remote-address=wfb-ppp-pool dns-server=8.8.8.8,1.1.1.1 comment="WiFiBilling PPPoE Profile";
   };
-  /ppp profile set [find name=default] local-address=10.0.0.1 remote-address="PPPOE ACTIVE POOL" dns-server=8.8.8.8,1.1.1.1;
   :if ([:len [/interface pppoe-server server find service-name="wfb-pppoe"]] = 0) do={
     /interface pppoe-server server add service-name="wfb-pppoe" interface="br-hotspot" authentication=pap,chap,mschap1,mschap2 default-profile="wfb-ppp-prof" disabled=no;
-  };
-  :if ([:len [/ip firewall nat find where comment="PPPOE NAT"]] = 0) do={
-    /ip firewall nat add chain=srcnat action=masquerade src-address=10.0.0.0/8 comment="PPPOE NAT";
-  } else={
-    /ip firewall nat set [find comment="PPPOE NAT"] src-address=10.0.0.0/8;
-  };
-  :if ([:len [/ip firewall nat find where comment="EXPIRED PPPOE NAT"]] = 0) do={
-    /ip firewall nat add chain=srcnat action=masquerade src-address=172.16.0.0/12 comment="EXPIRED PPPOE NAT";
-  } else={
-    /ip firewall nat set [find comment="EXPIRED PPPOE NAT"] src-address=172.16.0.0/12;
   };
 } on-error={};
 
@@ -1046,9 +996,7 @@ export function generateNetworkConfigurationScript(params: ScriptParams): string
 # 10. Firewall NAT & Masquerade (Hotspot + PPPoE + WAN)
 :do {
   :if ([:len [/ip firewall nat find where comment="WiFiBilling Hotspot NAT"]] = 0) do={
-    /ip firewall nat add chain=srcnat action=masquerade src-address=10.10.0.0/16 comment="WiFiBilling Hotspot NAT";
-  } else={
-    /ip firewall nat set [find comment="WiFiBilling Hotspot NAT"] src-address=10.10.0.0/16;
+    /ip firewall nat add chain=srcnat action=masquerade src-address=10.10.0.0/24 comment="WiFiBilling Hotspot NAT";
   };
   :if ([:len [/ip firewall nat find where comment="WiFiBilling PPPoE NAT"]] = 0) do={
     /ip firewall nat add chain=srcnat action=masquerade src-address=10.10.10.0/24 comment="WiFiBilling PPPoE NAT";

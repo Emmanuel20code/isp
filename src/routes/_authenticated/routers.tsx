@@ -412,34 +412,13 @@ function RouterCard({
                     {r.uptime || "—"}
                   </p>
                 </div>
-                <div className="rounded-lg border bg-muted/30 p-2.5 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <p className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground flex items-center gap-1">
-                      <Cpu className="size-3 text-primary animate-pulse" /> CPU Load
-                    </p>
-                    {r.cpu_load !== undefined && r.cpu_load !== null && (
-                      <span className="flex h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping" />
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <p className="truncate text-xs font-semibold text-foreground font-mono">
-                      {r.cpu_load !== undefined && r.cpu_load !== null ? `${r.cpu_load}%` : "—"}
-                    </p>
-                    {r.cpu_load !== undefined && r.cpu_load !== null && (
-                      <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all duration-500 ${
-                            Number(r.cpu_load) > 80
-                              ? "bg-rose-500"
-                              : Number(r.cpu_load) > 50
-                                ? "bg-amber-500"
-                                : "bg-emerald-500"
-                          }`}
-                          style={{ width: `${Math.min(100, Math.max(0, Number(r.cpu_load)))}%` }}
-                        />
-                      </div>
-                    )}
-                  </div>
+                <div className="rounded-lg border bg-muted/30 p-2.5 space-y-0.5">
+                  <p className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground flex items-center gap-1">
+                    <Cpu className="size-3 text-muted-foreground" /> CPU Load
+                  </p>
+                  <p className="truncate text-xs font-semibold text-foreground font-mono">
+                    {r.cpu_load ? `${r.cpu_load}% CPU` : "—"}
+                  </p>
                 </div>
                 <div className="rounded-lg border bg-muted/30 p-2.5 space-y-0.5">
                   <p className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">

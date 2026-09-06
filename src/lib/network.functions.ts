@@ -18,16 +18,8 @@ async function currentTenantId(supabase: Record<string, unknown>, userId: string
     .select("tenant_id")
     .eq("user_id", userId)
     .maybeSingle();
-  if (data?.tenant_id) return data.tenant_id as string;
-
-  const { data: tenant } = await (supabase as any)
-    .from("tenants")
-    .select("id")
-    .limit(1)
-    .maybeSingle();
-
-  if (tenant?.id) return tenant.id as string;
-  throw new Error("No business found for this account");
+  if (!data?.tenant_id) throw new Error("No business found for this account");
+  return data.tenant_id as string;
 }
 
 export const listNetwork = createServerFn({ method: "GET" })
@@ -60,68 +52,6 @@ export const listNetwork = createServerFn({ method: "GET" })
     }));
 
     return { tenantId, routers: mappedRouters, packages: packages ?? [] };
-  });
-
-export type FormattedRouterOption = {
-  id: string;
-  name: string;
-  status: "online" | "offline" | "pending";
-  label: string;
-  value: string;
-  isOnline: boolean;
-  model?: string | null;
-  public_ip?: string | null;
-  ros_version?: string | null;
-  active_pppoe_users?: number;
-  location?: string | null;
-};
-
-export type DropdownRoutersResponse = {
-  routers: FormattedRouterOption[];
-  hotspotDropdown: FormattedRouterOption[];
-  pppoeDropdown: FormattedRouterOption[];
-};
-
-export const getTenantRoutersForDropdown = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
-  .handler(async ({ context }): Promise<DropdownRoutersResponse> => {
-    const { supabase, userId } = context;
-    const tenantId = await currentTenantId(supabase as any, userId).catch(() => null);
-    if (!tenantId) {
-      return { routers: [], hotspotDropdown: [], pppoeDropdown: [] };
-    }
-
-    const { data: routers } = await supabase
-      .from("routers")
-      .select("*")
-      .eq("tenant_id", tenantId)
-      .order("created_at", { ascending: false });
-
-    const formattedList: FormattedRouterOption[] = (routers ?? []).map((r) => {
-      const status = computeRouterStatus(r);
-      const isOnline = status === "online";
-      const statusBadge = isOnline ? "🟢 Online" : status === "pending" ? "🟡 Pending Setup" : "🔴 Offline";
-
-      return {
-        id: r.id,
-        name: r.name,
-        status,
-        label: `${r.name} (${statusBadge})`,
-        value: r.id,
-        isOnline,
-        model: r.model || null,
-        public_ip: r.public_ip || null,
-        ros_version: r.ros_version || null,
-        active_pppoe_users: r.active_pppoe_users || 0,
-        location: r.location || null,
-      };
-    });
-
-    return {
-      routers: formattedList,
-      hotspotDropdown: formattedList, // Available for Hotspot management
-      pppoeDropdown: formattedList,   // Available for PPPoE management
-    };
   });
 
 const routerSchema = z.object({
@@ -667,26 +597,3 @@ export const getAICustomRouterScript = createServerFn({ method: "POST" })
       routerName: router.name,
     };
   });
-
-export const deployHighCapacityHotspotPool = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .validator((input: any) => {
-    const d = input?.data !== undefined ? input.data : input;
-    return (d || {}) as { routerId: string };
-  })
-  .handler(async ({ context, data }) => {
-    const { supabase, userId } = context;
-    const tenantId = await currentTenantId(supabase, userId);
-    if (!data?.routerId) throw new Error("Router ID is required");
-
-    const { RouterManagementService } = await import("@/lib/router-management.server");
-    const service = new RouterManagementService(supabase);
-    await service.setupHighCapacityHotspotPool(tenantId, data.routerId);
-
-    return {
-      success: true,
-      message:
-        "High-capacity Hotspot IP pool (65,525 client hosts on 10.10.0.0/16) deployed to router.",
-    };
-  });
-

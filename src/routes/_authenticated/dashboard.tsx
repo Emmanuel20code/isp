@@ -59,7 +59,6 @@ import {
   CheckCircle2,
   XCircle,
   GripVertical,
-  Cpu,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -481,14 +480,7 @@ function Dashboard() {
                   to="/routers"
                   className="rounded-md border border-border bg-background/40 p-3 hover:border-primary/60"
                 >
-                  <p className="truncate text-sm font-medium text-primary flex items-center justify-between">
-                    <span>{r.name}</span>
-                    {r.cpu_load !== undefined && r.cpu_load !== null && (
-                      <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded flex items-center gap-0.5 font-mono">
-                        <Cpu className="size-2.5 animate-pulse" /> {r.cpu_load}%
-                      </span>
-                    )}
-                  </p>
+                  <p className="truncate text-sm font-medium text-primary">{r.name}</p>
                   <p className="mt-1 flex items-center gap-3 text-[11px] text-muted-foreground">
                     <span className="inline-flex items-center gap-1">
                       <span
@@ -707,20 +699,11 @@ function Dashboard() {
                   />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{r.name}</p>
-                    <p className="truncate text-[11px] text-muted-foreground flex items-center gap-1.5 flex-wrap">
-                      <span className="capitalize">{r.status}</span>
-                      <span>·</span>
-                      {r.cpu_load !== undefined && r.cpu_load !== null ? (
-                        <span className="inline-flex items-center gap-1 text-primary font-semibold">
-                          <Cpu className="size-3 animate-pulse" /> {r.cpu_load}% CPU
-                        </span>
-                      ) : (
-                        <span>
-                          {r.last_seen_at
-                            ? `seen ${new Date(r.last_seen_at).toLocaleTimeString()}`
-                            : "never reported"}
-                        </span>
-                      )}
+                    <p className="truncate text-[11px] text-muted-foreground">
+                      {r.status} ·{" "}
+                      {r.last_seen_at
+                        ? `last seen ${new Date(r.last_seen_at).toLocaleString()}`
+                        : "never reported"}
                     </p>
                   </div>
                   {r.ros_version && (

@@ -194,78 +194,20 @@ async function handleSyncRequest(request: Request): Promise<Response> {
       );
       rscLines.push(`};`);
 
-      // Normalize MAC if present
-      const cleanMac = mac ? mac.toUpperCase().replace(/[^0-9A-F]/g, "").replace(/(..)(?=.)/g, "$1:") : null;
-
-      if (cleanMac || ip) {
-        if (cleanMac) {
-          // Remove any previous bypassed binding so the user shows up under /ip hotspot active instead of being bypassed
-          rscLines.push(`:do { /ip hotspot ip-binding remove [find mac-address="${cleanMac}"]; } on-error={};`);
-        }
-
-        // Clear any stale active session or cookies to ensure clean login
-        rscLines.push(`:do { /ip hotspot active remove [find user="${username}"]; } on-error={};`);
-        if (cleanMac) {
-          rscLines.push(`:do { /ip hotspot active remove [find mac-address="${cleanMac}"]; } on-error={};`);
-        }
-        if (ip) {
-          rscLines.push(`:do { /ip hotspot active remove [find address="${ip}"]; } on-error={};`);
-        }
-
-        // Locate host by MAC first, fallback to IP
-        rscLines.push(`:local targetMac "${cleanMac || ""}";`);
-        rscLines.push(`:local targetIp "${ip || ""}";`);
-        rscLines.push(`:local hID "";`);
-
-        if (cleanMac) {
-          rscLines.push(`:set hID [/ip hotspot host find where mac-address="${cleanMac}"];`);
-        }
-        if (ip) {
-          rscLines.push(
-            `:if ([:len $hID] = 0) do={ :set hID [/ip hotspot host find where address="${ip}" or ip-address="${ip}"]; };`,
-          );
-        }
-
-        rscLines.push(`:if ([:len $hID] > 0) do={`);
+      if (mac) {
+        // Automatically add/update IP binding for immediate internet access without captive portal friction
+        rscLines.push(`:if ([:len [/ip hotspot ip-binding find mac-address="${mac}"]] = 0) do={`);
         rscLines.push(
-          `  :if ([:len $targetIp] = 0) do={ :set targetIp [/ip hotspot host get $hID ip-address]; };`,
+          `  /ip hotspot ip-binding add mac-address="${mac}" type=bypassed comment="${comment}";`,
         );
-        rscLines.push(
-          `  :if ([:len $targetMac] = 0) do={ :set targetMac [/ip hotspot host get $hID mac-address]; };`,
-        );
-        rscLines.push(`};`);
-
-        rscLines.push(`:if ([:len $targetIp] > 0) do={`);
-        rscLines.push(`  :do {`);
-        rscLines.push(`    :if ([:len $targetMac] > 0) do={`);
-        rscLines.push(
-          `      /ip hotspot active login user="${username}" password="${password}" ip-address=$targetIp mac-address=$targetMac;`,
-        );
-        rscLines.push(`    } else={`);
-        rscLines.push(
-          `      /ip hotspot active login user="${username}" password="${password}" ip-address=$targetIp;`,
-        );
-        rscLines.push(`    };`);
-        rscLines.push(
-          `:log info "WiFiBilling [PAYMENT_FLOW][4/5]: Hotspot active login success for ${username} at IP $targetIp";`,
-        );
-        rscLines.push(`  } on-error={`);
-        rscLines.push(`    :do {`);
-        rscLines.push(
-          `      /ip hotspot active login user="${username}" password="${password}" ip-address=$targetIp;`,
-        );
-        rscLines.push(
-          `:log info "WiFiBilling [PAYMENT_FLOW][4/5]: Fallback active login success for ${username} at IP $targetIp";`,
-        );
-        rscLines.push(`    } on-error={`);
-        rscLines.push(
-          `:log warn "WiFiBilling [PAYMENT_FLOW][4/5]: Programmatic active login notice for ${username} at IP $targetIp";`,
-        );
-        rscLines.push(`    };`);
-        rscLines.push(`  };`);
         rscLines.push(`} else={`);
-        rscLines.push(`  :log info "WiFiBilling: Hotspot host credentials primed for ${username}. User will be activated on first packet.";`);
+        rscLines.push(
+          `  /ip hotspot ip-binding set [find mac-address="${mac}"] type=bypassed comment="${comment}";`,
+        );
         rscLines.push(`};`);
+        rscLines.push(
+          `:log info "WiFiBilling: Instant internet access granted for MAC ${mac} (user ${username})";`,
+        );
       }
     } else if (cmd.action === "hotspot.delete_user") {
       const username = String(p.username || "").replace(/"/g, "");
@@ -348,26 +290,15 @@ async function handleSyncRequest(request: Request): Promise<Response> {
       const disabled = p.disabled === true ? "yes" : "no";
       const rateLimit = p.rate_limit ? String(p.rate_limit).replace(/"/g, "") : null;
 
-      // Ensure 16M+ capacity PPPoE active pool and default profile are configured
-      rscLines.push(`:do {`);
-      rscLines.push(`  :if ([:len [/ip pool find name="PPPOE ACTIVE POOL"]] = 0) do={`);
-      rscLines.push(`    /ip pool add name="PPPOE ACTIVE POOL" ranges=10.0.0.2-10.9.255.255,10.11.0.1-10.255.255.254 comment="WiFiBilling 16M+ Active Subscribers Pool";`);
-      rscLines.push(`  };`);
-      rscLines.push(`  :if ([:len [/ip firewall nat find where comment="PPPOE NAT"]] = 0) do={`);
-      rscLines.push(`    /ip firewall nat add chain=srcnat action=masquerade src-address=10.0.0.0/8 comment="PPPOE NAT";`);
-      rscLines.push(`  };`);
-      rscLines.push(`  /ppp profile set [find name="default"] local-address=10.0.0.1 remote-address="PPPOE ACTIVE POOL" dns-server=8.8.8.8,1.1.1.1;`);
-      rscLines.push(`} on-error={};`);
-
       if (profile && profile !== "default") {
         rscLines.push(`:if ([:len [/ppp profile find name="${profile}"]] = 0) do={`);
         rscLines.push(
-          `  /ppp profile add name="${profile}" ${rateLimit ? `rate-limit="${rateLimit}"` : ""} local-address=10.0.0.1 remote-address="PPPOE ACTIVE POOL" dns-server=8.8.8.8,1.1.1.1;`,
+          `  /ppp profile add name="${profile}" ${rateLimit ? `rate-limit="${rateLimit}"` : ""} dns-server=8.8.8.8,1.1.1.1;`,
         );
         rscLines.push(`} else={`);
-        rscLines.push(
-          `  /ppp profile set [find name="${profile}"] local-address=10.0.0.1 remote-address="PPPOE ACTIVE POOL" ${rateLimit ? `rate-limit="${rateLimit}"` : ""} dns-server=8.8.8.8,1.1.1.1;`,
-        );
+        if (rateLimit) {
+          rscLines.push(`  /ppp profile set [find name="${profile}"] rate-limit="${rateLimit}";`);
+        }
         rscLines.push(`};`);
       }
 
@@ -381,12 +312,9 @@ async function handleSyncRequest(request: Request): Promise<Response> {
       );
       rscLines.push(`};`);
 
-      // Kicking active PPPoE session forces client CPE to reconnect immediately
-      // with new active profile/IP pool, granting instant internet access upon payment!
-      rscLines.push(`:do { /ppp active remove [find name="${username}"]; } on-error={};`);
-      rscLines.push(
-        `:log info "WiFiBilling [PAYMENT_FLOW][4/5]: PPPoE user ${username} ${disabled === "no" ? "activated & internet granted (stale session kicked)" : "disabled & disconnected"}";`,
-      );
+      if (disabled === "yes") {
+        rscLines.push(`:do { /ppp active remove [find name="${username}"]; } on-error={};`);
+      }
     } else if (cmd.action === "pppoe.update_user") {
       const username = String(p.username || "").replace(/"/g, "");
       const password = p.password !== undefined ? String(p.password).replace(/"/g, "") : undefined;
@@ -404,8 +332,9 @@ async function handleSyncRequest(request: Request): Promise<Response> {
         rscLines.push(`  ${setCmd};`);
         rscLines.push(`};`);
 
-        // Always disconnect active session so new parameters or status take effect immediately
-        rscLines.push(`:do { /ppp active remove [find name="${username}"]; } on-error={};`);
+        if (disabled) {
+          rscLines.push(`:do { /ppp active remove [find name="${username}"]; } on-error={};`);
+        }
       }
     } else if (cmd.action === "pppoe.set_enabled") {
       const username = String(p.username || "").replace(/"/g, "");
@@ -421,8 +350,9 @@ async function handleSyncRequest(request: Request): Promise<Response> {
         );
         rscLines.push(`};`);
 
-        // Disconnect active session to apply new state (connect if enabled, disconnect if expired)
-        rscLines.push(`:do { /ppp active remove [find name="${username}"]; } on-error={};`);
+        if (!enabled) {
+          rscLines.push(`:do { /ppp active remove [find name="${username}"]; } on-error={};`);
+        }
       }
     } else if (cmd.action === "pppoe.delete_user") {
       const username = String(p.username || "").replace(/"/g, "");
@@ -439,126 +369,6 @@ async function handleSyncRequest(request: Request): Promise<Response> {
         );
         rscLines.push(`};`);
       }
-    } else if (cmd.action === "pppoe.setup_pool") {
-      rscLines.push(`:log info "WiFiBilling: Provisioning 16M+ Scale PPPoE IP Pools...";`);
-      rscLines.push(`:do {`);
-      rscLines.push(`  :if ([:len [/ip pool find name="PPPOE ACTIVE POOL"]] = 0) do={`);
-      rscLines.push(
-        `    /ip pool add name="PPPOE ACTIVE POOL" ranges=10.0.0.2-10.9.255.255,10.11.0.1-10.255.255.254 comment="WiFiBilling 16M+ Active Subscribers Pool";`,
-      );
-      rscLines.push(`  } else={`);
-      rscLines.push(
-        `    /ip pool set [find name="PPPOE ACTIVE POOL"] ranges=10.0.0.2-10.9.255.255,10.11.0.1-10.255.255.254;`,
-      );
-      rscLines.push(`  };`);
-      rscLines.push(`} on-error={};`);
-      rscLines.push(`:do {`);
-      rscLines.push(`  :if ([:len [/ip pool find name="expired_pppoe_pool"]] = 0) do={`);
-      rscLines.push(
-        `    /ip pool add name="expired_pppoe_pool" ranges=172.16.0.2-172.31.255.254 comment="WiFiBilling 1M+ Expired Subscribers Pool";`,
-      );
-      rscLines.push(`  } else={`);
-      rscLines.push(
-        `    /ip pool set [find name="expired_pppoe_pool"] ranges=172.16.0.2-172.31.255.254;`,
-      );
-      rscLines.push(`  };`);
-      rscLines.push(`} on-error={};`);
-      rscLines.push(`:do {`);
-      rscLines.push(
-        `  /ppp profile set [find name="default"] local-address=10.0.0.1 remote-address="PPPOE ACTIVE POOL" dns-server=8.8.8.8,1.1.1.1;`,
-      );
-      rscLines.push(`} on-error={};`);
-      rscLines.push(`:do {`);
-      rscLines.push(`  :if ([:len [/ip firewall nat find where comment="PPPOE NAT"]] = 0) do={`);
-      rscLines.push(
-        `    /ip firewall nat add chain=srcnat action=masquerade src-address=10.0.0.0/8 comment="PPPOE NAT";`,
-      );
-      rscLines.push(`  } else={`);
-      rscLines.push(
-        `    /ip firewall nat set [find comment="PPPOE NAT"] src-address=10.0.0.0/8;`,
-      );
-      rscLines.push(`  };`);
-      rscLines.push(`} on-error={};`);
-      rscLines.push(`:do {`);
-      rscLines.push(
-        `  :if ([:len [/ip firewall nat find where comment="EXPIRED PPPOE NAT"]] = 0) do={`,
-      );
-      rscLines.push(
-        `    /ip firewall nat add chain=srcnat action=masquerade src-address=172.16.0.0/12 comment="EXPIRED PPPOE NAT";`,
-      );
-      rscLines.push(`  } else={`);
-      rscLines.push(
-        `    /ip firewall nat set [find comment="EXPIRED PPPOE NAT"] src-address=172.16.0.0/12;`,
-      );
-      rscLines.push(`  };`);
-      rscLines.push(`} on-error={};`);
-      rscLines.push(
-        `:log info "WiFiBilling: High-Capacity PPPoE Pools (16.7M active / 1M expired) applied successfully.";`,
-      );
-    } else if (cmd.action === "hotspot.setup_pool") {
-      rscLines.push(
-        `:log info "WiFiBilling: Configuring High-Capacity Hotspot Pool (65K+ Hosts)...";`,
-      );
-      rscLines.push(`:do {`);
-      rscLines.push(`  :local hasGw false;`);
-      rscLines.push(`  :foreach i in=[/ip address find] do={`);
-      rscLines.push(`    :local addrVal [/ip address get $i address];`);
-      rscLines.push(`    :if ([:pick $addrVal 0 9] = "10.10.0.1") do={`);
-      rscLines.push(`      /ip address set $i address=10.10.0.1/16;`);
-      rscLines.push(`      :set hasGw true;`);
-      rscLines.push(`    };`);
-      rscLines.push(`  };`);
-      rscLines.push(`  :if (!$hasGw) do={`);
-      rscLines.push(
-        `    /ip address add address=10.10.0.1/16 interface="br-hotspot" comment="WiFiBilling Hotspot Gateway";`,
-      );
-      rscLines.push(`  };`);
-      rscLines.push(`} on-error={};`);
-      rscLines.push(`:do {`);
-      rscLines.push(`  :if ([:len [/ip pool find name="hs-pool"]] = 0) do={`);
-      rscLines.push(
-        `    /ip pool add name="hs-pool" ranges=10.10.0.10-10.10.255.254 comment="WiFiBilling 65K+ Hotspot Pool";`,
-      );
-      rscLines.push(`  } else={`);
-      rscLines.push(`    /ip pool set [find name="hs-pool"] ranges=10.10.0.10-10.10.255.254;`);
-      rscLines.push(`  };`);
-      rscLines.push(`  :if ([:len [/ip pool find name="hotspot"]] > 0) do={`);
-      rscLines.push(`    /ip pool set [find name="hotspot"] ranges=10.10.0.10-10.10.255.254;`);
-      rscLines.push(`  };`);
-      rscLines.push(`} on-error={};`);
-      rscLines.push(`:do {`);
-      rscLines.push(
-        `  :if ([:len [/ip dhcp-server network find address="10.10.0.0/16"]] = 0) do={`,
-      );
-      rscLines.push(
-        `    /ip dhcp-server network add address=10.10.0.0/16 gateway=10.10.0.1 netmask=16 dns-server=10.10.0.1 comment="WiFiBilling Hotspot Network (65K+)";`,
-      );
-      rscLines.push(`  } else={`);
-      rscLines.push(
-        `    /ip dhcp-server network set [find address="10.10.0.0/16"] gateway=10.10.0.1 netmask=16 dns-server=10.10.0.1;`,
-      );
-      rscLines.push(`  };`);
-      rscLines.push(`} on-error={};`);
-      rscLines.push(`:do {`);
-      rscLines.push(`  /ip dhcp-server set [find address-pool="hs-pool"] lease-time=30m;`);
-      rscLines.push(`  /ip dhcp-server set [find address-pool="hotspot"] lease-time=30m;`);
-      rscLines.push(`} on-error={};`);
-      rscLines.push(`:do {`);
-      rscLines.push(
-        `  :if ([:len [/ip firewall nat find where comment="WiFiBilling Hotspot NAT"]] = 0) do={`,
-      );
-      rscLines.push(
-        `    /ip firewall nat add chain=srcnat action=masquerade src-address=10.10.0.0/16 comment="WiFiBilling Hotspot NAT";`,
-      );
-      rscLines.push(`  } else={`);
-      rscLines.push(
-        `    /ip firewall nat set [find comment="WiFiBilling Hotspot NAT"] src-address=10.10.0.0/16;`,
-      );
-      rscLines.push(`  };`);
-      rscLines.push(`} on-error={};`);
-      rscLines.push(
-        `:log info "WiFiBilling: High-Capacity Hotspot Pool (65,525 hosts on 10.10.0.0/16) applied successfully.";`,
-      );
     } else if (cmd.action === "raw.command") {
       if (p.command) {
         rscLines.push(String(p.command));

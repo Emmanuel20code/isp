@@ -354,10 +354,6 @@ export const getPortalPurchase = createServerFn({ method: "POST" })
               (i: Record<string, unknown>) => i.Name === "MpesaReceiptNumber",
             )?.Value ?? null;
 
-          console.log(
-            `[PAYMENT_FLOW][1/5] Callback/Polling verified payment via Daraja STK Query: CheckoutRequestID=${data.checkoutRequestId}, Receipt=${receipt || "none"}`,
-          );
-
           await supabaseAdmin
             .from("transactions")
             .update({
@@ -598,7 +594,6 @@ export const redeemPortalVoucher = createServerFn({ method: "POST" })
               password: voucher.code,
               kind: "pppoe",
               profile: pkg?.name ?? "emmatech-pppoe-prof",
-              rateLimit: `${pkg?.speed_up_mbps ?? 10}M/${pkg?.speed_down_mbps ?? 10}M`,
               comment: `Voucher ${voucher.code}`,
             });
           } else {

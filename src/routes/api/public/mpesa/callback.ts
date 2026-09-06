@@ -39,10 +39,6 @@ export const Route = createFileRoute("/api/public/mpesa/callback")({
         const receiptNumber =
           (meta["MpesaReceiptNumber"] as string) || (meta["mpesareceiptnumber"] as string) || null;
 
-        console.log(
-          `[PAYMENT_FLOW][1/5] Callback received: CheckoutRequestID=${checkoutRequestId}, ResultCode=${cb?.ResultCode}, ResultDesc="${cb?.ResultDesc}", Receipt=${receiptNumber || "none"}`,
-        );
-
         const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
         const { data: txn } = await supabaseAdmin
@@ -53,7 +49,7 @@ export const Route = createFileRoute("/api/public/mpesa/callback")({
 
         if (!txn) {
           console.warn(
-            `[PAYMENT_FLOW] WARNING: No transaction found matching checkoutRequestId: ${checkoutRequestId}`,
+            `[mpesa-callback] No transaction found for checkoutRequestId: ${checkoutRequestId}`,
           );
           return ok();
         }
@@ -61,11 +57,10 @@ export const Route = createFileRoute("/api/public/mpesa/callback")({
         const wasPending = txn.status === "pending";
 
         // Update transaction status and metadata
-        const newStatus = success ? "success" : txn.status === "success" ? "success" : "failed";
         await supabaseAdmin
           .from("transactions")
           .update({
-            status: newStatus,
+            status: success ? "success" : txn.status === "success" ? "success" : "failed",
             mpesa_receipt: receiptNumber ?? txn.mpesa_receipt,
             failure_reason: success ? null : (cb?.ResultDesc ?? "Payment not completed"),
             raw: {
@@ -75,10 +70,6 @@ export const Route = createFileRoute("/api/public/mpesa/callback")({
             },
           })
           .eq("id", txn.id);
-
-        console.log(
-          `[PAYMENT_FLOW][2/5] Database updated: Transaction ${txn.id} marked ${newStatus} (M-Pesa Receipt: ${receiptNumber ?? txn.mpesa_receipt ?? "N/A"})`,
-        );
 
         if (success && txn.kind === "saas_subscription" && txn.tenant_id && wasPending) {
           const { activateTenantSubscription } = await import("@/lib/payments.functions");
@@ -111,7 +102,10 @@ export const Route = createFileRoute("/api/public/mpesa/callback")({
               `[mpesa-callback] Successfully activated customer package for transaction ${txn.id}.`,
             );
           } catch (actErr) {
-            console.error("[mpesa-callback] Customer package activation error:", actErr);
+            console.error(
+              "[mpesa-callback] Customer package activation error:",
+              actErr,
+            );
           }
         }
 

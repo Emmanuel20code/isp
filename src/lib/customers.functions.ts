@@ -52,23 +52,14 @@ const customerSchema = z.object({
   fullName: z.string().min(2).max(80),
   phone: z.string().min(9).max(20),
   kind: z.enum(["hotspot", "pppoe"]),
-  packageId: z.preprocess(
-    (val) => (typeof val === "string" && (val.trim() === "" || val === "none") ? null : val),
-    z.string().uuid().nullable().optional(),
-  ),
-  routerId: z.preprocess(
-    (val) => (typeof val === "string" && (val.trim() === "" || val === "none") ? null : val),
-    z.string().uuid().nullable().optional(),
-  ),
+  packageId: z.string().uuid().nullable().optional(),
+  routerId: z.string().uuid().nullable().optional(),
   username: z.string().max(40).optional(),
 });
 
 export const createCustomer = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) => {
-    const d = (input as any)?.data !== undefined ? (input as any).data : input;
-    return customerSchema.parse(d);
-  })
+  .inputValidator((input: unknown) => customerSchema.parse(input))
   .handler(async ({ data, context }) => {
     const { supabase, userId } = context;
     const tenantId = await requireTenant(supabase, userId);
@@ -99,10 +90,8 @@ export const createCustomer = createServerFn({ method: "POST" })
         expires_at: expiresAt,
       })
       .select("*")
-      .maybeSingle();
-
+      .single();
     if (error) throw new Error(error.message);
-    if (!row || !row.id) throw new Error("Customer creation failed to return database ID");
 
     if (data.routerId && row?.username) {
       const { enqueueRouterCommands } = await import("@/lib/agent-commands.server");
@@ -167,25 +156,6 @@ export const deleteCustomer = createServerFn({ method: "POST" })
     const { supabase, userId } = context;
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const tenantId = await tenantOf(supabase, userId);
-
-    // Enqueue router command to disconnect customer before deletion
-    const { data: cust } = await supabaseAdmin
-      .from("customers")
-      .select("id, tenant_id, router_id, username, kind")
-      .eq("id", data.id)
-      .maybeSingle();
-
-    if (cust?.router_id && cust.username) {
-      const { enqueueRouterCommands } = await import("@/lib/agent-commands.server");
-      await enqueueRouterCommands([
-        {
-          tenantId: cust.tenant_id,
-          routerId: cust.router_id,
-          action: cust.kind === "pppoe" ? "pppoe.delete_user" : "hotspot.delete_user",
-          payload: { username: cust.username },
-        },
-      ]);
-    }
 
     // Unlink any transactions pointing to this customer before deletion
     if (tenantId) {
