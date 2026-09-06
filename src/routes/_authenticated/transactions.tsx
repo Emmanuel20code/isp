@@ -20,6 +20,7 @@ import {
   XCircle,
   Search,
   Filter,
+  Calendar,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -67,6 +68,7 @@ function TransactionsPage() {
   const { data, isPending } = useQuery({ queryKey: ["transactions"], queryFn: () => fetchList() });
 
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [dateFilter, setDateFilter] = useState<"all" | "today" | "week">("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
 
   const transactions = useMemo(() => data?.transactions ?? [], [data]);
@@ -77,6 +79,16 @@ function TransactionsPage() {
       (t) => t.status === "success" && t.kind === "customer_payment",
     );
     const totalRev = successPayments.reduce((sum, t) => sum + t.amount_kes, 0);
+
+    // Compute today's revenue (from local midnight of current day)
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const todayPayments = successPayments.filter(
+      (t) => new Date(t.created_at).getTime() >= startOfToday,
+    );
+    const todayRev = todayPayments.reduce((sum, t) => sum + (t.amount_kes ?? 0), 0);
+    const todayCount = todayPayments.length;
+
     const successCount = transactions.filter((t) => t.status === "success").length;
     const totalCount = transactions.length;
     const successRate = totalCount > 0 ? Math.round((successCount / totalCount) * 100) : 100;
@@ -85,6 +97,8 @@ function TransactionsPage() {
     const failedCount = transactions.filter((t) => t.status === "failed").length;
 
     return {
+      todayRevenue: todayRev,
+      todayCount,
       totalRevenue: totalRev,
       successRate,
       successCount,
@@ -146,9 +160,17 @@ function TransactionsPage() {
     }));
   }, [transactions]);
 
-  // Filter list
+  // Filter list by status, search query, and date range
   const filteredTransactions = useMemo(() => {
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const startOfWeek = startOfToday - 6 * 24 * 60 * 60 * 1000;
+
     return transactions.filter((t) => {
+      const tTime = new Date(t.created_at).getTime();
+      if (dateFilter === "today" && tTime < startOfToday) return false;
+      if (dateFilter === "week" && tTime < startOfWeek) return false;
+
       const matchesStatus = statusFilter === "all" || t.status === statusFilter;
       const cleanQuery = searchQuery.trim().toLowerCase();
       const matchesSearch =
@@ -159,7 +181,14 @@ function TransactionsPage() {
 
       return matchesStatus && matchesSearch;
     });
-  }, [transactions, statusFilter, searchQuery]);
+  }, [transactions, statusFilter, searchQuery, dateFilter]);
+
+  // Total revenue of currently filtered successful payments
+  const filteredRevenue = useMemo(() => {
+    return filteredTransactions
+      .filter((t) => t.status === "success" && t.kind === "customer_payment")
+      .reduce((sum, t) => sum + t.amount_kes, 0);
+  }, [filteredTransactions]);
 
   // CSV Export utility
   const handleExportCSV = () => {
@@ -206,9 +235,10 @@ function TransactionsPage() {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
+    const filterSuffix = dateFilter === "today" ? "today_" : dateFilter === "week" ? "week_" : "";
     link.setAttribute(
       "download",
-      `emmatech_revenue_report_${new Date().toISOString().split("T")[0]}.csv`,
+      `revenue_report_${filterSuffix}${new Date().toISOString().split("T")[0]}.csv`,
     );
     document.body.appendChild(link);
     link.click();
@@ -237,7 +267,13 @@ function TransactionsPage() {
 
       {isPending ? (
         <div className="mt-8 space-y-4">
-          <Skeleton className="h-28 w-full" />
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-24 w-full" />
+          </div>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <Skeleton className="h-64 col-span-2" />
             <Skeleton className="h-64" />
@@ -247,7 +283,33 @@ function TransactionsPage() {
       ) : (
         <div className="mt-6 space-y-6">
           {/* Statistical Highlights */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+            {/* 1. Today's Revenue */}
+            <Card className="border border-emerald-500/30 bg-emerald-500/[0.04] col-span-2 sm:col-span-1">
+              <CardContent className="p-5 flex items-center justify-between">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                      Today's Revenue
+                    </p>
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                      Live
+                    </span>
+                  </div>
+                  <p className="text-xl font-bold text-foreground">
+                    {currency} {stats.todayRevenue.toLocaleString()}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {stats.todayCount} {stats.todayCount === 1 ? "sale" : "sales"} today
+                  </p>
+                </div>
+                <div className="p-2.5 rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 shrink-0">
+                  <Calendar className="size-5" />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* 2. Total Revenue */}
             <Card className="border border-border/80">
               <CardContent className="p-5 flex items-center justify-between">
                 <div className="space-y-1">
@@ -255,46 +317,53 @@ function TransactionsPage() {
                   <p className="text-xl font-bold">
                     {currency} {stats.totalRevenue.toLocaleString()}
                   </p>
+                  <p className="text-[11px] text-muted-foreground">All-time customer sales</p>
                 </div>
-                <div className="p-2.5 rounded-lg bg-emerald-500/10 text-emerald-500">
+                <div className="p-2.5 rounded-lg bg-sky-500/10 text-sky-500 shrink-0">
                   <DollarSign className="size-5" />
                 </div>
               </CardContent>
             </Card>
 
+            {/* 3. Success Rate */}
             <Card className="border border-border/80">
               <CardContent className="p-5 flex items-center justify-between">
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-muted-foreground">Success Rate</p>
                   <p className="text-xl font-bold">{stats.successRate}%</p>
+                  <p className="text-[11px] text-muted-foreground">Completed vs. total</p>
                 </div>
-                <div className="p-2.5 rounded-lg bg-sky-500/10 text-sky-500">
+                <div className="p-2.5 rounded-lg bg-indigo-500/10 text-indigo-500 shrink-0">
                   <TrendingUp className="size-5" />
                 </div>
               </CardContent>
             </Card>
 
+            {/* 4. Completed Sales Count */}
             <Card className="border border-border/80">
               <CardContent className="p-5 flex items-center justify-between">
                 <div className="space-y-1">
-                  <p className="text-xs font-medium text-muted-foreground">Success Count</p>
+                  <p className="text-xs font-medium text-muted-foreground">Completed Sales</p>
                   <p className="text-xl font-bold">{stats.successCount}</p>
+                  <p className="text-[11px] text-muted-foreground">Successful transactions</p>
                 </div>
-                <div className="p-2.5 rounded-lg bg-indigo-500/10 text-indigo-500">
+                <div className="p-2.5 rounded-lg bg-emerald-500/10 text-emerald-500 shrink-0">
                   <CheckCircle className="size-5" />
                 </div>
               </CardContent>
             </Card>
 
-            <Card className="border border-border/80">
+            {/* 5. Pending / Failed */}
+            <Card className="border border-border/80 col-span-2 md:col-span-1">
               <CardContent className="p-5 flex items-center justify-between">
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-muted-foreground">Pending / Failed</p>
                   <p className="text-xl font-bold">
                     {stats.pendingCount} / {stats.failedCount}
                   </p>
+                  <p className="text-[11px] text-muted-foreground">Uncompleted attempts</p>
                 </div>
-                <div className="p-2.5 rounded-lg bg-rose-500/10 text-rose-500">
+                <div className="p-2.5 rounded-lg bg-rose-500/10 text-rose-500 shrink-0">
                   <XCircle className="size-5" />
                 </div>
               </CardContent>
@@ -427,14 +496,25 @@ function TransactionsPage() {
             <CardHeader className="pb-3 border-b border-border/60">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                  <CardTitle className="text-base font-semibold">Ledger Entries</CardTitle>
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-base font-semibold">Ledger Entries</CardTitle>
+                    {dateFilter === "today" && (
+                      <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[10px]">
+                        Today's View: {currency} {filteredRevenue.toLocaleString()}
+                      </Badge>
+                    )}
+                  </div>
                   <CardDescription className="text-xs">
-                    Every transaction received or created by Safaricom Daraja integrations.
+                    {dateFilter === "today"
+                      ? `Showing transactions received today. Total: ${currency} ${filteredRevenue.toLocaleString()} (${filteredTransactions.length} records).`
+                      : dateFilter === "week"
+                        ? `Showing transactions from the past 7 days. Total: ${currency} ${filteredRevenue.toLocaleString()} (${filteredTransactions.length} records).`
+                        : "Every transaction received or created by Safaricom Daraja integrations."}
                   </CardDescription>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
-                  <div className="relative w-full sm:w-48">
+                  <div className="relative w-full sm:w-44">
                     <Search className="absolute left-2.5 top-2.5 size-3.5 text-muted-foreground" />
                     <Input
                       placeholder="Search phone or receipt..."
@@ -444,14 +524,36 @@ function TransactionsPage() {
                     />
                   </div>
 
-                  <div className="flex items-center gap-1 bg-muted p-1 rounded-md border border-border/50">
+                  {/* Date Period Filter */}
+                  <div className="flex items-center gap-0.5 bg-muted p-1 rounded-md border border-border/50">
+                    {[
+                      { id: "all", label: "All Time" },
+                      { id: "today", label: "Today" },
+                      { id: "week", label: "7 Days" },
+                    ].map((d) => (
+                      <button
+                        key={d.id}
+                        onClick={() => setDateFilter(d.id as "all" | "today" | "week")}
+                        className={`text-[10px] font-medium py-1 px-2.5 rounded-sm transition-all ${
+                          dateFilter === d.id
+                            ? "bg-background text-foreground shadow-sm font-semibold"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        {d.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Status Filter */}
+                  <div className="flex items-center gap-0.5 bg-muted p-1 rounded-md border border-border/50">
                     {["all", "success", "pending", "failed"].map((st) => (
                       <button
                         key={st}
                         onClick={() => setStatusFilter(st)}
                         className={`text-[10px] capitalize font-medium py-1 px-2 rounded-sm transition-all ${
                           statusFilter === st
-                            ? "bg-background text-foreground shadow-sm"
+                            ? "bg-background text-foreground shadow-sm font-semibold"
                             : "text-muted-foreground hover:text-foreground"
                         }`}
                       >
