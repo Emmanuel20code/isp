@@ -39,6 +39,7 @@ import { Route as ApiPublicMikrotikHeartbeatRouteImport } from './routes/api/pub
 import { Route as ApiPublicMikrotikOnboardRouteImport } from './routes/api/public/mikrotik/onboard'
 import { Route as ApiPublicMikrotikPortalFileRouteImport } from './routes/api/public/mikrotik/portal-file'
 import { Route as ApiPublicMikrotikRegisterRouteImport } from './routes/api/public/mikrotik/register'
+import { Route as ApiPublicMikrotikScanReportRouteImport } from './routes/api/public/mikrotik/scan-report'
 import { Route as ApiPublicMikrotikSupabaseCallbackRouteImport } from './routes/api/public/mikrotik/supabase-callback'
 import { Route as ApiPublicMikrotikSyncRouteImport } from './routes/api/public/mikrotik/sync'
 import { Route as ApiPublicMikrotikSyncsourceRouteImport } from './routes/api/public/mikrotik/syncsource'
@@ -205,6 +206,12 @@ const ApiPublicMikrotikRegisterRoute =
     path: '/api/public/mikrotik/register',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicMikrotikScanReportRoute =
+  ApiPublicMikrotikScanReportRouteImport.update({
+    id: '/api/public/mikrotik/scan-report',
+    path: '/api/public/mikrotik/scan-report',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicMikrotikSupabaseCallbackRoute =
   ApiPublicMikrotikSupabaseCallbackRouteImport.update({
     id: '/api/public/mikrotik/supabase-callback',
@@ -281,6 +288,7 @@ export interface FileRoutesByFullPath {
   '/api/public/mikrotik/onboard': typeof ApiPublicMikrotikOnboardRouteWithChildren
   '/api/public/mikrotik/portal-file': typeof ApiPublicMikrotikPortalFileRouteWithChildren
   '/api/public/mikrotik/register': typeof ApiPublicMikrotikRegisterRoute
+  '/api/public/mikrotik/scan-report': typeof ApiPublicMikrotikScanReportRoute
   '/api/public/mikrotik/supabase-callback': typeof ApiPublicMikrotikSupabaseCallbackRoute
   '/api/public/mikrotik/sync': typeof ApiPublicMikrotikSyncRoute
   '/api/public/mikrotik/syncsource': typeof ApiPublicMikrotikSyncsourceRoute
@@ -320,6 +328,7 @@ export interface FileRoutesByTo {
   '/api/public/mikrotik/onboard': typeof ApiPublicMikrotikOnboardRouteWithChildren
   '/api/public/mikrotik/portal-file': typeof ApiPublicMikrotikPortalFileRouteWithChildren
   '/api/public/mikrotik/register': typeof ApiPublicMikrotikRegisterRoute
+  '/api/public/mikrotik/scan-report': typeof ApiPublicMikrotikScanReportRoute
   '/api/public/mikrotik/supabase-callback': typeof ApiPublicMikrotikSupabaseCallbackRoute
   '/api/public/mikrotik/sync': typeof ApiPublicMikrotikSyncRoute
   '/api/public/mikrotik/syncsource': typeof ApiPublicMikrotikSyncsourceRoute
@@ -361,6 +370,7 @@ export interface FileRoutesById {
   '/api/public/mikrotik/onboard': typeof ApiPublicMikrotikOnboardRouteWithChildren
   '/api/public/mikrotik/portal-file': typeof ApiPublicMikrotikPortalFileRouteWithChildren
   '/api/public/mikrotik/register': typeof ApiPublicMikrotikRegisterRoute
+  '/api/public/mikrotik/scan-report': typeof ApiPublicMikrotikScanReportRoute
   '/api/public/mikrotik/supabase-callback': typeof ApiPublicMikrotikSupabaseCallbackRoute
   '/api/public/mikrotik/sync': typeof ApiPublicMikrotikSyncRoute
   '/api/public/mikrotik/syncsource': typeof ApiPublicMikrotikSyncsourceRoute
@@ -402,6 +412,7 @@ export interface FileRouteTypes {
     | '/api/public/mikrotik/onboard'
     | '/api/public/mikrotik/portal-file'
     | '/api/public/mikrotik/register'
+    | '/api/public/mikrotik/scan-report'
     | '/api/public/mikrotik/supabase-callback'
     | '/api/public/mikrotik/sync'
     | '/api/public/mikrotik/syncsource'
@@ -441,6 +452,7 @@ export interface FileRouteTypes {
     | '/api/public/mikrotik/onboard'
     | '/api/public/mikrotik/portal-file'
     | '/api/public/mikrotik/register'
+    | '/api/public/mikrotik/scan-report'
     | '/api/public/mikrotik/supabase-callback'
     | '/api/public/mikrotik/sync'
     | '/api/public/mikrotik/syncsource'
@@ -481,6 +493,7 @@ export interface FileRouteTypes {
     | '/api/public/mikrotik/onboard'
     | '/api/public/mikrotik/portal-file'
     | '/api/public/mikrotik/register'
+    | '/api/public/mikrotik/scan-report'
     | '/api/public/mikrotik/supabase-callback'
     | '/api/public/mikrotik/sync'
     | '/api/public/mikrotik/syncsource'
@@ -507,6 +520,7 @@ export interface RootRouteChildren {
   ApiPublicMikrotikOnboardRoute: typeof ApiPublicMikrotikOnboardRouteWithChildren
   ApiPublicMikrotikPortalFileRoute: typeof ApiPublicMikrotikPortalFileRouteWithChildren
   ApiPublicMikrotikRegisterRoute: typeof ApiPublicMikrotikRegisterRoute
+  ApiPublicMikrotikScanReportRoute: typeof ApiPublicMikrotikScanReportRoute
   ApiPublicMikrotikSupabaseCallbackRoute: typeof ApiPublicMikrotikSupabaseCallbackRoute
   ApiPublicMikrotikSyncRoute: typeof ApiPublicMikrotikSyncRoute
   ApiPublicMikrotikSyncsourceRoute: typeof ApiPublicMikrotikSyncsourceRoute
@@ -727,6 +741,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicMikrotikRegisterRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/mikrotik/scan-report': {
+      id: '/api/public/mikrotik/scan-report'
+      path: '/api/public/mikrotik/scan-report'
+      fullPath: '/api/public/mikrotik/scan-report'
+      preLoaderRoute: typeof ApiPublicMikrotikScanReportRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/mikrotik/supabase-callback': {
       id: '/api/public/mikrotik/supabase-callback'
       path: '/api/public/mikrotik/supabase-callback'
@@ -871,6 +892,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicMikrotikPortalFileRoute:
     ApiPublicMikrotikPortalFileRouteWithChildren,
   ApiPublicMikrotikRegisterRoute: ApiPublicMikrotikRegisterRoute,
+  ApiPublicMikrotikScanReportRoute: ApiPublicMikrotikScanReportRoute,
   ApiPublicMikrotikSupabaseCallbackRoute:
     ApiPublicMikrotikSupabaseCallbackRoute,
   ApiPublicMikrotikSyncRoute: ApiPublicMikrotikSyncRoute,

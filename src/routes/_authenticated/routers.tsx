@@ -68,8 +68,10 @@ import {
   FileCode,
   Sparkles,
   ChevronRight,
+  Activity,
 } from "lucide-react";
 import { generateOnboardingCommand } from "@/lib/mikrotik";
+import { MacScannerModal } from "@/components/MacScannerModal";
 
 export const Route = createFileRoute("/_authenticated/routers")({
   head: () => ({
@@ -124,6 +126,7 @@ interface RouterCardProps {
   onToggleDisable: (id: string, isDisabled: boolean) => void;
   onFixSsl: (id: string) => void;
   onHardenHotspot: (id: string) => void;
+  onScanMacs: (id: string) => void;
   isDeleting: boolean;
   isRefreshingTok: boolean;
   isSyncing: boolean;
@@ -141,6 +144,7 @@ function RouterCard({
   onForceSync,
   onFixSsl,
   onHardenHotspot,
+  onScanMacs,
   onToggleDisable,
   isDeleting,
   isRefreshingTok,
@@ -284,6 +288,17 @@ function RouterCard({
           <Button
             variant="outline"
             size="sm"
+            className="h-7 text-[11px] gap-1.5 px-2 text-primary border-primary/25 bg-primary/5 hover:bg-primary/10 font-semibold"
+            onClick={() => onScanMacs(r.id)}
+            title="Scan connected MAC addresses on this router"
+          >
+            <Activity className="size-3" />
+            Scan MACs
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
             className="h-7 text-[11px] gap-1.5 px-2"
             disabled={isSyncing}
             onClick={() => onForceSync(r.id)}
@@ -385,6 +400,14 @@ function RouterCard({
                       className="text-[11px] text-sky-400 hover:text-sky-300 underline font-medium cursor-pointer"
                     >
                       Quick Guide
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onScanMacs(r.id)}
+                      className="text-[11px] text-sky-400 hover:text-sky-300 font-semibold underline flex items-center gap-1 cursor-pointer bg-sky-500/10 px-2 py-0.5 rounded border border-sky-500/20"
+                      title="Scan connected MAC addresses on this MikroTik"
+                    >
+                      <Activity className="size-3 text-sky-400" /> Scan MACs
                     </button>
                     <button
                       type="button"
@@ -1089,6 +1112,8 @@ function RoutersPage() {
   });
 
   const [apGuideOpen, setApGuideOpen] = useState(false);
+  const [macScannerOpen, setMacScannerOpen] = useState(false);
+  const [selectedRouterForScan, setSelectedRouterForScan] = useState<string | null>(null);
 
   const tenantSlug = ctx.data?.tenant?.slug || "wifi";
 
@@ -1103,7 +1128,18 @@ function RoutersPage() {
             Manage your network gateways, live telemetry, and one-click onboarding.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setSelectedRouterForScan(null);
+              setMacScannerOpen(true);
+            }}
+            className="gap-1.5 text-xs font-semibold text-primary border-primary/30 hover:bg-primary/10"
+          >
+            <Activity className="size-3.5" /> Scan MAC Addresses
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -1212,6 +1248,10 @@ function RoutersPage() {
               onForceSync={(id) => forceSyncMutation.mutate(id)}
               onFixSsl={(id) => fixSslMutation.mutate(id)}
               onHardenHotspot={(id) => hardenHotspotMutation.mutate(id)}
+              onScanMacs={(id) => {
+                setSelectedRouterForScan(id);
+                setMacScannerOpen(true);
+              }}
               onToggleDisable={(id, isDisabled) => toggleDisableMutation.mutate({ id, isDisabled })}
               isDeleting={deleteMutation.isPending && deleteMutation.variables === r.id}
               isRefreshingTok={
@@ -1433,6 +1473,14 @@ function RoutersPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Live MikroTik MAC Scanner Modal */}
+      <MacScannerModal
+        open={macScannerOpen}
+        onOpenChange={setMacScannerOpen}
+        initialRouterId={selectedRouterForScan}
+      />
+
       <ChatWidget />
     </AppShell>
   );

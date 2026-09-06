@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { createFileRoute } from "@tanstack/react-router";
+import { getPublicBaseUrl } from "@/lib/mikrotik";
 
 async function handleSyncRequest(request: Request): Promise<Response> {
   const url = new URL(request.url);
@@ -454,6 +455,85 @@ async function handleSyncRequest(request: Request): Promise<Response> {
       rscLines.push(`:do { /ip hotspot active remove [find]; } on-error={};`);
       rscLines.push(`:do { /ip hotspot host remove [find]; } on-error={};`);
       rscLines.push(`:log info "WiFiBilling: Hotspot Security Hardening completed successfully.";`);
+    } else if (cmd.action === "hotspot.kick_mac") {
+      const macToKick = p.mac ? String(p.mac).toUpperCase() : "";
+      if (macToKick) {
+        rscLines.push(
+          `:do { /ip hotspot active remove [find mac-address="${macToKick}"]; /ip hotspot host remove [find mac-address="${macToKick}"]; :log info "WiFiBilling: Disconnected MAC ${macToKick}"; } on-error={};`,
+        );
+      }
+    } else if (cmd.action === "hotspot.scan_hosts") {
+      const cleanBase = getPublicBaseUrl(request);
+      const routerToken = router.onboard_token || router.agent_key;
+      rscLines.push(`:log info "WiFiBilling: Running live MAC & Network Host Scan...";`);
+      rscLines.push(`:do {`);
+      rscLines.push(`  :local hsData "";`);
+      rscLines.push(`  :foreach h in=[/ip hotspot host find] do={`);
+      rscLines.push(`    :local hm [/ip hotspot host get $h mac-address];`);
+      rscLines.push(`    :local hip [/ip hotspot host get $h address];`);
+      rscLines.push(`    :local hup [/ip hotspot host get $h uptime];`);
+      rscLines.push(`    :local haut [/ip hotspot host get $h authorized];`);
+      rscLines.push(`    :local hbyp [/ip hotspot host get $h bypassed];`);
+      rscLines.push(`    :local hstat "unauthorized";`);
+      rscLines.push(`    :if ($haut = true) do={ :set hstat "authorized" };`);
+      rscLines.push(`    :if ($hbyp = true) do={ :set hstat "bypassed" };`);
+      rscLines.push(`    :set hsData ($hsData . $hm . "," . $hip . "," . $hup . "," . $hstat . "\\n");`);
+      rscLines.push(`  };`);
+      rscLines.push(`  :foreach l in=[/ip dhcp-server lease find] do={`);
+      rscLines.push(`    :local lm [/ip dhcp-server lease get $l mac-address];`);
+      rscLines.push(`    :local lip [/ip dhcp-server lease get $l address];`);
+      rscLines.push(`    :local lhn [/ip dhcp-server lease get $l host-name];`);
+      rscLines.push(`    :local lst [/ip dhcp-server lease get $l status];`);
+      rscLines.push(`    :set hsData ($hsData . $lm . "," . $lip . "," . $lhn . "," . $lst . "\\n");`);
+      rscLines.push(`  };`);
+      rscLines.push(`  :if ([:len $hsData] > 0) do={`);
+      rscLines.push(
+        `    /tool fetch url="${cleanBase}/api/public/mikrotik/scan-report?token=${routerToken}&type=hosts" mode=https http-method=post http-data=("hosts=" . $hsData) check-certificate=no output=none;`,
+      );
+      rscLines.push(`  };`);
+      rscLines.push(`} on-error={ :log warning "WiFiBilling: Live host scan report failed"; };`);
+    } else if (cmd.action === "wireless.scan_nearby" || cmd.action === "wireless.snoop") {
+      const cleanBase = getPublicBaseUrl(request);
+      const routerToken = router.onboard_token || router.agent_key;
+      rscLines.push(`:log info "WiFiBilling: Scanning nearby Over-the-Air Wireless MACs and BSSIDs...";`);
+      rscLines.push(`:do {`);
+      rscLines.push(`  :local nData "";`);
+      rscLines.push(`  :foreach n in=[/ip neighbor find] do={`);
+      rscLines.push(`    :local nm [/ip neighbor get $n mac-address];`);
+      rscLines.push(`    :local ni [/ip neighbor get $n identity];`);
+      rscLines.push(`    :local nip [/ip neighbor get $n address];`);
+      rscLines.push(`    :local nb [/ip neighbor get $n board];`);
+      rscLines.push(`    :local nint [/ip neighbor get $n interface];`);
+      rscLines.push(`    :set nData ($nData . $nm . "," . $ni . "," . $nip . "," . $nb . "," . $nint . "\\n");`);
+      rscLines.push(`  };`);
+      rscLines.push(`  :if ([:len $nData] > 0) do={`);
+      rscLines.push(
+        `    /tool fetch url="${cleanBase}/api/public/mikrotik/scan-report?token=${routerToken}&type=nearby" mode=https http-method=post http-data=("neighbors=" . $nData) check-certificate=no output=none;`,
+      );
+      rscLines.push(`  };`);
+      rscLines.push(`} on-error={ :log warning "WiFiBilling: Neighbor scan report failed"; };`);
+      rscLines.push(`:do { /interface wireless scan [find default-name=wlan1] duration=5; } on-error={};`);
+      rscLines.push(`:do { /interface wifi scan [find] duration=5; } on-error={};`);
+    } else if (cmd.action === "neighbor.scan") {
+      const cleanBase = getPublicBaseUrl(request);
+      const routerToken = router.onboard_token || router.agent_key;
+      rscLines.push(`:log info "WiFiBilling: Scanning Layer-2 Network Neighbors (MNDP/CDP/LLDP)...";`);
+      rscLines.push(`:do {`);
+      rscLines.push(`  :local nData "";`);
+      rscLines.push(`  :foreach n in=[/ip neighbor find] do={`);
+      rscLines.push(`    :local nm [/ip neighbor get $n mac-address];`);
+      rscLines.push(`    :local ni [/ip neighbor get $n identity];`);
+      rscLines.push(`    :local nip [/ip neighbor get $n address];`);
+      rscLines.push(`    :local nb [/ip neighbor get $n board];`);
+      rscLines.push(`    :local nint [/ip neighbor get $n interface];`);
+      rscLines.push(`    :set nData ($nData . $nm . "," . $ni . "," . $nip . "," . $nb . "," . $nint . "\\n");`);
+      rscLines.push(`  };`);
+      rscLines.push(`  :if ([:len $nData] > 0) do={`);
+      rscLines.push(
+        `    /tool fetch url="${cleanBase}/api/public/mikrotik/scan-report?token=${routerToken}&type=nearby" mode=https http-method=post http-data=("neighbors=" . $nData) check-certificate=no output=none;`,
+      );
+      rscLines.push(`  };`);
+      rscLines.push(`} on-error={};`);
     } else if (cmd.action === "raw.command" || cmd.action === "sys.terminal") {
       if (p.command) {
         rscLines.push(String(p.command));

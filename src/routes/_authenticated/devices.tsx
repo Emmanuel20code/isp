@@ -35,7 +35,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { Loader2, Trash2, Tv, Plus, Pause, Play, Scan } from "lucide-react";
+import { Loader2, Trash2, Tv, Plus, Pause, Play, Scan, Activity } from "lucide-react";
+import { MacScannerModal } from "@/components/MacScannerModal";
 
 export const Route = createFileRoute("/_authenticated/devices")({
   head: () => ({
@@ -69,6 +70,7 @@ function DevicesPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [deviceToDelete, setDeviceToDelete] = useState<string | null>(null);
+  const [scannerOpen, setScannerOpen] = useState(false);
 
   const routers =
     routersQuery.data && routersQuery.data.length > 0
@@ -131,14 +133,23 @@ function DevicesPage() {
 
   return (
     <AppShell>
-      <div className="flex flex-col gap-1 mb-8">
-        <h1 className="text-3xl font-bold font-display tracking-tight flex items-center gap-3">
-          <Tv className="size-8 text-primary" />
-          Bound Devices
-        </h1>
-        <p className="text-muted-foreground">
-          Manually bind MAC addresses (like Smart TVs) to bypass the captive portal.
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-3xl font-bold font-display tracking-tight flex items-center gap-3">
+            <Tv className="size-8 text-primary" />
+            Bound Devices
+          </h1>
+          <p className="text-muted-foreground">
+            Manually bind MAC addresses (like Smart TVs) to bypass the captive portal.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          onClick={() => setScannerOpen(true)}
+          className="gap-2 font-semibold text-primary border-primary/30 hover:bg-primary/10"
+        >
+          <Activity className="size-4" /> Scan Network MACs
+        </Button>
       </div>
 
       <div className="grid lg:grid-cols-[1fr_350px] gap-6 items-start">
@@ -156,6 +167,13 @@ function DevicesPage() {
                 <p className="text-muted-foreground mb-4">
                   Add a device MAC address to grant it immediate internet access.
                 </p>
+                <Button
+                  variant="outline"
+                  onClick={() => setScannerOpen(true)}
+                  className="gap-2 text-primary border-primary/30 hover:bg-primary/10"
+                >
+                  <Activity className="size-4" /> Scan Connected MACs
+                </Button>
               </CardContent>
             </Card>
           ) : (
@@ -325,14 +343,29 @@ function DevicesPage() {
                   </p>
                 )}
               </div>
-              <Button type="submit" disabled={isSubmitting || !mac || !name} className="mt-2">
-                {isSubmitting && <Loader2 className="mr-2 size-4 animate-spin" />}
-                Bind Device
-              </Button>
+              <div className="flex flex-col gap-2 mt-2">
+                <Button type="submit" disabled={isSubmitting || !mac || !name}>
+                  {isSubmitting && <Loader2 className="mr-2 size-4 animate-spin" />}
+                  Bind Device
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setScannerOpen(true)}
+                  className="text-xs text-primary border-primary/20 hover:bg-primary/5 gap-1.5"
+                >
+                  <Activity className="size-3.5" />
+                  Auto-Discover MAC from Router
+                </Button>
+              </div>
             </form>
           </CardContent>
         </Card>
       </div>
+
+      {/* Live MikroTik MAC Scanner Modal */}
+      <MacScannerModal open={scannerOpen} onOpenChange={setScannerOpen} />
 
       <AlertDialog
         open={!!deviceToDelete}
