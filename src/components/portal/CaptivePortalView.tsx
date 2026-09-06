@@ -251,22 +251,6 @@ export function CaptivePortalView({
 
   const activeVoucherCode = activeCode || redeemedData?.code;
 
-  const isPPPoE = useMemo(() => {
-    const pkgName = (redeemedData?.packageName || selectedPkg?.name || "").toLowerCase();
-    if (pkgName.includes("pppoe") || pkgName.includes("fiber") || pkgName.includes("home")) {
-      return true;
-    }
-    if (redeemedData?.packageName) {
-      const pkg = packages.find(
-        (p) => p.name.toLowerCase() === redeemedData.packageName?.toLowerCase()
-      );
-      if (pkg?.kind === "pppoe") return true;
-    }
-    if (selectedPkg?.kind === "pppoe") return true;
-    if (activeTab === "pppoe") return true;
-    return false;
-  }, [redeemedData?.packageName, packages, selectedPkg, activeTab]);
-
   const handleAutoConnect = useCallback(() => {
     if (!activeVoucherCode) return;
 
@@ -397,18 +381,11 @@ export function CaptivePortalView({
 
   useEffect(() => {
     if (activeVoucherCode && !autoConnectAttempted) {
-      if (isPPPoE) {
-        // For PPPoE, do not attempt to auto-login via Hotspot APIs
-        setAutoConnectAttempted(true);
-        setAutoConnectSeconds(null);
-        setAutoConnectStatus("PPPoE credentials active");
-        return;
-      }
       // Trigger client-side form POST instantly upon payment success
       setAutoConnectSeconds(0);
       setAutoConnectStatus("Payment confirmed! Connecting to internet...");
     }
-  }, [activeVoucherCode, autoConnectAttempted, isPPPoE]);
+  }, [activeVoucherCode, autoConnectAttempted]);
 
   useEffect(() => {
     if (autoConnectSeconds === null) return;
@@ -621,12 +598,10 @@ export function CaptivePortalView({
               className="space-y-2"
             >
               <h1 className="text-3xl font-black tracking-tight text-white leading-tight">
-                {isPPPoE ? "Account Ready!" : "Payment Confirmed!"}
+                Payment Confirmed!
               </h1>
               <p className={`text-sm ${theme.textSecondary} font-medium`}>
-                {isPPPoE
-                  ? "Configure your home router to activate connection."
-                  : "Your internet access is now active."}
+                Your internet access is now active.
               </p>
             </motion.div>
 
@@ -669,82 +644,34 @@ export function CaptivePortalView({
                 </div>
 
                 <p className="text-[10px] font-black uppercase tracking-[0.3em] text-emerald-400/80">
-                  {isPPPoE ? "Your PPPoE Credentials" : "Your Access Code"}
+                  Your Access Code
                 </p>
 
-                {isPPPoE ? (
-                  <div className="space-y-3 pt-1">
-                    <div className="rounded-2xl bg-white/5 border border-white/5 p-4 space-y-3.5 text-left">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">PPPoE Username</span>
-                        <div className="flex items-center gap-2 font-mono text-base font-black text-white">
-                          <span>{displayCode}</span>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            type="button"
-                            className="size-8 bg-white/5 hover:bg-white/10 text-emerald-400 rounded-lg"
-                            onClick={() => {
-                              if (displayCode) {
-                                navigator.clipboard.writeText(displayCode);
-                                toast.success("PPPoE Username copied");
-                              }
-                            }}
-                          >
-                            <Copy className="size-4" />
-                          </Button>
-                        </div>
-                      </div>
-                      <div className="border-t border-white/5" />
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">PPPoE Password</span>
-                        <div className="flex items-center gap-2 font-mono text-base font-black text-white">
-                          <span>{displayCode}</span>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            type="button"
-                            className="size-8 bg-white/5 hover:bg-white/10 text-emerald-400 rounded-lg"
-                            onClick={() => {
-                              if (displayCode) {
-                                navigator.clipboard.writeText(displayCode);
-                                toast.success("PPPoE Password copied");
-                              }
-                            }}
-                          >
-                            <Copy className="size-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-center gap-4">
-                    <span className="text-5xl font-mono font-black tracking-[0.1em] text-white tabular-nums drop-shadow-sm">
-                      {displayCode}
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-12 bg-white/5 hover:bg-white/10 text-emerald-400 border border-white/5 rounded-2xl transition-all"
-                      onClick={() => {
-                        if (displayCode) {
-                          navigator.clipboard.writeText(displayCode);
-                          toast.success("Code copied to clipboard");
-                        }
-                      }}
-                    >
-                      <Copy className="size-6" />
-                    </Button>
-                  </div>
-                )}
+                <div className="flex items-center justify-center gap-4">
+                  <span className="text-5xl font-mono font-black tracking-[0.1em] text-white tabular-nums drop-shadow-sm">
+                    {displayCode}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-12 bg-white/5 hover:bg-white/10 text-emerald-400 border border-white/5 rounded-2xl transition-all"
+                    onClick={() => {
+                      if (displayCode) {
+                        navigator.clipboard.writeText(displayCode);
+                        toast.success("Code copied to clipboard");
+                      }
+                    }}
+                  >
+                    <Copy className="size-6" />
+                  </Button>
+                </div>
 
                 <div className="pt-2 flex flex-col items-center gap-3">
                   <div
                     className={`inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[10px] font-bold text-emerald-400 uppercase tracking-widest`}
                   >
                     <ShieldCheck className="size-3" />
-                    {isPPPoE ? "PPPoE Server Primed" : "Verified Transaction"}
+                    Verified Transaction
                   </div>
 
                   {timeRemaining && (
@@ -764,154 +691,75 @@ export function CaptivePortalView({
               </div>
             </motion.div>
 
-            {/* Connection Engine / Router Setup Instructions */}
+            {/* Auto Connect Engine UI */}
             {activeVoucherCode && (
-              isPPPoE ? (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.6 }}
-                  className="space-y-4 text-left"
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.6 }}
+                className="space-y-5"
+              >
+                <div
+                  className={`p-5 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm space-y-4`}
                 >
-                  <div className="rounded-2xl bg-white/5 border border-white/10 p-5 space-y-4">
-                    <h2 className="text-sm font-black uppercase tracking-wider text-emerald-400 flex items-center gap-2">
-                      <Network className="size-4" />
-                      Router Setup Guide
-                    </h2>
-                    <p className="text-xs text-slate-300 leading-relaxed">
-                      Follow these steps on your <strong>Tenda</strong> or home router to connect your household:
-                    </p>
-
-                    <div className="space-y-3.5 text-xs">
-                      <div className="flex gap-3">
-                        <span className="flex size-5 items-center justify-center rounded-full bg-emerald-500/20 text-[10px] font-bold text-emerald-400 shrink-0 mt-0.5">
-                          1
-                        </span>
-                        <p className="text-slate-300">
-                          Connect your computer or phone to your <strong>Tenda</strong> router's Wi-Fi network (e.g. <code className="bg-white/5 px-1.5 py-0.5 rounded text-white font-semibold">Tenda_F15B70</code>).
-                        </p>
-                      </div>
-
-                      <div className="flex gap-3">
-                        <span className="flex size-5 items-center justify-center rounded-full bg-emerald-500/20 text-[10px] font-bold text-emerald-400 shrink-0 mt-0.5">
-                          2
-                        </span>
-                        <p className="text-slate-300">
-                          Open your web browser and enter your router's admin address (usually <code className="bg-white/5 px-1.5 py-0.5 rounded text-white font-mono font-semibold">192.168.0.1</code> or <code className="bg-white/5 px-1.5 py-0.5 rounded text-white font-mono font-semibold">192.168.1.1</code>).
-                        </p>
-                      </div>
-
-                      <div className="flex gap-3">
-                        <span className="flex size-5 items-center justify-center rounded-full bg-emerald-500/20 text-[10px] font-bold text-emerald-400 shrink-0 mt-0.5">
-                          3
-                        </span>
-                        <p className="text-slate-300">
-                          Go to <strong>Internet Settings</strong> or <strong>WAN Setup</strong>, select connection type as <strong>PPPoE</strong>, and enter the username and password listed above.
-                        </p>
-                      </div>
-
-                      <div className="flex gap-3">
-                        <span className="flex size-5 items-center justify-center rounded-full bg-emerald-500/20 text-[10px] font-bold text-emerald-400 shrink-0 mt-0.5">
-                          4
-                        </span>
-                        <p className="text-slate-300">
-                          Save settings. Your router will dial the PPPoE connection, activate your plan, and distribute high-speed internet to all connected devices!
-                        </p>
-                      </div>
-                    </div>
+                  <div className="flex items-center justify-between text-[11px] font-black uppercase tracking-wider">
+                    <span className="text-slate-400">Connection Engine</span>
+                    <span className="text-emerald-400 flex items-center gap-2">
+                      <Zap className="size-3 fill-emerald-400" />
+                      Auto-Connecting
+                    </span>
                   </div>
 
-                  <div className="rounded-xl border border-white/5 bg-slate-950/60 p-3.5 space-y-2">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Common Routers Admin URLs:</span>
-                    <div className="grid grid-cols-2 gap-2 text-[11px] font-mono">
-                      <div className="p-2 rounded bg-white/5 border border-white/5 flex flex-col">
-                        <span className="text-[9px] font-bold text-slate-400 uppercase">Tenda</span>
-                        <span className="text-white font-semibold">192.168.0.1</span>
+                  {autoConnectSeconds !== null && autoConnectSeconds > 0 ? (
+                    <div className="space-y-3 text-left">
+                      <div className="flex items-center justify-between text-sm font-bold text-white">
+                        <span className="animate-pulse">{autoConnectStatus}</span>
+                        <span className="font-mono text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded text-xs">
+                          {autoConnectSeconds}s
+                        </span>
                       </div>
-                      <div className="p-2 rounded bg-white/5 border border-white/5 flex flex-col">
-                        <span className="text-[9px] font-bold text-slate-400 uppercase">TP-Link</span>
-                        <span className="text-white font-semibold">192.168.1.1</span>
+                      <div className="w-full bg-white/5 rounded-full h-2 overflow-hidden border border-white/5">
+                        <div
+                          className="h-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-all duration-1000 ease-linear shadow-[0_0_15px_rgba(16,185,129,0.3)]"
+                          style={{ width: `${(autoConnectSeconds / 15) * 100}%` }}
+                        />
                       </div>
-                      <div className="p-2 rounded bg-white/5 border border-white/5 flex flex-col">
-                        <span className="text-[9px] font-bold text-slate-400 uppercase">Mercusys</span>
-                        <span className="text-white font-semibold">mwlogin.net</span>
-                      </div>
-                      <div className="p-2 rounded bg-white/5 border border-white/5 flex flex-col">
-                        <span className="text-[9px] font-bold text-slate-400 uppercase">D-Link / Others</span>
-                        <span className="text-white font-semibold">192.168.0.1</span>
-                      </div>
+                      {!redirectParams.linkLogin && !redirectParams.ip && (
+                        <p className="text-[9px] text-amber-400 font-medium leading-tight">
+                          Note: Automatic connection works best when connected directly to the
+                          hotspot Wi-Fi.
+                        </p>
+                      )}
                     </div>
-                  </div>
-                </motion.div>
-              ) : (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: 0.6 }}
-                  className="space-y-5"
-                >
-                  <div
-                    className={`p-5 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm space-y-4`}
+                  ) : (
+                    <div className="flex items-center justify-center gap-3 py-2 text-sm font-black text-white">
+                      <Loader2 className="size-5 animate-spin text-emerald-400" />
+                      <span className="tracking-tight">{autoConnectStatus || "Finalizing..."}</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-3">
+                  <Button
+                    className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-7 rounded-2xl shadow-2xl shadow-emerald-600/30 transition-all active:scale-[0.97] border-0 text-lg group"
+                    onClick={handleAutoConnect}
                   >
-                    <div className="flex items-center justify-between text-[11px] font-black uppercase tracking-wider">
-                      <span className="text-slate-400">Connection Engine</span>
-                      <span className="text-emerald-400 flex items-center gap-2">
-                        <Zap className="size-3 fill-emerald-400" />
-                        Auto-Connecting
-                      </span>
-                    </div>
+                    <Globe className="size-6 mr-3 group-hover:rotate-12 transition-transform" />
+                    Connect Now
+                  </Button>
 
-                    {autoConnectSeconds !== null && autoConnectSeconds > 0 ? (
-                      <div className="space-y-3 text-left">
-                        <div className="flex items-center justify-between text-sm font-bold text-white">
-                          <span className="animate-pulse">{autoConnectStatus}</span>
-                          <span className="font-mono text-emerald-400 bg-emerald-400/10 px-2 py-0.5 rounded text-xs">
-                            {autoConnectSeconds}s
-                          </span>
-                        </div>
-                        <div className="w-full bg-white/5 rounded-full h-2 overflow-hidden border border-white/5">
-                          <div
-                            className="h-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-all duration-1000 ease-linear shadow-[0_0_15px_rgba(16,185,129,0.3)]"
-                            style={{ width: `${(autoConnectSeconds / 15) * 100}%` }}
-                          />
-                        </div>
-                        {!redirectParams.linkLogin && !redirectParams.ip && (
-                          <p className="text-[9px] text-amber-400 font-medium leading-tight">
-                            Note: Automatic connection works best when connected directly to the
-                            hotspot Wi-Fi.
-                          </p>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-center gap-3 py-2 text-sm font-black text-white">
-                        <Loader2 className="size-5 animate-spin text-emerald-400" />
-                        <span className="tracking-tight">{autoConnectStatus || "Finalizing..."}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex flex-col gap-3">
+                  {redirectParams.linkOrig && (
                     <Button
-                      className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black py-7 rounded-2xl shadow-2xl shadow-emerald-600/30 transition-all active:scale-[0.97] border-0 text-lg group"
-                      onClick={handleAutoConnect}
+                      variant="outline"
+                      className="w-full bg-white/5 border-white/10 hover:bg-white/10 text-white font-bold py-6 rounded-2xl transition-all"
+                      onClick={() => (window.location.href = redirectParams.linkOrig!)}
                     >
-                      <Globe className="size-6 mr-3 group-hover:rotate-12 transition-transform" />
-                      Connect Now
+                      <ArrowRight className="size-5 mr-2" />
+                      Continue to Website
                     </Button>
-
-                    {redirectParams.linkOrig && (
-                      <Button
-                        variant="outline"
-                        className="w-full bg-white/5 border-white/10 hover:bg-white/10 text-white font-bold py-6 rounded-2xl transition-all"
-                        onClick={() => (window.location.href = redirectParams.linkOrig!)}
-                      >
-                        <ArrowRight className="size-5 mr-2" />
-                        Continue to Website
-                      </Button>
-                    )}
-                  </div>
-                </motion.div>
-              )
+                  )}
+                </div>
+              </motion.div>
             )}
 
             <motion.div
@@ -1433,14 +1281,6 @@ export function CaptivePortalView({
                       className={`${theme.inputBg} h-11 text-sm rounded-xl focus-visible:ring-1`}
                       autoFocus
                     />
-                    {selectedPkg.kind === "pppoe" && (
-                      <p className="text-[10px] text-amber-300 font-medium leading-normal mt-1 flex items-start gap-1">
-                        <span>🏡</span>
-                        <span>
-                          <strong>PPPoE Home Fiber:</strong> This will automatically renew the existing subscriber router configured with this phone number.
-                        </span>
-                      </p>
-                    )}
                   </div>
 
                   <Button

@@ -7,8 +7,6 @@ import {
   createPackage,
   setPackageActive,
   deletePackage,
-  updatePackage,
-  syncPackagesToRouter,
 } from "@/lib/network.functions";
 import { getMyContext, updatePortalSettings } from "@/lib/tenancy.functions";
 import { formatPackageDuration } from "@/lib/billing-helpers";
@@ -30,14 +28,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -93,8 +83,6 @@ function PackagesPage() {
   const add = useServerFn(createPackage);
   const toggle = useServerFn(setPackageActive);
   const remove = useServerFn(deletePackage);
-  const update = useServerFn(updatePackage);
-  const sync = useServerFn(syncPackagesToRouter);
 
   const ctx = useQuery({ queryKey: ["my-context"], queryFn: () => fetchContext() });
   const currency = getCurrencyByCountry(ctx.data?.tenant?.country);
@@ -112,9 +100,6 @@ function PackagesPage() {
     packageName: string;
     expiresAt: string | null;
   } | null>(null);
-
-  const [editingPackage, setEditingPackage] = useState<any | null>(null);
-  const [selectedSyncRouterId, setSelectedSyncRouterId] = useState<string>("");
 
   const pay = useMutation({
     mutationFn: ({ packageId, phone }: { packageId: string; phone: string }) =>
@@ -231,7 +216,6 @@ function PackagesPage() {
     speedDownMbps: "5",
     speedUpMbps: "5",
     deviceLimit: "1",
-    routerId: "",
   });
 
   const computedDurationHours = useMemo(() => {
@@ -271,11 +255,10 @@ function PackagesPage() {
           speedDownMbps: Number(form.speedDownMbps),
           speedUpMbps: Number(form.speedUpMbps),
           deviceLimit: Number(form.deviceLimit),
-          routerId: form.routerId || null,
         },
       }),
     onSuccess: async () => {
-      setForm((f) => ({ ...f, name: "", routerId: "" }));
+      setForm((f) => ({ ...f, name: "" }));
       toast.success("Package created");
       await qc.invalidateQueries({ queryKey: ["network"] });
     },
@@ -286,23 +269,6 @@ function PackagesPage() {
     mutationFn: (v: { id: string; isActive: boolean }) => toggle({ data: v }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["network"] }),
     onError: (e) => toast.error(e instanceof Error ? e.message : "Could not update package"),
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: (v: Parameters<typeof update>[0]["data"]) => update({ data: v }),
-    onSuccess: async () => {
-      toast.success("Package updated successfully");
-      await qc.invalidateQueries({ queryKey: ["network"] });
-    },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "Could not update package"),
-  });
-
-  const syncMutation = useMutation({
-    mutationFn: (routerId: string) => sync({ data: { routerId } }),
-    onSuccess: (res) => {
-      toast.success(`Successfully queued packages synchronization! ${res.count} packages enqueued.`);
-    },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "Could not synchronize packages"),
   });
 
   const deleteMutation = useMutation({
@@ -360,12 +326,11 @@ function PackagesPage() {
         </TabsList>
         <TabsContent value="packages" className="mt-6">
           <div className="grid gap-6 lg:grid-cols-[380px_1fr]">
-            <div className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>New package</CardTitle>
-                  <CardDescription>Hotspot vouchers or PPPoE home plans.</CardDescription>
-                </CardHeader>
+            <Card>
+              <CardHeader>
+                <CardTitle>New package</CardTitle>
+                <CardDescription>Hotspot vouchers or PPPoE home plans.</CardDescription>
+              </CardHeader>
               <CardContent>
                 <form
                   className="space-y-4"
@@ -529,30 +494,6 @@ function PackagesPage() {
                       />
                     </div>
                   </div>
-
-                  <div className="space-y-2 pt-1 border-t border-border/40">
-                    <Label htmlFor="router-select" className="text-xs font-semibold">MikroTik Router Association</Label>
-                    <Select
-                      value={form.routerId || "global_all"}
-                      onValueChange={(val) => setForm({ ...form, routerId: val === "global_all" ? "" : val })}
-                    >
-                      <SelectTrigger id="router-select" className="bg-background h-9 text-xs">
-                        <SelectValue placeholder="All Routers (Global)" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="global_all" className="text-xs">All Routers (Global)</SelectItem>
-                        {(data?.routers ?? []).map((r) => (
-                          <SelectItem key={r.id} value={r.id} className="text-xs">
-                            {r.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                      Separating packages by router allows automatic profiling and billing configurations.
-                    </p>
-                  </div>
-
                   <Button type="submit" className="w-full" disabled={createMutation.isPending}>
                     {createMutation.isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
                     Create package
@@ -561,57 +502,7 @@ function PackagesPage() {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                  <Zap className="size-4 text-amber-500 fill-amber-500" />
-                  Router Synchronization
-                </CardTitle>
-                <CardDescription className="text-xs">
-                  Force a full synchronization of all applicable package profiles to a chosen MikroTik router.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="sync-router" className="text-xs font-semibold">Target Router</Label>
-                  <Select
-                    value={selectedSyncRouterId}
-                    onValueChange={setSelectedSyncRouterId}
-                  >
-                    <SelectTrigger id="sync-router" className="bg-background h-9 text-xs">
-                      <SelectValue placeholder="Select a router to sync..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(data?.routers ?? []).map((r) => (
-                        <SelectItem key={r.id} value={r.id} className="text-xs">
-                          {r.name} ({r.status === "online" ? "🟢 Online" : "🔴 Offline"})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Button
-                  size="sm"
-                  className="w-full text-xs font-semibold gap-1.5"
-                  disabled={!selectedSyncRouterId || syncMutation.isPending}
-                  onClick={() => {
-                    if (selectedSyncRouterId) {
-                      syncMutation.mutate(selectedSyncRouterId);
-                    }
-                  }}
-                >
-                  {syncMutation.isPending ? (
-                    <Loader2 className="size-3.5 animate-spin" />
-                  ) : (
-                    <Zap className="size-3.5" />
-                  )}
-                  Sync Profiles Now
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="space-y-4">
+            <div className="space-y-4">
               {isPending && <Skeleton className="h-32 w-full" />}
               {!isPending && (data?.packages.length ?? 0) === 0 && (
                 <Card>
@@ -643,16 +534,6 @@ function PackagesPage() {
                         </span>{" "}
                         · {p.device_limit} device{p.device_limit === 1 ? "" : "s"}
                       </p>
-
-                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground pt-0.5">
-                        <span className="font-semibold text-foreground/70">Router:</span>
-                        <Badge variant="secondary" className="px-1.5 py-0 text-[10px] bg-muted font-medium">
-                          {p.router_id
-                            ? data?.routers?.find((r) => r.id === p.router_id)?.name ?? "Associated Router"
-                            : "Global (All Routers)"}
-                        </Badge>
-                      </div>
-
                       <div className="flex items-center justify-between pt-1 border-t border-border/40">
                         <div className="flex items-center gap-2">
                           <Switch
@@ -665,51 +546,40 @@ function PackagesPage() {
                           <span className="text-xs">{p.is_active ? "Selling" : "Hidden"}</span>
                         </div>
 
-                        <div className="flex items-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 px-2 text-muted-foreground hover:bg-muted hover:text-foreground"
-                            onClick={() => setEditingPackage(p)}
-                          >
-                            <span className="text-xs">Edit</span>
-                          </Button>
-
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 px-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                                disabled={deleteMutation.isPending}
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 px-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                              disabled={deleteMutation.isPending}
+                            >
+                              <Trash2 className="size-3.5 mr-1" />
+                              <span className="text-xs">Delete</span>
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>
+                                Delete package &ldquo;{p.name}&rdquo;?
+                              </AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This will permanently remove this package from your pricing catalog.
+                                Any active customers assigned to this package will be safely
+                                unlinked.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancel</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() => deleteMutation.mutate(p.id)}
+                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                               >
-                                <Trash2 className="size-3.5 mr-1" />
-                                <span className="text-xs">Delete</span>
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>
-                                  Delete package &ldquo;{p.name}&rdquo;?
-                                </AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  This will permanently remove this package from your pricing catalog.
-                                  Any active customers assigned to this package will be safely
-                                  unlinked.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction
-                                  onClick={() => deleteMutation.mutate(p.id)}
-                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                >
-                                  Delete Package
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </div>
+                                Delete Package
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
                       </div>
                     </CardContent>
                   </Card>
@@ -1043,126 +913,6 @@ function PackagesPage() {
           </div>
         </TabsContent>
       </Tabs>
-      <Dialog open={!!editingPackage} onOpenChange={(open) => !open && setEditingPackage(null)}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Edit Package</DialogTitle>
-            <DialogDescription>
-              Update speed, duration, pricing, and router settings for this package.
-            </DialogDescription>
-          </DialogHeader>
-          {editingPackage && (
-            <form
-              className="space-y-4"
-              onSubmit={(e) => {
-                e.preventDefault();
-                updateMutation.mutate({
-                  id: editingPackage.id,
-                  name: editingPackage.name,
-                  kind: editingPackage.kind,
-                  priceKes: Number(editingPackage.price_kes),
-                  durationHours: Number(editingPackage.duration_hours),
-                  speedDownMbps: Number(editingPackage.speed_down_mbps),
-                  speedUpMbps: Number(editingPackage.speed_up_mbps),
-                  deviceLimit: Number(editingPackage.device_limit),
-                  routerId: editingPackage.router_id || null,
-                });
-                setEditingPackage(null);
-              }}
-            >
-              <div className="space-y-2">
-                <Label htmlFor="edit-name">Name</Label>
-                <Input
-                  id="edit-name"
-                  value={editingPackage.name}
-                  onChange={(e) => setEditingPackage({ ...editingPackage, name: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <Label htmlFor="edit-price">Price ({currency})</Label>
-                  <Input
-                    id="edit-price"
-                    type="number"
-                    min={0}
-                    value={editingPackage.price_kes}
-                    onChange={(e) => setEditingPackage({ ...editingPackage, price_kes: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-devices">Device Limit</Label>
-                  <Input
-                    id="edit-devices"
-                    type="number"
-                    min={1}
-                    value={editingPackage.device_limit}
-                    onChange={(e) => setEditingPackage({ ...editingPackage, device_limit: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-down">Down (Mbps)</Label>
-                  <Input
-                    id="edit-down"
-                    type="number"
-                    min={1}
-                    value={editingPackage.speed_down_mbps}
-                    onChange={(e) => setEditingPackage({ ...editingPackage, speed_down_mbps: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-up">Up (Mbps)</Label>
-                  <Input
-                    id="edit-up"
-                    type="number"
-                    min={1}
-                    value={editingPackage.speed_up_mbps}
-                    onChange={(e) => setEditingPackage({ ...editingPackage, speed_up_mbps: e.target.value })}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="edit-router-select">MikroTik Router Association</Label>
-                <Select
-                  value={editingPackage.router_id || "global"}
-                  onValueChange={(val) => setEditingPackage({ ...editingPackage, router_id: val === "global" ? null : val })}
-                >
-                  <SelectTrigger id="edit-router-select" className="bg-background">
-                    <SelectValue placeholder="All Routers (Global)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="global">All Routers (Global)</SelectItem>
-                    {(data?.routers ?? []).map((r) => (
-                      <SelectItem key={r.id} value={r.id}>
-                        {r.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  Changing router association will synchronize this package profile to the new chosen router.
-                </p>
-              </div>
-
-              <DialogFooter className="pt-2">
-                <Button type="button" variant="outline" onClick={() => setEditingPackage(null)}>
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={updateMutation.isPending}>
-                  {updateMutation.isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
-                  Save Changes
-                </Button>
-              </DialogFooter>
-            </form>
-          )}
-        </DialogContent>
-      </Dialog>
     </AppShell>
   );
 }

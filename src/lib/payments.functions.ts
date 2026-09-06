@@ -853,40 +853,13 @@ export async function activateCustomerPackage(
   }
 
   if (!existingCustomer) {
-    // Highly robust phone matching: format the transaction phone to various common Kenyan formats
-    const cleanPhoneDigits = txn.phone.replace(/\D/g, "");
-    let matchPhoneFormats = [txn.phone];
-    
-    if (cleanPhoneDigits.startsWith("254") && cleanPhoneDigits.length === 12) {
-      const mainPart = cleanPhoneDigits.slice(3); // e.g. 7XXXXXXXX
-      matchPhoneFormats = [
-        cleanPhoneDigits, // 2547XXXXXXXX
-        `0${mainPart}`,    // 07XXXXXXXX
-        `+${cleanPhoneDigits}`, // +2547XXXXXXXX
-        mainPart,         // 7XXXXXXXX
-      ];
-    } else if (cleanPhoneDigits.startsWith("0") && cleanPhoneDigits.length === 10) {
-      const mainPart = cleanPhoneDigits.slice(1);
-      matchPhoneFormats = [
-        cleanPhoneDigits,
-        `254${mainPart}`,
-        `+254${mainPart}`,
-        mainPart,
-      ];
-    }
-
-    const { data: matchedCustomers } = await db
+    const { data } = await db
       .from("customers")
       .select("id, username, password, kind, router_id, expires_at")
       .eq("tenant_id", txn.tenant_id)
-      .in("phone", matchPhoneFormats)
-      .limit(2);
-
-    if (matchedCustomers && matchedCustomers.length > 0) {
-      // Prioritize kind="pppoe" if multiple matches exist, otherwise pick the first
-      const pppoeMatch = matchedCustomers.find(c => c.kind === "pppoe");
-      existingCustomer = pppoeMatch || matchedCustomers[0];
-    }
+      .eq("phone", txn.phone)
+      .maybeSingle();
+    existingCustomer = data;
   }
 
   if (existingCustomer) {

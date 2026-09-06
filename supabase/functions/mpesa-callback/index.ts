@@ -273,14 +273,12 @@ class RouterManager {
     username: string;
     password?: string;
     profile?: string;
-    rateLimit?: string;
     comment?: string;
   }) {
     return this.enqueueCommand(params.tenantId, params.routerId, "pppoe.create_user", {
       username: params.username,
       password: params.password || params.username,
       profile: params.profile || "default",
-      rate_limit: params.rateLimit,
       comment: params.comment || "WiFiBilling PPPoE",
     });
   }
@@ -326,6 +324,8 @@ async function grantCaptivePortalAccess(
     }
 
     const hours = pkg.duration_hours ?? 24;
+    const expiresAt = new Date(Date.now() + hours * 3_600_000).toISOString();
+
     const rawObj = (txn.raw as Record<string, unknown>) || {};
     const routerId = (rawObj.router_id as string | undefined) ?? routers?.[0]?.id ?? null;
     const macAddress = (rawObj.mac as string | undefined) ?? null;
@@ -333,81 +333,17 @@ async function grantCaptivePortalAccess(
     let code = generateVoucherCode(6);
     let pppPassword = code;
 
-    // 1. Find existing customer by direct reference first, then fall back to robust phone matching
-    let customerId = txn.customer_id || (rawObj.customer_id as string | null);
-    let existingCustomer = null;
-
-    if (customerId) {
-      const { data: custById } = await supabase
-        .from("customers")
-        .select("id, username, password, kind, router_id, expires_at")
-        .eq("id", customerId)
-        .maybeSingle();
-      existingCustomer = custById;
-    }
-
-    if (!existingCustomer && rawObj.username) {
-      const { data: custByUsername } = await supabase
-        .from("customers")
-        .select("id, username, password, kind, router_id, expires_at")
-        .eq("tenant_id", txn.tenant_id)
-        .eq("username", String(rawObj.username).trim())
-        .maybeSingle();
-      existingCustomer = custByUsername;
-    }
-
-    if (!existingCustomer) {
-      // Highly robust phone matching: format the transaction phone to various common Kenyan formats
-      const cleanPhoneDigits = txn.phone.replace(/\D/g, "");
-      let matchPhoneFormats = [txn.phone];
-      
-      if (cleanPhoneDigits.startsWith("254") && cleanPhoneDigits.length === 12) {
-        const mainPart = cleanPhoneDigits.slice(3); // e.g. 7XXXXXXXX
-        matchPhoneFormats = [
-          cleanPhoneDigits, // 2547XXXXXXXX
-          `0${mainPart}`,    // 07XXXXXXXX
-          `+${cleanPhoneDigits}`, // +2547XXXXXXXX
-          mainPart,         // 7XXXXXXXX
-        ];
-      } else if (cleanPhoneDigits.startsWith("0") && cleanPhoneDigits.length === 10) {
-        const mainPart = cleanPhoneDigits.slice(1);
-        matchPhoneFormats = [
-          cleanPhoneDigits,
-          `254${mainPart}`,
-          `+254${mainPart}`,
-          mainPart,
-        ];
-      }
-
-      const { data: matchedCustomers } = await supabase
-        .from("customers")
-        .select("id, username, password, kind, router_id, expires_at")
-        .eq("tenant_id", txn.tenant_id)
-        .in("phone", matchPhoneFormats)
-        .limit(2);
-
-      if (matchedCustomers && matchedCustomers.length > 0) {
-        // Prioritize kind="pppoe" if multiple matches exist, otherwise pick the first
-        const pppoeMatch = matchedCustomers.find((c: any) => c.kind === "pppoe");
-        existingCustomer = pppoeMatch || matchedCustomers[0];
-      }
-    }
-
-    // 2. Compute correct expiration date (rolling forward if still active)
-    let expiresAt = new Date(Date.now() + hours * 3_600_000).toISOString();
-    if (existingCustomer && existingCustomer.expires_at) {
-      const currentExpiryMs = new Date(existingCustomer.expires_at).getTime();
-      const nowMs = Date.now();
-      if (currentExpiryMs > nowMs) {
-        expiresAt = new Date(currentExpiryMs + hours * 3_600_000).toISOString();
-      }
-    }
+    // 1. Find existing customer by phone or create new customer
+    let customerId: string | null = null;
+    const { data: existingCustomer } = await supabase
+      .from("customers")
+      .select("id, username, password, kind")
+      .eq("tenant_id", txn.tenant_id)
+      .eq("phone", txn.phone)
+      .maybeSingle();
 
     if (existingCustomer) {
       customerId = existingCustomer.id;
-      if (existingCustomer.router_id) {
-        routerId = existingCustomer.router_id;
-      }
       if (existingCustomer.kind === "pppoe" && existingCustomer.username) {
         code = existingCustomer.username;
         pppPassword = existingCustomer.password || existingCustomer.username;
@@ -438,7 +374,6 @@ async function grantCaptivePortalAccess(
           package_id: txn.package_id,
           router_id: routerId,
           username: code,
-          password: pppPassword,
           mac_address: macAddress,
           expires_at: expiresAt,
           status: "active",
@@ -449,7 +384,7 @@ async function grantCaptivePortalAccess(
       customerId = newCustomer?.id ?? null;
     }
 
-    // 3. Issue 'active' voucher for instant login on captive portal
+    // 2. Issue 'active' voucher for instant login on captive portal
     const { data: voucher } = await supabase
       .from("vouchers")
       .insert({
@@ -492,7 +427,7 @@ async function grantCaptivePortalAccess(
         `[PAYMENT_FLOW][2/5] Database updated: Voucher ${voucher.code} created, Customer ${customerId} activated, Session initialized.`,
       );
 
-      // 4. Enqueue MikroTik router user provisioning commands using RouterManager
+      // 3. Enqueue MikroTik router user provisioning commands using RouterManager
       if (routerId) {
         console.log(
           `[PAYMENT_FLOW][3/5] RouterOS request sending: Enqueuing provisioning command for router ${routerId}, user=${code}, kind=${pkg.kind ?? "hotspot"}, MAC=${macAddress || "none"}`,
@@ -504,7 +439,6 @@ async function grantCaptivePortalAccess(
             username: code,
             password: pppPassword,
             profile: pkg.name ?? "emmatech-pppoe-prof",
-            rateLimit: `${pkg.speed_up_mbps ?? 10}M/${pkg.speed_down_mbps ?? 10}M`,
             comment: `M-Pesa ${txn.phone} - Renewal`,
           });
         } else {

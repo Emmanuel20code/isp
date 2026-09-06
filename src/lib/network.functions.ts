@@ -360,7 +360,6 @@ const packageSchema = z.object({
   speedDownMbps: z.number().int().min(1).max(1000),
   speedUpMbps: z.number().int().min(1).max(1000),
   deviceLimit: z.number().int().min(1).max(50),
-  routerId: z.string().uuid().nullable().optional(),
 });
 
 export const createPackage = createServerFn({ method: "POST" })
@@ -380,34 +379,10 @@ export const createPackage = createServerFn({ method: "POST" })
         speed_down_mbps: data.speedDownMbps,
         speed_up_mbps: data.speedUpMbps,
         device_limit: data.deviceLimit,
-        router_id: data.routerId || null,
       })
       .select("*")
       .single();
     if (error) throw new Error(error.message);
-
-    // Automatic real-time synchronization if a router is selected
-    if (data.routerId) {
-      try {
-        const { enqueueRouterCommands } = await import("@/lib/agent-commands.server");
-        const rateLimit = `${data.speedUpMbps}M/${data.speedDownMbps}M`;
-        let cmd = "";
-        if (data.kind === "hotspot") {
-          cmd = `:if ([:len [/ip hotspot user profile find name="${data.name}"]] = 0) do={ /ip hotspot user profile add name="${data.name}" rate-limit="${rateLimit}" shared-users=${data.deviceLimit || 1} status-autorefresh=1m; } else={ /ip hotspot user profile set [find name="${data.name}"] rate-limit="${rateLimit}" shared-users=${data.deviceLimit || 1} status-autorefresh=1m; };`;
-        } else {
-          cmd = `:if ([:len [/ppp profile find name="${data.name}"]] = 0) do={ /ppp profile add name="${data.name}" local-address=10.0.0.1 remote-address="PPPOE ACTIVE POOL" rate-limit="${rateLimit}" dns-server=8.8.8.8,1.1.1.1; } else={ /ppp profile set [find name="${data.name}"] local-address=10.0.0.1 remote-address="PPPOE ACTIVE POOL" rate-limit="${rateLimit}" dns-server=8.8.8.8,1.1.1.1; };`;
-        }
-        await enqueueRouterCommands([{
-          tenantId,
-          routerId: data.routerId,
-          action: "raw.command",
-          payload: { command: cmd }
-        }]);
-      } catch (syncErr) {
-        console.error("[createPackage] Auto-sync command queue error:", syncErr);
-      }
-    }
-
     return row;
   });
 
@@ -469,7 +444,6 @@ export const updatePackage = createServerFn({ method: "POST" })
         speedUpMbps: z.number().int().min(1).max(1000),
         deviceLimit: z.number().int().min(1).max(50),
         isActive: z.boolean().optional(),
-        routerId: z.string().uuid().nullable().optional(),
       })
       .parse(input),
   )
@@ -485,7 +459,6 @@ export const updatePackage = createServerFn({ method: "POST" })
       speed_down_mbps: data.speedDownMbps,
       speed_up_mbps: data.speedUpMbps,
       device_limit: data.deviceLimit,
-      router_id: data.routerId || null,
     };
     if (data.isActive !== undefined) {
       updatePayload.is_active = data.isActive;
@@ -500,29 +473,6 @@ export const updatePackage = createServerFn({ method: "POST" })
       .single();
 
     if (error) throw new Error(error.message);
-
-    // Automatic real-time synchronization if a router is selected
-    if (data.routerId) {
-      try {
-        const { enqueueRouterCommands } = await import("@/lib/agent-commands.server");
-        const rateLimit = `${data.speedUpMbps}M/${data.speedDownMbps}M`;
-        let cmd = "";
-        if (data.kind === "hotspot") {
-          cmd = `:if ([:len [/ip hotspot user profile find name="${data.name}"]] = 0) do={ /ip hotspot user profile add name="${data.name}" rate-limit="${rateLimit}" shared-users=${data.deviceLimit || 1} status-autorefresh=1m; } else={ /ip hotspot user profile set [find name="${data.name}"] rate-limit="${rateLimit}" shared-users=${data.deviceLimit || 1} status-autorefresh=1m; };`;
-        } else {
-          cmd = `:if ([:len [/ppp profile find name="${data.name}"]] = 0) do={ /ppp profile add name="${data.name}" local-address=10.0.0.1 remote-address="PPPOE ACTIVE POOL" rate-limit="${rateLimit}" dns-server=8.8.8.8,1.1.1.1; } else={ /ppp profile set [find name="${data.name}"] local-address=10.0.0.1 remote-address="PPPOE ACTIVE POOL" rate-limit="${rateLimit}" dns-server=8.8.8.8,1.1.1.1; };`;
-        }
-        await enqueueRouterCommands([{
-          tenantId,
-          routerId: data.routerId,
-          action: "raw.command",
-          payload: { command: cmd }
-        }]);
-      } catch (syncErr) {
-        console.error("[updatePackage] Auto-sync command queue error:", syncErr);
-      }
-    }
-
     return updated;
   });
 
@@ -738,55 +688,5 @@ export const deployHighCapacityHotspotPool = createServerFn({ method: "POST" })
       message:
         "High-capacity Hotspot IP pool (65,525 client hosts on 10.10.0.0/16) deployed to router.",
     };
-  });
-
-export const syncPackagesToRouter = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) => z.object({ routerId: z.string().uuid() }).parse(input))
-  .handler(async ({ data, context }) => {
-    const { supabase, userId } = context;
-    const { enqueueRouterCommands } = await import("@/lib/agent-commands.server");
-    const tenantId = await currentTenantId(supabase, userId);
-
-    // Fetch packages for this tenant and either this router or no router (global)
-    const { data: packages, error } = await supabase
-      .from("packages")
-      .select("*")
-      .eq("tenant_id", tenantId)
-      .or(`router_id.eq.${data.routerId},router_id.is.null`)
-      .eq("is_active", true);
-
-    if (error) throw new Error(error.message);
-
-    const commands: { tenantId: string; routerId: string; action: string; payload: any }[] = [];
-
-    for (const pkg of (packages ?? [])) {
-      const rateLimit = `${pkg.speed_up_mbps}M/${pkg.speed_down_mbps}M`;
-      if (pkg.kind === "hotspot") {
-        commands.push({
-          tenantId,
-          routerId: data.routerId,
-          action: "raw.command",
-          payload: {
-            command: `:if ([:len [/ip hotspot user profile find name="${pkg.name}"]] = 0) do={ /ip hotspot user profile add name="${pkg.name}" rate-limit="${rateLimit}" shared-users=${pkg.device_limit || 1} status-autorefresh=1m; } else={ /ip hotspot user profile set [find name="${pkg.name}"] rate-limit="${rateLimit}" shared-users=${pkg.device_limit || 1} status-autorefresh=1m; };`
-          }
-        });
-      } else if (pkg.kind === "pppoe") {
-        commands.push({
-          tenantId,
-          routerId: data.routerId,
-          action: "raw.command",
-          payload: {
-            command: `:if ([:len [/ppp profile find name="${pkg.name}"]] = 0) do={ /ppp profile add name="${pkg.name}" local-address=10.0.0.1 remote-address="PPPOE ACTIVE POOL" rate-limit="${rateLimit}" dns-server=8.8.8.8,1.1.1.1; } else={ /ppp profile set [find name="${pkg.name}"] local-address=10.0.0.1 remote-address="PPPOE ACTIVE POOL" rate-limit="${rateLimit}" dns-server=8.8.8.8,1.1.1.1; };`
-          }
-        });
-      }
-    }
-
-    if (commands.length > 0) {
-      await enqueueRouterCommands(commands);
-    }
-
-    return { success: true, count: commands.length };
   });
 

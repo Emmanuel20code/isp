@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { enqueueRouterCommands } from "@/lib/agent-commands.server";
-import { startOfMonthUtc, startOfTodayUtc, normalizeKePhone } from "@/lib/billing-helpers";
+import { startOfMonthUtc, startOfTodayUtc } from "@/lib/billing-helpers";
 import { computeRouterStatus } from "@/lib/mikrotik";
 import { getTenantRoutersForDropdown } from "@/lib/network.functions";
 
@@ -223,7 +223,7 @@ export const savePPPoECustomer = createServerFn({ method: "POST" })
     const payload = {
       tenant_id: tenantId,
       full_name: inputData.full_name || "",
-      phone: inputData.phone ? normalizeKePhone(inputData.phone) : "",
+      phone: inputData.phone || "",
       kind: "pppoe",
       username: inputData.username || "",
       password: inputData.password || inputData.username || "",
@@ -304,33 +304,18 @@ export const suspendPPPoECustomer = createServerFn({ method: "POST" })
     await supabase.from("customers").update({ status: data.status }).eq("id", data.id);
 
     if (customer.router_id) {
-      const { RouterManagementService } = await import("@/lib/router-management.server");
-      const service = new RouterManagementService(supabase);
-
-      // Resolve package profile and rate limits for proper sync
-      let profileName = "default";
-      let rateLimit: string | undefined = undefined;
-
-      if (customer.package_id) {
-        const { data: pkg } = await supabase
-          .from("packages")
-          .select("name, speed_up_mbps, speed_down_mbps")
-          .eq("id", customer.package_id)
-          .maybeSingle();
-        if (pkg) {
-          profileName = pkg.name;
-          rateLimit = `${pkg.speed_up_mbps || 10}M/${pkg.speed_down_mbps || 10}M`;
-        }
-      }
-
-      await service.togglePPPoEUserState({
-        tenantId,
-        routerId: customer.router_id,
-        username: customer.username,
-        enabled: data.status === "active",
-        profileName,
-        rateLimit,
-      });
+      await enqueueRouterCommands([
+        {
+          tenantId,
+          routerId: customer.router_id,
+          action: "pppoe.update_user",
+          payload: {
+            username: customer.username,
+            disabled: data.status !== "active",
+            profile: data.status === "active" ? undefined : "expired-limited",
+          },
+        },
+      ]);
     }
 
     return { success: true };
