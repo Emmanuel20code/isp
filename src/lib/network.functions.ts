@@ -207,6 +207,38 @@ export const fixRouterSsl = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+export const hardenRouterHotspot = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({ id: z.string().uuid() }).parse(input))
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const tenantId = await currentTenantId(supabase, userId);
+
+    const { data: router } = await supabase
+      .from("routers")
+      .select("id, name, onboard_token")
+      .eq("id", data.id)
+      .eq("tenant_id", tenantId)
+      .single();
+
+    if (!router) throw new Error("Router not found");
+
+    // Enqueue hotspot hardening command to eliminate unauthorized device connections
+    const { error } = await supabase.from("router_commands").insert({
+      tenant_id: tenantId,
+      router_id: data.id,
+      action: "hotspot.harden_security",
+      payload: {
+        reason: "dashboard_manual_hardening",
+        timestamp: new Date().toISOString(),
+      },
+      status: "queued",
+    });
+
+    if (error) throw new Error(error.message);
+    return { ok: true, message: "Hotspot hardening command queued for router." };
+  });
+
 export const deleteRouter = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => z.object({ id: z.string().uuid() }).parse(input))

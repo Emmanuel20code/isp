@@ -12,6 +12,7 @@ import {
   toggleRouterDisabled,
   getRouterScript,
   fixRouterSsl,
+  hardenRouterHotspot,
 } from "@/lib/network.functions";
 import { getMyContext } from "@/lib/tenancy.functions";
 import { AppShell } from "@/components/AppShell";
@@ -122,10 +123,12 @@ interface RouterCardProps {
   onForceSync: (id: string) => void;
   onToggleDisable: (id: string, isDisabled: boolean) => void;
   onFixSsl: (id: string) => void;
+  onHardenHotspot: (id: string) => void;
   isDeleting: boolean;
   isRefreshingTok: boolean;
   isSyncing: boolean;
   isFixingSsl: boolean;
+  isHardening: boolean;
 }
 
 function RouterCard({
@@ -137,11 +140,13 @@ function RouterCard({
   onRefreshTok,
   onForceSync,
   onFixSsl,
+  onHardenHotspot,
   onToggleDisable,
   isDeleting,
   isRefreshingTok,
   isSyncing,
   isFixingSsl,
+  isHardening,
 }: RouterCardProps) {
   const [copied, setCopied] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
@@ -395,6 +400,20 @@ function RouterCard({
                       )}
                       Fix SSL Handshake
                     </button>
+                    <button
+                      type="button"
+                      disabled={isHardening}
+                      onClick={() => onHardenHotspot(r.id)}
+                      className="text-[11px] text-emerald-400 hover:text-emerald-300 underline font-medium cursor-pointer disabled:opacity-50 flex items-center gap-1 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20"
+                      title="Removes MAC cookies, disables trial uptime, sets 1 device per MAC, and clears rogue bindings"
+                    >
+                      {isHardening ? (
+                        <Loader2 className="size-3 animate-spin" />
+                      ) : (
+                        <ShieldCheck className="size-3 text-emerald-400" />
+                      )}
+                      Fix Free Internet / Harden
+                    </button>
                     <Button
                       size="sm"
                       variant="secondary"
@@ -535,6 +554,30 @@ function RouterCard({
                       onClick={() => onToggleDisable(r.id, !r.is_disabled)}
                     >
                       {r.is_disabled ? "Enable Router" : "Disable / Quarantine"}
+                    </Button>
+                  </div>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2.5 border-t bg-emerald-500/[0.04] -mx-3 -mb-3 p-3 rounded-b-lg border-emerald-500/20">
+                    <div className="space-y-0.5">
+                      <span className="font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5 text-xs">
+                        <ShieldCheck className="size-3.5" /> Hotspot Anti-Free-Internet Lock
+                      </span>
+                      <p className="text-[11px] text-muted-foreground">
+                        Removes MAC cookies, disables trial uptime, sets 1 device per MAC, and clears rogue bindings.
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={isHardening}
+                      className="h-7 text-xs gap-1.5 bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 shrink-0"
+                      onClick={() => onHardenHotspot(r.id)}
+                    >
+                      {isHardening ? (
+                        <Loader2 className="size-3 animate-spin" />
+                      ) : (
+                        <ShieldCheck className="size-3.5" />
+                      )}
+                      Remote Harden Hotspot
                     </Button>
                   </div>
                 </div>
@@ -1029,6 +1072,24 @@ function RoutersPage() {
     },
   });
 
+  const hardenHotspotFn = useServerFn(hardenRouterHotspot);
+  const hardenHotspotMutation = useMutation({
+    mutationFn: (id: string) => hardenHotspotFn({ data: { id } }),
+    onSuccess: async () => {
+      toast.success(
+        "Hotspot security hardening queued! Cookies wiped, trial disabled, 1-device policy enforced.",
+      );
+      await qc.invalidateQueries({ queryKey: ["network"] });
+    },
+    onError: (err) => {
+      toast.error(
+        `Failed to harden hotspot: ${err instanceof Error ? err.message : "Unknown error"}`,
+      );
+    },
+  });
+
+  const [apGuideOpen, setApGuideOpen] = useState(false);
+
   const tenantSlug = ctx.data?.tenant?.slug || "wifi";
 
   return (
@@ -1043,6 +1104,14 @@ function RoutersPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setApGuideOpen(true)}
+            className="gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10"
+          >
+            <ShieldCheck className="size-3.5" /> Anti-Leak & Security Guide
+          </Button>
           <Link to="/datagrid">
             <Button variant="outline" size="sm" className="gap-1.5 text-xs font-semibold">
               <Layers className="size-3.5 text-primary" /> Open Data Grid View
@@ -1142,6 +1211,7 @@ function RoutersPage() {
               onRefreshTok={(id) => refreshTokMutation.mutate(id)}
               onForceSync={(id) => forceSyncMutation.mutate(id)}
               onFixSsl={(id) => fixSslMutation.mutate(id)}
+              onHardenHotspot={(id) => hardenHotspotMutation.mutate(id)}
               onToggleDisable={(id, isDisabled) => toggleDisableMutation.mutate({ id, isDisabled })}
               isDeleting={deleteMutation.isPending && deleteMutation.variables === r.id}
               isRefreshingTok={
@@ -1149,10 +1219,90 @@ function RoutersPage() {
               }
               isSyncing={forceSyncMutation.isPending && forceSyncMutation.variables === r.id}
               isFixingSsl={fixSslMutation.isPending && fixSslMutation.variables === r.id}
+              isHardening={
+                hardenHotspotMutation.isPending && hardenHotspotMutation.variables === r.id
+              }
             />
           ))}
         </div>
       </div>
+
+      {/* Access Point / Leak Diagnostics Dialog */}
+      <Dialog open={apGuideOpen} onOpenChange={setApGuideOpen}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ShieldCheck className="size-5 text-emerald-500" /> Hotspot Security & Anti-Leak Diagnostics
+            </DialogTitle>
+            <DialogDescription>
+              Why random phones/devices might connect without paying and how the system stops it.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 text-xs leading-relaxed">
+            <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg space-y-1.5">
+              <h4 className="font-bold text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5">
+                <Check className="size-3.5" /> 1. Dashboard 1-Click Remote Hardening
+              </h4>
+              <p className="text-muted-foreground">
+                Clicking <strong className="text-foreground">"Fix Free Internet / Harden"</strong> on your router sends an instant command to:
+              </p>
+              <ul className="list-disc list-inside text-muted-foreground space-y-0.5 ml-1">
+                <li>Enforce <code className="text-emerald-500">addresses-per-mac=1</code> (blocks MAC spoofing & device cloning).</li>
+                <li>Disable <code className="text-emerald-500">mac-cookie</code> (stops devices from auto-reauthenticating for free after voucher expiry).</li>
+                <li>Set <code className="text-emerald-500">trial-uptime-limit=0s</code> (wipes free trial bypasses).</li>
+                <li>Wipe ghost cookies & rogue bypassed IP bindings from router memory.</li>
+                <li>Activate Anti-DNS-Tunnel NAT redirection (intercepts SlowDNS/DroidVPN port 53).</li>
+              </ul>
+            </div>
+
+            <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg space-y-1.5">
+              <h4 className="font-bold text-blue-700 dark:text-blue-300 flex items-center gap-1.5">
+                <ShieldCheck className="size-3.5" /> 2. Tunneling Apps (HTTP Custom, HA Tunnel, SlowDNS, DroidVPN)
+              </h4>
+              <p className="text-muted-foreground">
+                Tunneling apps exploit unauthenticated DNS (Port 53) or spoofed SNI headers in Walled Gardens to tunnel free data:
+              </p>
+              <ul className="list-disc list-inside text-muted-foreground space-y-0.5 ml-1">
+                <li>
+                  <strong className="text-foreground">SlowDNS & DroidVPN (DNS Port 53)</strong>: Blocked by redirecting all DNS queries to the router's internal resolver, preventing direct UDP tunnel communication.
+                </li>
+                <li>
+                  <strong className="text-foreground">HTTP Custom & HA Tunnel Plus (SNI Spoofing)</strong>: Blocked by dropping QUIC (UDP 443) and restricting Walled Garden entries strictly to the captive portal and payment endpoints.
+                </li>
+              </ul>
+            </div>
+
+            <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg space-y-1.5">
+              <h4 className="font-bold text-amber-700 dark:text-amber-300 flex items-center gap-1.5">
+                <ShieldAlert className="size-3.5" /> 3. Access Point Double-NAT Check (Crucial Hardware Step)
+              </h4>
+              <p className="text-muted-foreground">
+                If your Wi-Fi Access Points (e.g. TP-Link, Tenda, Mercusys) are operating in{" "}
+                <strong>Router / NAT Mode</strong> instead of <strong>Access Point / Bridge Mode</strong>:
+              </p>
+              <p className="text-foreground font-medium">
+                The MikroTik only sees the single MAC address of the Access Point. As soon as ONE user buys a voucher, ALL other users connected to that AP get free internet!
+              </p>
+              <div className="bg-background/80 p-2.5 rounded border border-amber-500/30 text-[11px] space-y-1">
+                <p className="font-bold text-amber-500">
+                  To fix this on your physical Access Points:
+                </p>
+                <ol className="list-decimal list-inside space-y-0.5 text-muted-foreground">
+                  <li>
+                    Set AP Operation Mode to <strong>"Access Point"</strong> or{" "}
+                    <strong>"Bridge"</strong>.
+                  </li>
+                  <li>Disable DHCP Server on the Access Point.</li>
+                  <li>
+                    Plug ethernet cable from MikroTik into the AP's <strong>LAN port</strong> (NOT
+                    the WAN/Internet port).
+                  </li>
+                </ol>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Edit Router Name & Location Dialog */}
       <Dialog

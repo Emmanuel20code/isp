@@ -177,6 +177,13 @@
 
 # ─── 11. FIREWALL NAT & MASQUERADE (HOTSPOT + PPPOE + WAN) ───
 :do {
+  # Anti-DNS-Tunnel: Force all client DNS queries to the local router resolver
+  :if ([:len [/ip firewall nat find where comment="WiFiBilling: Anti-DNS-Tunnel-UDP"]] = 0) do={
+    /ip firewall nat add chain=dstnat protocol=udp dst-port=53 action=redirect to-ports=53 comment="WiFiBilling: Anti-DNS-Tunnel-UDP" place-before=0
+  }
+  :if ([:len [/ip firewall nat find where comment="WiFiBilling: Anti-DNS-Tunnel-TCP"]] = 0) do={
+    /ip firewall nat add chain=dstnat protocol=tcp dst-port=53 action=redirect to-ports=53 comment="WiFiBilling: Anti-DNS-Tunnel-TCP" place-before=0
+  }
   :if ([:len [/ip firewall nat find where comment="WiFiBilling Hotspot NAT"]] = 0) do={
     /ip firewall nat add chain=srcnat action=masquerade src-address=10.10.0.0/24 comment="WiFiBilling Hotspot NAT"
   }
@@ -185,6 +192,13 @@
   }
   :if ([:len [/ip firewall nat find where comment="WiFiBilling WAN Masquerade"]] = 0) do={
     /ip firewall nat add chain=srcnat action=masquerade out-interface="ether1" comment="WiFiBilling WAN Masquerade"
+  }
+  # Anti-Tunneling: Block unauthenticated QUIC (UDP 443) bypasses
+  :if ([:len [/ip firewall filter find where comment="block-quic-youtube-bypass"]] = 0) do={
+    /ip firewall filter add chain=forward action=drop protocol=udp dst-port=443 comment="block-quic-youtube-bypass" place-before=0
+  }
+  :if ([:len [/ip firewall raw find where comment="block-quic-youtube-bypass"]] = 0) do={
+    /ip firewall raw add chain=prerouting action=drop protocol=udp dst-port=443 comment="block-quic-youtube-bypass"
   }
 } on-error={}
 

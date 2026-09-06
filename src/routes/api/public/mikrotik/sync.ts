@@ -400,7 +400,61 @@ async function handleSyncRequest(request: Request): Promise<Response> {
         );
         rscLines.push(`};`);
       }
-    } else if (cmd.action === "raw.command") {
+    } else if (
+      cmd.action === "hotspot.harden_security" ||
+      cmd.action === "hotspot.fix_unauthorized"
+    ) {
+      rscLines.push(
+        `:log warning "WiFiBilling: Executing Hotspot Security Hardening & Anti-Tunneling Fix...";`,
+      );
+      // 1. Enforce strict login-by on all hotspot profiles and disable trial uptime
+      rscLines.push(
+        `:do { /ip hotspot profile set [find] login-by=http-chap,http-pap,cookie trial-uptime-limit=0s split-user-domain=no http-cookie-lifetime=1d use-radius=no ssl-certificate=none; } on-error={};`,
+      );
+      // 2. Enforce 1 device per MAC address on all hotspot servers
+      rscLines.push(
+        `:do { /ip hotspot set [find] addresses-per-mac=1 disabled=no; } on-error={};`,
+      );
+      // 3. Wipe all stored MAC cookies (kills unauthorized cookie logins)
+      rscLines.push(`:do { /ip hotspot cookie remove [find]; } on-error={};`);
+      // 4. Remove default unpassworded 'admin' hotspot user if present
+      rscLines.push(`:do { /ip hotspot user remove [find name="admin"]; } on-error={};`);
+      // 5. Clean up any rogue bypass bindings that do not belong to valid devices
+      rscLines.push(`:do {`);
+      rscLines.push(`  :foreach b in=[/ip hotspot ip-binding find type=bypassed] do={`);
+      rscLines.push(`    :local c [/ip hotspot ip-binding get $b comment];`);
+      rscLines.push(`    :local a [/ip hotspot ip-binding get $b address];`);
+      rscLines.push(
+        `    :if ($a != "10.10.0.1" && $a != "192.168.88.1" && !($c ~ "WiFiBilling: Device") && !($c ~ "WiFiBilling: Router") && !($c ~ "WiFiBilling: Default")) do={`,
+      );
+      rscLines.push(`      :do { /ip hotspot ip-binding remove $b; } on-error={};`);
+      rscLines.push(`    };`);
+      rscLines.push(`  };`);
+      rscLines.push(`} on-error={};`);
+      // 6. Anti-DNS-Tunneling: Force all client DNS requests (UDP/TCP 53) to the local router DNS resolver
+      rscLines.push(`:do {`);
+      rscLines.push(`  /ip hotspot walled-garden ip remove [find comment~"Allow DNS Queries"];`);
+      rscLines.push(`  :if ([:len [/ip firewall nat find comment="WiFiBilling: Anti-DNS-Tunnel-UDP"]] = 0) do={`);
+      rscLines.push(`    /ip firewall nat add chain=dstnat protocol=udp dst-port=53 action=redirect to-ports=53 comment="WiFiBilling: Anti-DNS-Tunnel-UDP" place-before=0;`);
+      rscLines.push(`  };`);
+      rscLines.push(`  :if ([:len [/ip firewall nat find comment="WiFiBilling: Anti-DNS-Tunnel-TCP"]] = 0) do={`);
+      rscLines.push(`    /ip firewall nat add chain=dstnat protocol=tcp dst-port=53 action=redirect to-ports=53 comment="WiFiBilling: Anti-DNS-Tunnel-TCP" place-before=0;`);
+      rscLines.push(`  };`);
+      rscLines.push(`} on-error={};`);
+      // 7. Anti-Tunneling: Block QUIC (UDP 443) and rogue tunnel proxy ports
+      rscLines.push(`:do {`);
+      rscLines.push(`  :if ([:len [/ip firewall filter find comment="block-quic-youtube-bypass"]] = 0) do={`);
+      rscLines.push(`    /ip firewall filter add chain=forward action=drop protocol=udp dst-port=443 comment="block-quic-youtube-bypass" place-before=0;`);
+      rscLines.push(`  };`);
+      rscLines.push(`  :if ([:len [/ip firewall raw find comment="block-quic-youtube-bypass"]] = 0) do={`);
+      rscLines.push(`    /ip firewall raw add chain=prerouting action=drop protocol=udp dst-port=443 comment="block-quic-youtube-bypass";`);
+      rscLines.push(`  };`);
+      rscLines.push(`} on-error={};`);
+      // 8. Flush active sessions and host table so unauthenticated devices immediately hit the captive portal
+      rscLines.push(`:do { /ip hotspot active remove [find]; } on-error={};`);
+      rscLines.push(`:do { /ip hotspot host remove [find]; } on-error={};`);
+      rscLines.push(`:log info "WiFiBilling: Hotspot Security Hardening completed successfully.";`);
+    } else if (cmd.action === "raw.command" || cmd.action === "sys.terminal") {
       if (p.command) {
         rscLines.push(String(p.command));
       }

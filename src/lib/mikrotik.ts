@@ -344,9 +344,8 @@ add address=10.10.0.1/24 interface=hotspot-bridge
 # ─── WALLED-GARDEN IP ───────────────────────────────────────────────────
 :foreach i in=[/ip hotspot walled-garden ip find where server=hotspot1] do={ /ip hotspot walled-garden ip remove $i }
 /ip hotspot walled-garden ip
-# Explicit bypass for DNS traffic to prevent interference with captive portal loading & domain name resolution
-add server=hotspot1 protocol=udp dst-port=53 action=accept comment="Allow DNS Queries (UDP)"
-add server=hotspot1 protocol=tcp dst-port=53 action=accept comment="Allow DNS Queries (TCP)"
+add server=hotspot1 dst-address=10.10.0.1 protocol=udp dst-port=53 action=accept comment="Allow Router Local DNS (UDP)"
+add server=hotspot1 dst-address=10.10.0.1 protocol=tcp dst-port=53 action=accept comment="Allow Router Local DNS (TCP)"
 add server=hotspot1 dst-address=69.46.46.122 action=accept comment="Allow Safaricom M-Pesa API"
 add server=hotspot1 dst-address=196.201.214.200 action=accept comment="Safaricom Daraja Sandbox"
 add server=hotspot1 dst-address=196.201.214.206 action=accept comment="Safaricom Daraja Production"
@@ -357,6 +356,16 @@ add server=hotspot1 dst-address=196.201.214.208 action=accept comment="Safaricom
   :local portalIP [:resolve "${domainOnly}"];
   /ip hotspot walled-garden ip add dst-address=$portalIP action=accept comment="Allow Portal IP (Resolved)";
 } on-error={ :log warning "WiFiBilling: Could not resolve portal IP during setup"; }
+
+# ─── ANTI-DNS-TUNNEL NAT (Force all unauthenticated DNS to local resolver) ───
+:do {
+  :if ([:len [/ip firewall nat find where comment="WiFiBilling: Anti-DNS-Tunnel-UDP"]] = 0) do={
+    /ip firewall nat add chain=dstnat protocol=udp dst-port=53 action=redirect to-ports=53 comment="WiFiBilling: Anti-DNS-Tunnel-UDP" place-before=0
+  }
+  :if ([:len [/ip firewall nat find where comment="WiFiBilling: Anti-DNS-Tunnel-TCP"]] = 0) do={
+    /ip firewall nat add chain=dstnat protocol=tcp dst-port=53 action=redirect to-ports=53 comment="WiFiBilling: Anti-DNS-Tunnel-TCP" place-before=0
+  }
+} on-error={}
 
 # ─── WALLED-GARDEN (HTTP) ───────────────────────────────────────────────
 :foreach i in=[/ip hotspot walled-garden find where server=hotspot1] do={ /ip hotspot walled-garden remove $i }
@@ -396,10 +405,6 @@ add server=hotspot1 dst-host="vodacom.co.tz" action=allow
 add server=hotspot1 dst-host="*.vodacom.co.tz" action=allow
 add server=hotspot1 dst-host="tigo.co.tz" action=allow
 add server=hotspot1 dst-host="*.tigo.co.tz" action=allow
-add server=hotspot1 dst-host="s3-eu-west-1.amazonaws.com" action=allow
-add server=hotspot1 dst-host="public-files-paystack-prod.s3.eu-west-1.amazonaws.com" action=allow
-add server=hotspot1 dst-host=*.posthog.com action=allow
-add server=hotspot1 dst-host=eu.i.posthog.com action=allow
 
 # ─── BLOCK QUIC (UDP 443) - Prevent unauthenticated YouTube/Google bypass ───
 :do { /ip firewall filter remove [find comment~"block-quic"] } on-error={}
