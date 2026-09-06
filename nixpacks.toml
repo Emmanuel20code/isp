@@ -1,0 +1,17 @@
+# Nixpacks configuration for Railway deployment
+providers = ["node"]
+
+[nixpkgs]
+pkgs = ["nodejs_22", "deno"]
+
+[phases.setup]
+nixPkgs = ["nodejs_22", "deno"]
+
+[phases.install]
+cmds = ["npm install"]
+
+[phases.build]
+cmds = ["deno cache src/integrations/lovable/index.ts || true", "npm run build"]
+
+[start]
+cmd = "HOST=0.0.0.0 PORT=${PORT:-3000} NODE_ENV=production node .output/server/index.mjs"

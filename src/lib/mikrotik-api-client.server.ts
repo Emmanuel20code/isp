@@ -1,0 +1,819 @@
+import { RouterOSAPI } from "node-routeros";
+
+export interface UserSession {
+  sessionId: string;
+  username: string;
+  ipAddress: string;
+  macAddress: string;
+  bytesIn: number;
+  bytesOut: number;
+  uptime: string;
+}
+
+/**
+ * MikroTik RouterOS API Service
+ * Handles direct communication with routers for real-time operations.
+ */
+export class MikrotikApiClient {
+  private api: RouterOSAPI;
+  private isConnected: boolean = false;
+  private host: string;
+  private username: string;
+  private password: string;
+  private port: number;
+
+  constructor(options: {
+    host: string;
+    username?: string;
+    password?: string;
+    port?: number;
+    timeout?: number;
+  }) {
+    this.host = options.host;
+    this.username = options.username || "admin";
+    this.password = options.password || "";
+    this.port = options.port || 8728;
+
+    this.api = new RouterOSAPI({
+      host: this.host,
+      user: this.username,
+      password: this.password,
+      port: this.port,
+      timeout: options.timeout || 4, // 4-second connect timeout for fast fallback
+    });
+  }
+
+  /**
+   * Establishes a persistent connection to the router if not already connected.
+   */
+  async connect(): Promise<void> {
+    if (this.isConnected) return;
+    try {
+      await this.api.connect();
+      this.isConnected = true;
+      console.log(`✅ Connected to MikroTik router at ${this.host}`);
+
+      this.api.on("error", (err) => {
+        console.warn(
+          `[MikrotikApiClient] Router connection notice (${this.host}):`,
+          err?.message || err,
+        );
+        this.isConnected = false;
+      });
+    } catch (error: any) {
+      this.isConnected = false;
+      const isTimeout =
+        error?.message?.includes("Timed out") ||
+        error?.name === "RosException" ||
+        error?.code === "ETIMEDOUT" ||
+        error?.code === "ECONNREFUSED" ||
+        error?.code === "EHOSTUNREACH";
+
+      if (isTimeout) {
+        console.debug(
+          `[MikrotikApiClient] Direct API connection to ${this.host}:${this.port} unavailable (${error.message || error.name}). Router uses agent polling sync.`,
+        );
+      } else {
+        console.warn(
+          `[MikrotikApiClient] Could not connect to MikroTik router at ${this.host}: ${error.message}`,
+        );
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Manually terminates the persistent router connection.
+   */
+  async disconnect(): Promise<void> {
+    try {
+      await this.api.close();
+      this.isConnected = false;
+      console.log(`🔌 Disconnected from MikroTik router at ${this.host}`);
+    } catch (error) {
+      console.error(`Error disconnecting from router at ${this.host}:`, error);
+    }
+  }
+
+  /**
+   * Automatically handles user logic. If they exist, it resets counters and updates their profile.
+   * If they do not exist, it inserts them freshly into the hotspot database.
+   */
+  async upsertHotspotUser(
+    username: string,
+    password: string,
+    profile: string = "default",
+    limitUptime?: string, // e.g., "01:00:00" or "1d"
+    limitBytesTotal?: number, // e.g., 1073741824 for 1GB
+    comment: string = "Paid via Portal",
+  ): Promise<void> {
+    try {
+      await this.connect();
+
+      // Search for an existing user record
+      const users = await this.api.write("/ip/hotspot/user/print", [`?name=${username}`]);
+
+      if (users && users.length > 0) {
+        const userId = users[0][".id"];
+        const updateArgs = [
+          `=.id=${userId}`,
+          `=password=${password}`,
+          `=profile=${profile}`,
+          `=comment=Renewed: ${comment}`,
+          "=disabled=no",
+        ];
+
+        // Apply or safely clear limits
+        updateArgs.push(limitUptime ? `=limit-uptime=${limitUptime}` : "=limit-uptime=");
+        updateArgs.push(
+          limitBytesTotal
+            ? `=limit-bytes-total=${limitBytesTotal.toString()}`
+            : "=limit-bytes-total=",
+        );
+
+        // Zero out usage data to give them a completely clean renewal window
+        updateArgs.push("=uptime=0s");
+        updateArgs.push("=bytes-in=0");
+        updateArgs.push("=bytes-out=0");
+
+        await this.api.write("/ip/hotspot/user/set", updateArgs);
+        console.log(`🔄 Renewed existing user: ${username} on ${this.host}`);
+
+        // Kick them if they are actively connected so changes apply instantly
+        await this.kickUserSessionByUsername(username);
+      } else {
+        // Create user freshly if they don't exist
+        const commandArgs = [
+          `=name=${username}`,
+          `=password=${password}`,
+          `=profile=${profile}`,
+          `=comment=${comment}`,
+          "=disabled=no",
+        ];
+
+        if (limitUptime) commandArgs.push(`=limit-uptime=${limitUptime}`);
+        if (limitBytesTotal) commandArgs.push(`=limit-bytes-total=${limitBytesTotal.toString()}`);
+
+        await this.api.write("/ip/hotspot/user/add", commandArgs);
+        console.log(`✅ Created fresh hotspot user: ${username} on ${this.host}`);
+      }
+    } catch (error) {
+      console.error(`❌ Upsert workflow failed for user ${username} on ${this.host}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Kicks an active session immediately by username, forcing re-authentication.
+   */
+  async kickUserSessionByUsername(username: string): Promise<boolean> {
+    try {
+      await this.connect();
+      const activeSessions = await this.api.write("/ip/hotspot/active/print", [
+        `?user=${username}`,
+      ]);
+
+      if (activeSessions && activeSessions.length > 0) {
+        for (const session of activeSessions) {
+          await this.api.write("/ip/hotspot/active/remove", [`=.id=${session[".id"]}`]);
+          console.log(`⚡ Kicked active session for user: ${username} on ${this.host}`);
+        }
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error(`❌ Failed to kick user session for ${username} on ${this.host}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Removes a user from the router Hotspot databases completely.
+   */
+  async removeHotspotUser(username: string): Promise<void> {
+    try {
+      await this.connect();
+      const users = await this.api.write("/ip/hotspot/user/print", [`?name=${username}`]);
+
+      if (users && users.length > 0) {
+        const userId = users[0][".id"];
+        await this.api.write("/ip/hotspot/user/remove", [`=.id=${userId}`]);
+        console.log(`🗑️ Removed hotspot user: ${username} on ${this.host}`);
+      }
+    } catch (error) {
+      console.error(`❌ Failed to remove hotspot user ${username} on ${this.host}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Retrieves an array of all active connections on the hotspot network.
+   */
+  async getActiveUsers(): Promise<UserSession[]> {
+    try {
+      await this.connect();
+      const activeSessions = await this.api.write("/ip/hotspot/active/print");
+
+      return activeSessions.map((session: any) => ({
+        sessionId: session[".id"],
+        username: session.user || "unknown",
+        ipAddress: session.address || "",
+        macAddress: session["mac-address"] || "",
+        bytesIn: parseInt(session["bytes-in"] || "0"),
+        bytesOut: parseInt(session["bytes-out"] || "0"),
+        uptime: session.uptime || "0s",
+      }));
+    } catch (error) {
+      console.error(`❌ Failed to get active users on ${this.host}:`, error);
+      return [];
+    }
+  }
+
+  /**
+   * Fetches data metrics for an actively logged-in user.
+   */
+  async getUserUsage(
+    username: string,
+  ): Promise<{ bytesIn: number; bytesOut: number; uptime: string } | null> {
+    try {
+      await this.connect();
+      const activeSessions = await this.api.write("/ip/hotspot/active/print", [
+        `?user=${username}`,
+      ]);
+
+      if (activeSessions && activeSessions.length > 0) {
+        const session = activeSessions[0];
+        return {
+          bytesIn: parseInt(session["bytes-in"] || "0"),
+          bytesOut: parseInt(session["bytes-out"] || "0"),
+          uptime: session.uptime || "0s",
+        };
+      }
+      return null;
+    } catch (error) {
+      console.error(`❌ Failed to get user usage for ${username} on ${this.host}:`, error);
+      return null;
+    }
+  }
+
+  /**
+   * Creates a structured user speed and session parameter profile template on the router.
+   */
+  async createUserProfile(
+    profileName: string,
+    rateLimit: string,
+    sessionTimeout: string,
+  ): Promise<void> {
+    try {
+      await this.connect();
+      await this.api.write("/ip/hotspot/user/profile/add", [
+        `=name=${profileName}`,
+        `=rate-limit=${rateLimit}`,
+        `=session-timeout=${sessionTimeout}`,
+        "=shared-users=1",
+        "=status-autorefresh=1m",
+      ]);
+      console.log(`✅ Created user profile: ${profileName} on ${this.host}`);
+    } catch (error) {
+      console.error(`❌ Failed to create user profile ${profileName} on ${this.host}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Immediately authorizes a hotspot user on the router via /ip/hotspot/active/login or host session activation,
+   * ensuring they appear under /ip hotspot active without requiring a manual page refresh.
+   */
+  async authorizeHotspotActiveSession(
+    username: string,
+    password?: string,
+    ip?: string,
+    mac?: string,
+  ): Promise<boolean> {
+    try {
+      await this.connect();
+
+      // Clear any prior conflicting session
+      await this.kickUserSessionByUsername(username).catch(() => false);
+
+      let targetIp = ip?.trim() || "";
+      let targetMac = mac?.trim() || "";
+
+      // If IP is missing, find host by MAC
+      if (!targetIp && targetMac) {
+        try {
+          const hosts = await this.api.write("/ip/hotspot/host/print", [
+            `?mac-address=${targetMac}`,
+          ]);
+          if (hosts && hosts.length > 0) {
+            targetIp = hosts[0]["ip-address"] || hosts[0]["address"] || "";
+          }
+        } catch {
+          // ignore search failure
+        }
+      }
+
+      // If MAC is missing, find host by IP
+      if (!targetMac && targetIp) {
+        try {
+          const hosts = await this.api.write("/ip/hotspot/host/print", [`?address=${targetIp}`]);
+          if (hosts && hosts.length > 0) {
+            targetMac = hosts[0]["mac-address"] || "";
+          }
+        } catch {
+          // ignore search failure
+        }
+      }
+
+      if (targetIp) {
+        const loginArgs = [
+          `=user=${username}`,
+          `=password=${password || username}`,
+          `=ip-address=${targetIp}`,
+        ];
+        if (targetMac) loginArgs.push(`=mac-address=${targetMac}`);
+
+        await this.api.write("/ip/hotspot/active/login", loginArgs);
+        console.log(
+          `[PAYMENT_FLOW][4/5] Router response received: Programmatic active login successful for user ${username} at IP ${targetIp} on ${this.host}`,
+        );
+        return true;
+      }
+
+      return false;
+    } catch (err: any) {
+      console.warn(
+        `[PAYMENT_FLOW][4/5] Direct active session login notice on ${this.host} for ${username}: ${err?.message || err}`,
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Automatically creates or updates a PPPoE user secret on the router,
+   * sets the active profile, and kicks any stale active session so the customer's
+   * home router / CPE immediately reconnects with renewed credentials and gains instant internet access.
+   */
+  async upsertPPPoEUser(
+    username: string,
+    password: string,
+    profile: string = "default",
+    rateLimit?: string,
+    comment: string = "Paid PPPoE User",
+  ): Promise<void> {
+    try {
+      await this.connect();
+
+      // 1. Ensure profile exists if custom profile name provided
+      if (profile && profile !== "default") {
+        try {
+          const existingProfiles = await this.api.write("/ppp/profile/print", [`?name=${profile}`]);
+          if (!existingProfiles || existingProfiles.length === 0) {
+            const profileArgs = [
+              `=name=${profile}`,
+              "=local-address=10.0.0.1",
+              "=remote-address=PPPOE ACTIVE POOL",
+              "=dns-server=8.8.8.8,1.1.1.1",
+            ];
+            if (rateLimit) profileArgs.push(`=rate-limit=${rateLimit}`);
+            await this.api.write("/ppp/profile/add", profileArgs);
+          }
+        } catch {
+          // ignore profile creation warning
+        }
+      }
+
+      // 2. Upsert PPP secret
+      const secrets = await this.api.write("/ppp/secret/print", [`?name=${username}`]);
+      if (secrets && secrets.length > 0) {
+        const secretId = secrets[0][".id"];
+        await this.api.write("/ppp/secret/set", [
+          `=.id=${secretId}`,
+          `=password=${password}`,
+          `=profile=${profile}`,
+          "=disabled=no",
+          `=comment=${comment}`,
+        ]);
+        console.log(
+          `[PAYMENT_FLOW][4/5] Router response received: Updated existing PPPoE secret for ${username} on ${this.host}`,
+        );
+      } else {
+        await this.api.write("/ppp/secret/add", [
+          `=name=${username}`,
+          `=password=${password}`,
+          `=profile=${profile}`,
+          "=service=pppoe",
+          "=disabled=no",
+          `=comment=${comment}`,
+        ]);
+        console.log(
+          `[PAYMENT_FLOW][4/5] Router response received: Created fresh PPPoE secret for ${username} on ${this.host}`,
+        );
+      }
+
+      // 3. Kicking active PPPoE session forces client CPE / home router to reconnect immediately!
+      await this.kickPPPoEActiveSession(username);
+    } catch (error) {
+      console.error(
+        `[PAYMENT_FLOW][4/5] PPPoE upsert failed for user ${username} on ${this.host}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Kicks active PPPoE session by username to force immediate reconnection with active credentials.
+   */
+  async kickPPPoEActiveSession(username: string): Promise<boolean> {
+    try {
+      await this.connect();
+      const activeSessions = await this.api.write("/ppp/active/print", [`?name=${username}`]);
+      if (activeSessions && activeSessions.length > 0) {
+        for (const session of activeSessions) {
+          await this.api.write("/ppp/active/remove", [`=.id=${session[".id"]}`]);
+          console.log(
+            `[PAYMENT_FLOW][4/5] Router response: Terminated old PPPoE session for ${username} on ${this.host} to force immediate reconnect.`,
+          );
+        }
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.warn(`[MikrotikApiClient] Notice kicking PPPoE session for ${username}:`, error);
+      return false;
+    }
+  }
+
+  /**
+   * Safely enables or disables a PPPoE user on the MikroTik router.
+   * If disabling, automatically terminates active PPPoE sessions to disconnect them instantly.
+   */
+  async setPPPoEUserEnabled(username: string, enabled: boolean): Promise<boolean> {
+    try {
+      await this.connect();
+      const secrets = await this.api.write("/ppp/secret/print", [`?name=${username}`]);
+
+      if (secrets && secrets.length > 0) {
+        const secretId = secrets[0][".id"];
+        const disabledState = enabled ? "no" : "yes";
+        await this.api.write("/ppp/secret/set", [`=.id=${secretId}`, `=disabled=${disabledState}`]);
+        console.log(
+          `[PPPoE Client] Successfully set enabled state to ${enabled} for user ${username} on ${this.host}`,
+        );
+
+        // Kick the active session to force status application
+        await this.kickPPPoEActiveSession(username);
+        return true;
+      } else {
+        console.warn(
+          `[PPPoE Client] Cannot toggle state. User ${username} not found on ${this.host}`,
+        );
+        return false;
+      }
+    } catch (error) {
+      console.error(
+        `[PPPoE Client] Failed to set PPPoE user state for ${username} on ${this.host}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Synchronizes a user's PPPoE profile and active state based on their payment/subscription status.
+   * If paid, sets to high-speed profile & enables secret. If unpaid/expired, either disables them or
+   * assigns them to a restricted speed/portal redirect profile like "expired-limited" to display billing reminders.
+   */
+  async syncPPPoEUserProfileAndStatus(
+    username: string,
+    profileName: string,
+    rateLimit?: string,
+    isPaid: boolean = true,
+  ): Promise<boolean> {
+    try {
+      await this.connect();
+
+      // Ensure target profile exists if user is paid and profile is custom
+      if (isPaid && profileName && profileName !== "default") {
+        try {
+          const existingProfiles = await this.api.write("/ppp/profile/print", [
+            `?name=${profileName}`,
+          ]);
+          if (!existingProfiles || existingProfiles.length === 0) {
+            const profileArgs = [
+              `=name=${profileName}`,
+              "=local-address=10.0.0.1",
+              "=remote-address=PPPOE ACTIVE POOL",
+              "=dns-server=8.8.8.8,1.1.1.1",
+            ];
+            if (rateLimit) profileArgs.push(`=rate-limit=${rateLimit}`);
+            await this.api.write("/ppp/profile/add", profileArgs);
+            console.log(
+              `[PPPoE Client] Created profile ${profileName} during sync on ${this.host}`,
+            );
+          }
+        } catch (profileErr) {
+          console.warn(
+            `[PPPoE Client] Profile setup warning for ${profileName} on ${this.host}:`,
+            profileErr,
+          );
+        }
+      }
+
+      // Look up and update the secret
+      const secrets = await this.api.write("/ppp/secret/print", [`?name=${username}`]);
+      if (secrets && secrets.length > 0) {
+        const secretId = secrets[0][".id"];
+
+        // If paid, enable secret and assign correct service profile.
+        // If unpaid, assign to 'expired-limited' profile and keep secret active so they can redirect to pay!
+        const targetProfile = isPaid ? profileName : "expired-limited";
+        const disabledState = "no";
+        const commentMsg = isPaid
+          ? "Paid PPPoE User (Synced)"
+          : "Suspended PPPoE User (Expired/Unpaid - Redirecting to Portal)";
+
+        await this.api.write("/ppp/secret/set", [
+          `=.id=${secretId}`,
+          `=profile=${targetProfile}`,
+          `=disabled=${disabledState}`,
+          `=comment=${commentMsg}`,
+        ]);
+        console.log(
+          `[PPPoE Client] Synced PPPoE user ${username} (Paid: ${isPaid}, Profile: ${targetProfile}, Disabled: ${disabledState}) on ${this.host}`,
+        );
+
+        // Kick session to apply new profile or status instantly
+        await this.kickPPPoEActiveSession(username);
+        return true;
+      } else {
+        console.warn(
+          `[PPPoE Client] Cannot sync user. PPPoE secret for ${username} not found on ${this.host}`,
+        );
+        return false;
+      }
+    } catch (error) {
+      console.error(
+        `[PPPoE Client] Failed to sync PPPoE profile and status for ${username} on ${this.host}:`,
+        error,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Periodically cleans up active sessions on the router that are not in the provided allowed list.
+   * This prevents "ghost" sessions from blocking a user's portal access.
+   */
+  async cleanupStaleSessions(allowedUsernames: string[]): Promise<{ kicked: number }> {
+    try {
+      await this.connect();
+      const activeSessions = await this.api.write("/ip/hotspot/active/print");
+      const allowedSet = new Set(allowedUsernames);
+      let kickedCount = 0;
+
+      for (const session of activeSessions) {
+        const username = session.user;
+        // Skip sessions that might be internal or specifically exempted if needed
+        if (username && !allowedSet.has(username)) {
+          // This session is stale according to our database
+          await this.api.write("/ip/hotspot/active/remove", [`=.id=${session[".id"]}`]);
+          console.log(`🧹 Cleaned up stale ghost session for user: ${username} on ${this.host}`);
+          kickedCount++;
+        }
+      }
+
+      return { kicked: kickedCount };
+    } catch (error: any) {
+      const isTimeout =
+        error?.message?.includes("Timed out") ||
+        error?.name === "RosException" ||
+        error?.code === "ETIMEDOUT" ||
+        error?.code === "ECONNREFUSED" ||
+        error?.code === "EHOSTUNREACH";
+
+      if (isTimeout) {
+        console.debug(
+          `[MikrotikApiClient] Direct session cleanup skipped for ${this.host} (router behind NAT / API unreachable).`,
+        );
+      } else {
+        console.warn(
+          `[MikrotikApiClient] Session cleanup notice for ${this.host}:`,
+          error?.message || error,
+        );
+      }
+      return { kicked: 0 };
+    }
+  }
+
+  /**
+   * Configures or updates the high-capacity PPPoE IP pool (16,711,676 active + 1,048,574 expired IPs)
+   * along with the default PPP profile and NAT masquerade rules.
+   */
+  async ensureHighCapacityPPPoEPool(): Promise<void> {
+    try {
+      await this.connect();
+
+      // 1. PPPOE ACTIVE POOL (ranges: 172.16.0.2 - 172.31.255.254)
+      const activeRange = "172.16.0.2-172.31.255.254";
+      const existingActivePools = await this.api.write("/ip/pool/print", [
+        "?name=PPPOE ACTIVE POOL",
+      ]);
+      if (existingActivePools && existingActivePools.length > 0) {
+        await this.api.write("/ip/pool/set", [
+          `=.id=${existingActivePools[0][".id"]}`,
+          `=ranges=${activeRange}`,
+          "=comment=WiFiBilling Active Subscribers Pool",
+        ]);
+      } else {
+        await this.api.write("/ip/pool/add", [
+          "=name=PPPOE ACTIVE POOL",
+          `=ranges=${activeRange}`,
+          "=comment=WiFiBilling Active Subscribers Pool",
+        ]);
+      }
+
+      // 2. Expired PPPoE Pool (ranges: 10.250.0.2 - 10.250.255.254)
+      const expiredRange = "10.250.0.2-10.250.255.254";
+      const existingExpiredPools = await this.api.write("/ip/pool/print", [
+        "?name=expired_pppoe_pool",
+      ]);
+      if (existingExpiredPools && existingExpiredPools.length > 0) {
+        await this.api.write("/ip/pool/set", [
+          `=.id=${existingExpiredPools[0][".id"]}`,
+          `=ranges=${expiredRange}`,
+          "=comment=WiFiBilling Expired Subscribers Pool",
+        ]);
+      } else {
+        await this.api.write("/ip/pool/add", [
+          "=name=expired_pppoe_pool",
+          `=ranges=${expiredRange}`,
+          "=comment=WiFiBilling Expired Subscribers Pool",
+        ]);
+      }
+
+      // 3. Configure default PPP profile
+      const defaultProfiles = await this.api.write("/ppp/profile/print", ["?name=default"]);
+      if (defaultProfiles && defaultProfiles.length > 0) {
+        await this.api.write("/ppp/profile/set", [
+          `=.id=${defaultProfiles[0][".id"]}`,
+          "=local-address=10.0.0.1",
+          "=remote-address=PPPOE ACTIVE POOL",
+          "=dns-server=8.8.8.8,1.1.1.1",
+        ]);
+      }
+
+      // 4. NAT masquerade for PPPoE Active subnet (172.16.0.0/12)
+      const existingNat = await this.api.write("/ip/firewall/nat/print", ["?comment=PPPOE NAT"]);
+      if (existingNat && existingNat.length > 0) {
+        await this.api.write("/ip/firewall/nat/set", [
+          `=.id=${existingNat[0][".id"]}`,
+          "=src-address=172.16.0.0/12",
+        ]);
+      } else {
+        await this.api.write("/ip/firewall/nat/add", [
+          "=chain=srcnat",
+          "=action=masquerade",
+          "=src-address=172.16.0.0/12",
+          "=comment=PPPOE NAT",
+        ]);
+      }
+
+      // 5. NAT masquerade for Expired subnet (10.250.0.0/16)
+      const existingExpiredNat = await this.api.write("/ip/firewall/nat/print", [
+        "?comment=EXPIRED PPPOE NAT",
+      ]);
+      if (existingExpiredNat && existingExpiredNat.length > 0) {
+        await this.api.write("/ip/firewall/nat/set", [
+          `=.id=${existingExpiredNat[0][".id"]}`,
+          "=src-address=10.250.0.0/16",
+        ]);
+      } else {
+        await this.api.write("/ip/firewall/nat/add", [
+          "=chain=srcnat",
+          "=action=masquerade",
+          "=src-address=10.250.0.0/16",
+          "=comment=EXPIRED PPPOE NAT",
+        ]);
+      }
+
+      console.log(`[PPPoE Pool] PPPoE IP Pools successfully configured on ${this.host}`);
+    } catch (error) {
+      console.warn(`[PPPoE Pool] Pool setup via API notice for ${this.host}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Configures or updates the high-capacity Hotspot IP pool (65,525 clients on 10.10.0.0/16)
+   * with gateway 10.10.0.1/16, DHCP network, 30m lease time, and NAT masquerade.
+   */
+  async ensureHighCapacityHotspotPool(): Promise<void> {
+    try {
+      await this.connect();
+
+      // 1. Gateway IP address 10.10.0.1/16
+      const existingAddresses = await this.api.write("/ip/address/print", []);
+      const gwAddr = (existingAddresses || []).find(
+        (a: any) => a.address && a.address.startsWith("10.10.0.1/"),
+      );
+      if (gwAddr) {
+        if (gwAddr.address !== "10.10.0.1/16") {
+          await this.api.write("/ip/address/set", [
+            `=.id=${gwAddr[".id"]}`,
+            "=address=10.10.0.1/16",
+          ]);
+        }
+      } else {
+        await this.api.write("/ip/address/add", [
+          "=address=10.10.0.1/16",
+          "=interface=br-hotspot",
+          "=comment=WiFiBilling Hotspot Gateway",
+        ]);
+      }
+
+      // 2. High-capacity Hotspot IP pool (10.10.0.10-10.10.255.254)
+      const hsRange = "10.10.0.10-10.10.255.254";
+      const existingHsPool = await this.api.write("/ip/pool/print", ["?name=hs-pool"]);
+      if (existingHsPool && existingHsPool.length > 0) {
+        await this.api.write("/ip/pool/set", [
+          `=.id=${existingHsPool[0][".id"]}`,
+          `=ranges=${hsRange}`,
+          "=comment=WiFiBilling 65K+ Hotspot Pool",
+        ]);
+      } else {
+        await this.api.write("/ip/pool/add", [
+          "=name=hs-pool",
+          `=ranges=${hsRange}`,
+          "=comment=WiFiBilling 65K+ Hotspot Pool",
+        ]);
+      }
+
+      // Also update pool "hotspot" if present
+      const legacyHsPool = await this.api.write("/ip/pool/print", ["?name=hotspot"]);
+      if (legacyHsPool && legacyHsPool.length > 0) {
+        await this.api.write("/ip/pool/set", [
+          `=.id=${legacyHsPool[0][".id"]}`,
+          `=ranges=${hsRange}`,
+        ]);
+      }
+
+      // 3. DHCP Server Network for 10.10.0.0/16
+      const existingDhcpNets = await this.api.write("/ip/dhcp-server/network/print", [
+        "?address=10.10.0.0/16",
+      ]);
+      if (existingDhcpNets && existingDhcpNets.length > 0) {
+        await this.api.write("/ip/dhcp-server/network/set", [
+          `=.id=${existingDhcpNets[0][".id"]}`,
+          "=gateway=10.10.0.1",
+          "=netmask=16",
+          "=dns-server=10.10.0.1,8.8.8.8",
+        ]);
+      } else {
+        await this.api.write("/ip/dhcp-server/network/add", [
+          "=address=10.10.0.0/16",
+          "=gateway=10.10.0.1",
+          "=netmask=16",
+          "=dns-server=10.10.0.1,8.8.8.8",
+          "=comment=WiFiBilling Hotspot Network (65K+)",
+        ]);
+      }
+
+      // 4. DHCP Server Lease Time (30m for rapid lease recycling)
+      const dhcpServers = await this.api.write("/ip/dhcp-server/print", []);
+      for (const ds of dhcpServers || []) {
+        if (
+          ds["address-pool"] === "hs-pool" ||
+          ds["address-pool"] === "hotspot" ||
+          ds.name === "Hotspot_Gateway"
+        ) {
+          await this.api.write("/ip/dhcp-server/set", [`=.id=${ds[".id"]}`, "=lease-time=30m"]);
+        }
+      }
+
+      // 5. NAT Masquerade for 10.10.0.0/16
+      const existingHsNat = await this.api.write("/ip/firewall/nat/print", [
+        "?comment=WiFiBilling Hotspot NAT",
+      ]);
+      if (existingHsNat && existingHsNat.length > 0) {
+        await this.api.write("/ip/firewall/nat/set", [
+          `=.id=${existingHsNat[0][".id"]}`,
+          "=src-address=10.10.0.0/16",
+        ]);
+      } else {
+        await this.api.write("/ip/firewall/nat/add", [
+          "=chain=srcnat",
+          "=action=masquerade",
+          "=src-address=10.10.0.0/16",
+          "=comment=WiFiBilling Hotspot NAT",
+        ]);
+      }
+
+      console.log(`[Hotspot Pool] 65K+ Hotspot IP Pool successfully configured on ${this.host}`);
+    } catch (error) {
+      console.warn(`[Hotspot Pool] Pool setup via API notice for ${this.host}:`, error);
+      throw error;
+    }
+  }
+}

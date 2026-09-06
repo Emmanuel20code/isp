@@ -1,0 +1,1133 @@
+<!doctype html>
+<html lang="en" data-tsd-source="/src/routes/__root.tsx:119:5">
+  <head data-tsd-source="/src/routes/__root.tsx:120:7">
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="/src/styles.css" data-precedence="default" />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&amp;family=DM+Sans:wght@400;500;600&amp;display=swap"
+      data-precedence="default"
+    />
+    <link
+      rel="stylesheet"
+      href="/@tanstack-start/styles.css?routes=__root__%2C%2F"
+      data-tanstack-router-dev-styles="true"
+      data-precedence="default"
+    />
+    <title>Wifi Billing</title>
+    <meta name="author" content="Wifi Billing" />
+    <meta
+      name="description"
+      content="Run your ISP business on autopilot: Automated payments, MikroTik Hotspot/PPPoE activation and expiry, and per-business isolation. 3-day free trial. Starting at KES 1/mo. Supporting Kenya, Tanzania, Uganda, and Rwanda."
+    />
+    <meta property="og:title" content="Wifi Billing" />
+    <meta
+      property="og:description"
+      content="Run your ISP business on autopilot: Automated payments, MikroTik Hotspot/PPPoE activation and expiry, and per-business isolation. 3-day free trial. Starting at KES 1/mo. Supporting Kenya, Tanzania, Uganda, and Rwanda."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://wifibilling.site/" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="modulepreload" href="/@id/virtual:tanstack-start-dev-client-entry" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
+    <link rel="icon" href="/favicon.ico" type="image/x-icon" />
+    <link rel="canonical" href="https://wifibilling.site/" />
+  </head>
+  <body data-tsd-source="/src/routes/__root.tsx:123:7">
+    <!--$-->
+    <div
+      class="min-h-screen bg-background text-foreground overflow-x-hidden relative"
+      data-tsd-source="/src/routes/index.tsx:255:5"
+    >
+      <header
+        class="sticky top-0 z-50 border-b border-border/40 bg-background/70 backdrop-blur-xl"
+        data-tsd-source="/src/routes/index.tsx:256:7"
+      >
+        <div
+          class="mx-auto flex h-20 max-w-7xl items-center justify-between px-6"
+          data-tsd-source="/src/routes/index.tsx:257:9"
+        >
+          <a
+            data-tsd-source="/src/routes/index.tsx:258:11"
+            class="flex items-center gap-3 group active"
+            href="/"
+            data-status="active"
+            aria-current="page"
+            ><span
+              class="grid size-10 place-items-center rounded-xl bg-gradient-to-tr from-primary to-indigo-500 text-primary-foreground shadow-lg shadow-primary/25 transition-transform duration-300 group-hover:scale-110"
+              data-tsd-source="/src/routes/index.tsx:259:13"
+              ><svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="lucide lucide-wifi size-5 animate-pulse"
+                aria-hidden="true"
+                data-tsd-source="/src/routes/index.tsx:260:15"
+              >
+                <path d="M12 20h.01"></path>
+                <path d="M2 8.82a15 15 0 0 1 20 0"></path>
+                <path d="M5 12.859a10 10 0 0 1 14 0"></path>
+                <path d="M8.5 16.429a5 5 0 0 1 7 0"></path></svg
+            ></span>
+            <div class="flex flex-col" data-tsd-source="/src/routes/index.tsx:262:13">
+              <span
+                class="font-display text-lg font-bold tracking-tight"
+                data-tsd-source="/src/routes/index.tsx:263:15"
+                >Wifi Billing</span
+              ><span
+                class="text-[10px] font-medium text-muted-foreground uppercase tracking-wider"
+                data-tsd-source="/src/routes/index.tsx:264:15"
+                >ISP Billing Platform</span
+              >
+            </div></a
+          >
+          <div class="flex items-center gap-3" data-tsd-source="/src/routes/index.tsx:269:11">
+            <div
+              class="rounded-md border font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 text-foreground hidden sm:flex items-center gap-1.5 py-1 px-3 bg-card/50 border-primary/20 text-xs"
+              data-tsd-source="/src/routes/index.tsx:270:13"
+            >
+              <span
+                class="size-2 rounded-full bg-emerald-500 animate-ping"
+                data-tsd-source="/src/routes/index.tsx:274:15"
+              ></span
+              >Regional MikroTik &amp; Payment Nodes Active
+            </div>
+            <a
+              data-tsd-source="/src/routes/index.tsx:278:15"
+              href="/auth"
+              class="inline-flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed [&amp;_svg]:pointer-events-none [&amp;_svg]:size-4 [&amp;_svg]:shrink-0 hover:bg-accent hover:text-accent-foreground h-8 rounded-md px-3 text-xs font-medium"
+              >Sign in</a
+            ><a
+              data-tsd-source="/src/routes/index.tsx:285:15"
+              href="/auth?mode=signup"
+              class="inline-flex items-center justify-center gap-2 whitespace-nowrap font-medium cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed [&amp;_svg]:pointer-events-none [&amp;_svg]:size-4 [&amp;_svg]:shrink-0 bg-primary text-primary-foreground hover:bg-primary/90 h-8 rounded-md px-3 text-xs shadow-lg shadow-primary/20 hover:shadow-primary/40 transition-all"
+              >Start free trial</a
+            >
+          </div>
+        </div>
+      </header>
+      <main class="relative" data-tsd-source="/src/routes/index.tsx:293:7">
+        <section
+          class="relative overflow-hidden pt-12 pb-24 lg:pt-20 lg:pb-32"
+          data-tsd-source="/src/routes/index.tsx:294:9"
+        >
+          <div
+            class="absolute inset-0 h-full w-full pointer-events-none opacity-80 z-0"
+            data-tsd-source="/src/routes/index.tsx:227:5"
+          ></div>
+          <div
+            class="absolute inset-0 bg-gradient-to-b from-transparent via-background/40 to-background pointer-events-none z-10"
+            data-tsd-source="/src/routes/index.tsx:296:11"
+          ></div>
+          <div
+            class="relative mx-auto grid max-w-7xl items-center gap-16 px-6 lg:grid-cols-2 z-20"
+            data-tsd-source="/src/routes/index.tsx:298:11"
+          >
+            <div
+              class="flex flex-col items-start text-left"
+              data-tsd-source="/src/routes/index.tsx:299:13"
+            >
+              <div
+                class="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-xs font-semibold text-primary backdrop-blur-md mb-6 shadow-sm"
+                data-tsd-source="/src/routes/index.tsx:300:15"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  class="lucide lucide-zap size-3.5 text-primary animate-bounce"
+                  aria-hidden="true"
+                  data-tsd-source="/src/routes/index.tsx:301:17"
+                >
+                  <path
+                    d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"
+                  ></path></svg
+                >3<!-- -->
+                Days Free Trial · No Credit Card Required
+              </div>
+              <h1
+                class="font-display text-4xl font-extrabold tracking-tight sm:text-6xl lg:text-7xl leading-[1.08]"
+                data-tsd-source="/src/routes/index.tsx:305:15"
+              >
+                Next-Gen ISP <br data-tsd-source="/src/routes/index.tsx:306:30" /><span
+                  class="bg-gradient-to-r from-primary via-indigo-400 to-cyan-400 bg-clip-text text-transparent"
+                  data-tsd-source="/src/routes/index.tsx:307:17"
+                  >Billing &amp; Automation</span
+                >
+              </h1>
+              <p
+                class="mt-6 text-lg text-muted-foreground sm:text-xl max-w-xl leading-relaxed"
+                data-tsd-source="/src/routes/index.tsx:312:15"
+              >
+                Connect your MikroTik routers directly to M-Pesa &amp; Mobile Money. Automated
+                provisioning, instant receipt validation, and hard tenant isolation engineered for
+                modern ISPs in East Africa.
+              </p>
+              <div
+                class="mt-8 flex flex-wrap items-center gap-4"
+                data-tsd-source="/src/routes/index.tsx:318:15"
+              >
+                <a
+                  data-tsd-source="/src/routes/index.tsx:324:19"
+                  href="/auth?mode=signup"
+                  class="inline-flex items-center justify-center gap-2 whitespace-nowrap font-medium cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed [&amp;_svg]:pointer-events-none [&amp;_svg]:size-4 [&amp;_svg]:shrink-0 bg-primary text-primary-foreground hover:bg-primary/90 rounded-md h-12 px-8 text-base shadow-xl shadow-primary/25 hover:scale-105 transition-all"
+                  >Launch Your ISP Now
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    class="lucide lucide-arrow-right ml-2 size-5"
+                    aria-hidden="true"
+                    data-tsd-source="/src/routes/index.tsx:325:41"
+                  >
+                    <path d="M5 12h14"></path>
+                    <path d="m12 5 7 7-7 7"></path></svg></a
+                ><a
+                  data-tsd-source="/src/routes/index.tsx:334:19"
+                  href="/auth"
+                  class="inline-flex items-center justify-center gap-2 whitespace-nowrap font-medium cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed [&amp;_svg]:pointer-events-none [&amp;_svg]:size-4 [&amp;_svg]:shrink-0 border shadow-sm hover:text-accent-foreground rounded-md h-12 px-8 text-base backdrop-blur-md bg-card/40 border-border/80 hover:bg-card"
+                  >Sign In to Dashboard</a
+                >
+              </div>
+              <div
+                class="mt-10 grid grid-cols-3 gap-6 pt-8 border-t border-border/60 w-full"
+                data-tsd-source="/src/routes/index.tsx:338:15"
+              >
+                <div data-tsd-source="/src/routes/index.tsx:339:17">
+                  <div
+                    class="text-2xl font-bold font-display text-primary"
+                    data-tsd-source="/src/routes/index.tsx:340:19"
+                  >
+                    99.9%
+                  </div>
+                  <div
+                    class="text-xs text-muted-foreground mt-0.5"
+                    data-tsd-source="/src/routes/index.tsx:341:19"
+                  >
+                    Uptime SLA
+                  </div>
+                </div>
+                <div data-tsd-source="/src/routes/index.tsx:343:17">
+                  <div
+                    class="text-2xl font-bold font-display text-indigo-500"
+                    data-tsd-source="/src/routes/index.tsx:344:19"
+                  >
+                    &lt; 3s
+                  </div>
+                  <div
+                    class="text-xs text-muted-foreground mt-0.5"
+                    data-tsd-source="/src/routes/index.tsx:345:19"
+                  >
+                    Payment Processing
+                  </div>
+                </div>
+                <div data-tsd-source="/src/routes/index.tsx:347:17">
+                  <div
+                    class="text-2xl font-bold font-display text-cyan-500"
+                    data-tsd-source="/src/routes/index.tsx:348:19"
+                  >
+                    KES
+                    <!-- -->1
+                  </div>
+                  <div
+                    class="text-xs text-muted-foreground mt-0.5"
+                    data-tsd-source="/src/routes/index.tsx:351:19"
+                  >
+                    Monthly Plan
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div
+              class="relative flex items-center justify-center lg:justify-end"
+              data-tsd-source="/src/routes/index.tsx:356:13"
+            >
+              <div
+                class="absolute -inset-4 rounded-3xl bg-gradient-to-tr from-primary/20 via-indigo-500/10 to-cyan-500/20 blur-2xl opacity-70 animate-pulse"
+                data-tsd-source="/src/routes/index.tsx:357:15"
+              ></div>
+              <div
+                style="
+                  transform: perspective(1000px) rotateX(0deg) rotateY(0deg);
+                  transition: transform 0.1s ease-out;
+                "
+                class="relative w-full max-w-lg rounded-3xl border border-white/10 bg-card/80 p-6 shadow-2xl backdrop-blur-2xl"
+                data-tsd-source="/src/routes/index.tsx:359:15"
+              >
+                <div
+                  class="flex items-center justify-between border-b border-border/60 pb-4 mb-4"
+                  data-tsd-source="/src/routes/index.tsx:369:17"
+                >
+                  <div
+                    class="flex items-center gap-3"
+                    data-tsd-source="/src/routes/index.tsx:370:19"
+                  >
+                    <span
+                      class="grid size-10 place-items-center rounded-xl bg-primary/20 text-primary"
+                      data-tsd-source="/src/routes/index.tsx:371:21"
+                      ><svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="24"
+                        height="24"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        class="lucide lucide-cpu size-5"
+                        aria-hidden="true"
+                        data-tsd-source="/src/routes/index.tsx:372:23"
+                      >
+                        <path d="M12 20v2"></path>
+                        <path d="M12 2v2"></path>
+                        <path d="M17 20v2"></path>
+                        <path d="M17 2v2"></path>
+                        <path d="M2 12h2"></path>
+                        <path d="M2 17h2"></path>
+                        <path d="M2 7h2"></path>
+                        <path d="M20 12h2"></path>
+                        <path d="M20 17h2"></path>
+                        <path d="M20 7h2"></path>
+                        <path d="M7 20v2"></path>
+                        <path d="M7 2v2"></path>
+                        <rect x="4" y="4" width="16" height="16" rx="2"></rect>
+                        <rect x="8" y="8" width="8" height="8" rx="1"></rect></svg
+                    ></span>
+                    <div data-tsd-source="/src/routes/index.tsx:374:21">
+                      <div
+                        class="font-semibold text-sm"
+                        data-tsd-source="/src/routes/index.tsx:375:23"
+                      >
+                        Router Node #MK-01
+                      </div>
+                      <div
+                        class="text-xs text-emerald-500 flex items-center gap-1"
+                        data-tsd-source="/src/routes/index.tsx:376:23"
+                      >
+                        <span
+                          class="size-1.5 rounded-full bg-emerald-500 animate-ping"
+                          data-tsd-source="/src/routes/index.tsx:377:25"
+                        ></span
+                        >Connected &amp; Synchronized
+                      </div>
+                    </div>
+                  </div>
+                  <div
+                    class="inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent shadow hover:bg-primary/80 bg-primary/10 text-primary"
+                    data-tsd-source="/src/routes/index.tsx:382:19"
+                  >
+                    PPPoE &amp; Hotspot
+                  </div>
+                </div>
+                <div class="space-y-3" data-tsd-source="/src/routes/index.tsx:385:17">
+                  <div
+                    class="rounded-2xl bg-background/50 border border-border/60 p-4 space-y-2"
+                    data-tsd-source="/src/routes/index.tsx:386:19"
+                  >
+                    <div
+                      class="flex justify-between text-xs text-muted-foreground font-medium"
+                      data-tsd-source="/src/routes/index.tsx:387:21"
+                    >
+                      <span data-tsd-source="/src/routes/index.tsx:388:23"
+                        >Live Mobile Money Event</span
+                      ><span
+                        class="text-emerald-500 font-semibold"
+                        data-tsd-source="/src/routes/index.tsx:389:23"
+                        >Success</span
+                      >
+                    </div>
+                    <div
+                      class="flex items-center justify-between"
+                      data-tsd-source="/src/routes/index.tsx:391:21"
+                    >
+                      <div
+                        class="flex items-center gap-2"
+                        data-tsd-source="/src/routes/index.tsx:392:23"
+                      >
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="24"
+                          height="24"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="2"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          class="lucide lucide-smartphone size-4 text-primary"
+                          aria-hidden="true"
+                          data-tsd-source="/src/routes/index.tsx:393:25"
+                        >
+                          <rect width="14" height="20" x="5" y="2" rx="2" ry="2"></rect>
+                          <path d="M12 18h.01"></path></svg
+                        ><span
+                          class="text-sm font-mono"
+                          data-tsd-source="/src/routes/index.tsx:394:25"
+                          >+254 712 *** 890</span
+                        >
+                      </div>
+                      <span
+                        class="text-sm font-bold font-mono text-primary"
+                        data-tsd-source="/src/routes/index.tsx:396:23"
+                        >KES 1,500</span
+                      >
+                    </div>
+                    <div
+                      class="text-[11px] text-muted-foreground flex items-center justify-between pt-1 border-t border-border/40"
+                      data-tsd-source="/src/routes/index.tsx:398:21"
+                    >
+                      <span data-tsd-source="/src/routes/index.tsx:399:23">Receipt: QHX9823145</span
+                      ><span data-tsd-source="/src/routes/index.tsx:400:23">Just now</span>
+                    </div>
+                  </div>
+                  <div
+                    class="grid grid-cols-2 gap-3"
+                    data-tsd-source="/src/routes/index.tsx:404:19"
+                  >
+                    <div
+                      class="rounded-2xl bg-background/50 border border-border/60 p-3.5"
+                      data-tsd-source="/src/routes/index.tsx:405:21"
+                    >
+                      <div
+                        class="text-xs text-muted-foreground"
+                        data-tsd-source="/src/routes/index.tsx:406:23"
+                      >
+                        Active Sessions
+                      </div>
+                      <div
+                        class="text-xl font-bold font-display mt-1"
+                        data-tsd-source="/src/routes/index.tsx:407:23"
+                      >
+                        428 Users
+                      </div>
+                    </div>
+                    <div
+                      class="rounded-2xl bg-background/50 border border-border/60 p-3.5"
+                      data-tsd-source="/src/routes/index.tsx:409:21"
+                    >
+                      <div
+                        class="text-xs text-muted-foreground"
+                        data-tsd-source="/src/routes/index.tsx:410:23"
+                      >
+                        Bandwidth Load
+                      </div>
+                      <div
+                        class="text-xl font-bold font-display mt-1 text-indigo-500"
+                        data-tsd-source="/src/routes/index.tsx:411:23"
+                      >
+                        1.2 Gbps
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div
+                  class="mt-5 pt-4 border-t border-border/60 flex items-center justify-between text-xs text-muted-foreground"
+                  data-tsd-source="/src/routes/index.tsx:418:17"
+                >
+                  <span
+                    class="flex items-center gap-1.5"
+                    data-tsd-source="/src/routes/index.tsx:419:19"
+                    ><svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="24"
+                      height="24"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      class="lucide lucide-activity size-3.5 text-primary"
+                      aria-hidden="true"
+                      data-tsd-source="/src/routes/index.tsx:420:21"
+                    >
+                      <path
+                        d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"
+                      ></path></svg
+                    >Automated Router Expiry Guard</span
+                  ><span
+                    class="font-semibold text-foreground"
+                    data-tsd-source="/src/routes/index.tsx:423:19"
+                    >Active</span
+                  >
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+        <section
+          class="mx-auto max-w-7xl px-6 py-24 relative z-20"
+          data-tsd-source="/src/routes/index.tsx:430:9"
+        >
+          <div
+            class="text-center max-w-2xl mx-auto mb-16"
+            data-tsd-source="/src/routes/index.tsx:431:11"
+          >
+            <h2
+              class="text-3xl font-bold sm:text-5xl font-display tracking-tight"
+              data-tsd-source="/src/routes/index.tsx:432:13"
+            >
+              Engineered for Scale &amp; Reliability
+            </h2>
+            <p
+              class="mt-4 text-muted-foreground text-lg"
+              data-tsd-source="/src/routes/index.tsx:435:13"
+            >
+              Wifi Billing replaces manual Winbox scripts, WhatsApp payment confirmations, and
+              expired subscriber friction with absolute automation.
+            </p>
+          </div>
+          <div
+            class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3"
+            data-tsd-source="/src/routes/index.tsx:441:11"
+          >
+            <div
+              class="group relative rounded-3xl border border-border/80 bg-card/60 p-8 transition-all duration-300 hover:-translate-y-2 hover:border-primary/50 hover:shadow-2xl hover:shadow-primary/10 backdrop-blur-xl"
+              data-tsd-source="/src/routes/index.tsx:443:15"
+            >
+              <div
+                class="absolute top-0 right-0 p-6 text-muted-foreground/20 font-mono font-bold text-2xl group-hover:text-primary/30 transition-colors"
+                data-tsd-source="/src/routes/index.tsx:447:17"
+              >
+                0<!-- -->1
+              </div>
+              <span
+                class="mb-6 grid size-12 place-items-center rounded-2xl bg-primary/10 text-primary transition-transform duration-300 group-hover:scale-110 group-hover:bg-primary group-hover:text-primary-foreground shadow-md shadow-primary/20"
+                data-tsd-source="/src/routes/index.tsx:450:17"
+                ><svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  class="lucide lucide-router size-6"
+                  aria-hidden="true"
+                  data-tsd-source="/src/routes/index.tsx:451:19"
+                >
+                  <rect width="20" height="8" x="2" y="14" rx="2"></rect>
+                  <path d="M6.01 18H6"></path>
+                  <path d="M10.01 18H10"></path>
+                  <path d="M15 10v4"></path>
+                  <path d="M17.84 7.17a4 4 0 0 0-5.66 0"></path>
+                  <path d="M20.66 4.34a8 8 0 0 0-11.31 0"></path></svg
+              ></span>
+              <h3
+                class="text-xl font-bold font-display"
+                data-tsd-source="/src/routes/index.tsx:453:17"
+              >
+                MikroTik on autopilot
+              </h3>
+              <p
+                class="mt-3 text-sm leading-relaxed text-muted-foreground"
+                data-tsd-source="/src/routes/index.tsx:454:17"
+              >
+                An on-site agent talks to your router over a secure outbound link — no port
+                forwarding, no static IP. Users are activated and cut off automatically.
+              </p>
+            </div>
+            <div
+              class="group relative rounded-3xl border border-border/80 bg-card/60 p-8 transition-all duration-300 hover:-translate-y-2 hover:border-primary/50 hover:shadow-2xl hover:shadow-primary/10 backdrop-blur-xl"
+              data-tsd-source="/src/routes/index.tsx:443:15"
+            >
+              <div
+                class="absolute top-0 right-0 p-6 text-muted-foreground/20 font-mono font-bold text-2xl group-hover:text-primary/30 transition-colors"
+                data-tsd-source="/src/routes/index.tsx:447:17"
+              >
+                0<!-- -->2
+              </div>
+              <span
+                class="mb-6 grid size-12 place-items-center rounded-2xl bg-primary/10 text-primary transition-transform duration-300 group-hover:scale-110 group-hover:bg-primary group-hover:text-primary-foreground shadow-md shadow-primary/20"
+                data-tsd-source="/src/routes/index.tsx:450:17"
+                ><svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  class="lucide lucide-smartphone size-6"
+                  aria-hidden="true"
+                  data-tsd-source="/src/routes/index.tsx:451:19"
+                >
+                  <rect width="14" height="20" x="5" y="2" rx="2" ry="2"></rect>
+                  <path d="M12 18h.01"></path></svg
+              ></span>
+              <h3
+                class="text-xl font-bold font-display"
+                data-tsd-source="/src/routes/index.tsx:453:17"
+              >
+                Mobile Money Automation
+              </h3>
+              <p
+                class="mt-3 text-sm leading-relaxed text-muted-foreground"
+                data-tsd-source="/src/routes/index.tsx:454:17"
+              >
+                Customers pay via M-Pesa (Kenya/Tanzania), Airtel Money, or MTN. Payments land in
+                your account, activation happens seconds later.
+              </p>
+            </div>
+            <div
+              class="group relative rounded-3xl border border-border/80 bg-card/60 p-8 transition-all duration-300 hover:-translate-y-2 hover:border-primary/50 hover:shadow-2xl hover:shadow-primary/10 backdrop-blur-xl"
+              data-tsd-source="/src/routes/index.tsx:443:15"
+            >
+              <div
+                class="absolute top-0 right-0 p-6 text-muted-foreground/20 font-mono font-bold text-2xl group-hover:text-primary/30 transition-colors"
+                data-tsd-source="/src/routes/index.tsx:447:17"
+              >
+                0<!-- -->3
+              </div>
+              <span
+                class="mb-6 grid size-12 place-items-center rounded-2xl bg-primary/10 text-primary transition-transform duration-300 group-hover:scale-110 group-hover:bg-primary group-hover:text-primary-foreground shadow-md shadow-primary/20"
+                data-tsd-source="/src/routes/index.tsx:450:17"
+                ><svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  class="lucide lucide-shield-check size-6"
+                  aria-hidden="true"
+                  data-tsd-source="/src/routes/index.tsx:451:19"
+                >
+                  <path
+                    d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"
+                  ></path>
+                  <path d="m9 12 2 2 4-4"></path></svg
+              ></span>
+              <h3
+                class="text-xl font-bold font-display"
+                data-tsd-source="/src/routes/index.tsx:453:17"
+              >
+                Hard tenant isolation
+              </h3>
+              <p
+                class="mt-3 text-sm leading-relaxed text-muted-foreground"
+                data-tsd-source="/src/routes/index.tsx:454:17"
+              >
+                Every business sees only its own routers, packages, customers and money. Enforced in
+                the database, not in the UI.
+              </p>
+            </div>
+            <div
+              class="group relative rounded-3xl border border-border/80 bg-card/60 p-8 transition-all duration-300 hover:-translate-y-2 hover:border-primary/50 hover:shadow-2xl hover:shadow-primary/10 backdrop-blur-xl"
+              data-tsd-source="/src/routes/index.tsx:443:15"
+            >
+              <div
+                class="absolute top-0 right-0 p-6 text-muted-foreground/20 font-mono font-bold text-2xl group-hover:text-primary/30 transition-colors"
+                data-tsd-source="/src/routes/index.tsx:447:17"
+              >
+                0<!-- -->4
+              </div>
+              <span
+                class="mb-6 grid size-12 place-items-center rounded-2xl bg-primary/10 text-primary transition-transform duration-300 group-hover:scale-110 group-hover:bg-primary group-hover:text-primary-foreground shadow-md shadow-primary/20"
+                data-tsd-source="/src/routes/index.tsx:450:17"
+                ><svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  class="lucide lucide-users size-6"
+                  aria-hidden="true"
+                  data-tsd-source="/src/routes/index.tsx:451:19"
+                >
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                  <path d="M16 3.128a4 4 0 0 1 0 7.744"></path>
+                  <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+                  <circle cx="9" cy="7" r="4"></circle></svg
+              ></span>
+              <h3
+                class="text-xl font-bold font-display"
+                data-tsd-source="/src/routes/index.tsx:453:17"
+              >
+                Customer self-service
+              </h3>
+              <p
+                class="mt-3 text-sm leading-relaxed text-muted-foreground"
+                data-tsd-source="/src/routes/index.tsx:454:17"
+              >
+                Branded captive portal where subscribers pick a package, pay, and get online without
+                calling you.
+              </p>
+            </div>
+            <div
+              class="group relative rounded-3xl border border-border/80 bg-card/60 p-8 transition-all duration-300 hover:-translate-y-2 hover:border-primary/50 hover:shadow-2xl hover:shadow-primary/10 backdrop-blur-xl"
+              data-tsd-source="/src/routes/index.tsx:443:15"
+            >
+              <div
+                class="absolute top-0 right-0 p-6 text-muted-foreground/20 font-mono font-bold text-2xl group-hover:text-primary/30 transition-colors"
+                data-tsd-source="/src/routes/index.tsx:447:17"
+              >
+                0<!-- -->5
+              </div>
+              <span
+                class="mb-6 grid size-12 place-items-center rounded-2xl bg-primary/10 text-primary transition-transform duration-300 group-hover:scale-110 group-hover:bg-primary group-hover:text-primary-foreground shadow-md shadow-primary/20"
+                data-tsd-source="/src/routes/index.tsx:450:17"
+                ><svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  class="lucide lucide-gauge size-6"
+                  aria-hidden="true"
+                  data-tsd-source="/src/routes/index.tsx:451:19"
+                >
+                  <path d="m12 14 4-4"></path>
+                  <path d="M3.34 19a10 10 0 1 1 17.32 0"></path></svg
+              ></span>
+              <h3
+                class="text-xl font-bold font-display"
+                data-tsd-source="/src/routes/index.tsx:453:17"
+              >
+                Live operations view
+              </h3>
+              <p
+                class="mt-3 text-sm leading-relaxed text-muted-foreground"
+                data-tsd-source="/src/routes/index.tsx:454:17"
+              >
+                Active sessions, expiring accounts, failed payments and router health in one
+                operations dashboard.
+              </p>
+            </div>
+            <div
+              class="group relative rounded-3xl border border-border/80 bg-card/60 p-8 transition-all duration-300 hover:-translate-y-2 hover:border-primary/50 hover:shadow-2xl hover:shadow-primary/10 backdrop-blur-xl"
+              data-tsd-source="/src/routes/index.tsx:443:15"
+            >
+              <div
+                class="absolute top-0 right-0 p-6 text-muted-foreground/20 font-mono font-bold text-2xl group-hover:text-primary/30 transition-colors"
+                data-tsd-source="/src/routes/index.tsx:447:17"
+              >
+                0<!-- -->6
+              </div>
+              <span
+                class="mb-6 grid size-12 place-items-center rounded-2xl bg-primary/10 text-primary transition-transform duration-300 group-hover:scale-110 group-hover:bg-primary group-hover:text-primary-foreground shadow-md shadow-primary/20"
+                data-tsd-source="/src/routes/index.tsx:450:17"
+                ><svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  class="lucide lucide-building2 lucide-building-2 size-6"
+                  aria-hidden="true"
+                  data-tsd-source="/src/routes/index.tsx:451:19"
+                >
+                  <path d="M10 12h4"></path>
+                  <path d="M10 8h4"></path>
+                  <path d="M14 21v-3a2 2 0 0 0-4 0v3"></path>
+                  <path
+                    d="M6 10H4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-2"
+                  ></path>
+                  <path d="M6 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16"></path></svg
+              ></span>
+              <h3
+                class="text-xl font-bold font-display"
+                data-tsd-source="/src/routes/index.tsx:453:17"
+              >
+                Built for East African ISPs
+              </h3>
+              <p
+                class="mt-3 text-sm leading-relaxed text-muted-foreground"
+                data-tsd-source="/src/routes/index.tsx:454:17"
+              >
+                Multi-currency support (KES, TZS, UGX, RWF), regional payment gateways, and the
+                workflows local providers actually use.
+              </p>
+            </div>
+          </div>
+        </section>
+        <section
+          class="relative border-y border-border/60 bg-gradient-to-b from-card/30 to-card/60 py-24 z-20"
+          data-tsd-source="/src/routes/index.tsx:460:9"
+        >
+          <div class="mx-auto max-w-7xl px-6" data-tsd-source="/src/routes/index.tsx:461:11">
+            <div
+              class="text-center max-w-2xl mx-auto mb-16"
+              data-tsd-source="/src/routes/index.tsx:462:13"
+            >
+              <h2
+                class="text-3xl font-bold sm:text-4xl font-display"
+                data-tsd-source="/src/routes/index.tsx:463:15"
+              >
+                How Wifi Billing Works
+              </h2>
+              <p class="mt-3 text-muted-foreground" data-tsd-source="/src/routes/index.tsx:466:15">
+                Four simple steps from zero to fully automated ISP billing.
+              </p>
+            </div>
+            <div class="grid gap-8 md:grid-cols-4" data-tsd-source="/src/routes/index.tsx:471:13">
+              <div
+                class="relative rounded-3xl border border-border/80 bg-background/80 p-8 shadow-xl backdrop-blur-xl transition-all duration-300 hover:border-primary/50 hover:-translate-y-1"
+                data-tsd-source="/src/routes/index.tsx:481:17"
+              >
+                <div
+                  class="absolute -top-4 left-8 size-9 rounded-xl bg-gradient-to-tr from-primary to-indigo-500 text-primary-foreground font-display font-bold grid place-items-center shadow-lg shadow-primary/30"
+                  data-tsd-source="/src/routes/index.tsx:485:19"
+                >
+                  1
+                </div>
+                <h3
+                  class="mt-3 text-lg font-bold font-display"
+                  data-tsd-source="/src/routes/index.tsx:488:19"
+                >
+                  Create Business
+                </h3>
+                <p
+                  class="mt-2 text-sm text-muted-foreground leading-relaxed"
+                  data-tsd-source="/src/routes/index.tsx:489:19"
+                >
+                  Sign up in seconds and start your trial immediately.
+                </p>
+              </div>
+              <div
+                class="relative rounded-3xl border border-border/80 bg-background/80 p-8 shadow-xl backdrop-blur-xl transition-all duration-300 hover:border-primary/50 hover:-translate-y-1"
+                data-tsd-source="/src/routes/index.tsx:481:17"
+              >
+                <div
+                  class="absolute -top-4 left-8 size-9 rounded-xl bg-gradient-to-tr from-primary to-indigo-500 text-primary-foreground font-display font-bold grid place-items-center shadow-lg shadow-primary/30"
+                  data-tsd-source="/src/routes/index.tsx:485:19"
+                >
+                  2
+                </div>
+                <h3
+                  class="mt-3 text-lg font-bold font-display"
+                  data-tsd-source="/src/routes/index.tsx:488:19"
+                >
+                  Connect Router
+                </h3>
+                <p
+                  class="mt-2 text-sm text-muted-foreground leading-relaxed"
+                  data-tsd-source="/src/routes/index.tsx:489:19"
+                >
+                  Link your MikroTik with our secure outbound agent.
+                </p>
+              </div>
+              <div
+                class="relative rounded-3xl border border-border/80 bg-background/80 p-8 shadow-xl backdrop-blur-xl transition-all duration-300 hover:border-primary/50 hover:-translate-y-1"
+                data-tsd-source="/src/routes/index.tsx:481:17"
+              >
+                <div
+                  class="absolute -top-4 left-8 size-9 rounded-xl bg-gradient-to-tr from-primary to-indigo-500 text-primary-foreground font-display font-bold grid place-items-center shadow-lg shadow-primary/30"
+                  data-tsd-source="/src/routes/index.tsx:485:19"
+                >
+                  3
+                </div>
+                <h3
+                  class="mt-3 text-lg font-bold font-display"
+                  data-tsd-source="/src/routes/index.tsx:488:19"
+                >
+                  Define Packages
+                </h3>
+                <p
+                  class="mt-2 text-sm text-muted-foreground leading-relaxed"
+                  data-tsd-source="/src/routes/index.tsx:489:19"
+                >
+                  Set speed limits, durations, and multi-currency pricing.
+                </p>
+              </div>
+              <div
+                class="relative rounded-3xl border border-border/80 bg-background/80 p-8 shadow-xl backdrop-blur-xl transition-all duration-300 hover:border-primary/50 hover:-translate-y-1"
+                data-tsd-source="/src/routes/index.tsx:481:17"
+              >
+                <div
+                  class="absolute -top-4 left-8 size-9 rounded-xl bg-gradient-to-tr from-primary to-indigo-500 text-primary-foreground font-display font-bold grid place-items-center shadow-lg shadow-primary/30"
+                  data-tsd-source="/src/routes/index.tsx:485:19"
+                >
+                  4
+                </div>
+                <h3
+                  class="mt-3 text-lg font-bold font-display"
+                  data-tsd-source="/src/routes/index.tsx:488:19"
+                >
+                  Automated Payments
+                </h3>
+                <p
+                  class="mt-2 text-sm text-muted-foreground leading-relaxed"
+                  data-tsd-source="/src/routes/index.tsx:489:19"
+                >
+                  Subscribers pay via Mobile Money and get online instantly.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+        <section
+          class="mx-auto max-w-5xl px-6 py-28 text-center relative z-20"
+          data-tsd-source="/src/routes/index.tsx:496:9"
+        >
+          <div
+            class="absolute inset-0 rounded-3xl bg-gradient-to-tr from-primary/10 via-indigo-500/10 to-cyan-500/10 blur-3xl -z-10"
+            data-tsd-source="/src/routes/index.tsx:497:11"
+          ></div>
+          <div
+            class="rounded-3xl border border-border/80 bg-card/80 p-12 lg:p-16 shadow-2xl backdrop-blur-2xl"
+            data-tsd-source="/src/routes/index.tsx:498:11"
+          >
+            <h2
+              class="text-3xl font-bold sm:text-5xl font-display tracking-tight"
+              data-tsd-source="/src/routes/index.tsx:499:13"
+            >
+              Ready to Automate Your ISP?
+            </h2>
+            <p
+              class="mt-4 text-muted-foreground text-lg max-w-xl mx-auto"
+              data-tsd-source="/src/routes/index.tsx:502:13"
+            >
+              Join East African ISPs running their networks effortlessly with Wifi Billing.
+              <!-- -->3<!-- -->
+              <!-- -->days free, then KES
+              <!-- -->1<!-- -->
+              / month.
+            </p>
+            <div
+              class="mt-8 flex flex-wrap items-center justify-center gap-4"
+              data-tsd-source="/src/routes/index.tsx:506:13"
+            >
+              <a
+                data-tsd-source="/src/routes/index.tsx:512:17"
+                href="/auth?mode=signup"
+                class="inline-flex items-center justify-center gap-2 whitespace-nowrap font-medium cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 disabled:cursor-not-allowed [&amp;_svg]:pointer-events-none [&amp;_svg]:size-4 [&amp;_svg]:shrink-0 bg-primary text-primary-foreground hover:bg-primary/90 rounded-md h-12 px-8 text-base shadow-xl shadow-primary/25 hover:scale-105 transition-all"
+                >Start Free Trial Now
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  class="lucide lucide-arrow-right ml-2 size-5"
+                  aria-hidden="true"
+                  data-tsd-source="/src/routes/index.tsx:513:40"
+                >
+                  <path d="M5 12h14"></path>
+                  <path d="m12 5 7 7-7 7"></path></svg
+              ></a>
+            </div>
+          </div>
+        </section>
+      </main>
+      <footer
+        class="border-t border-border/60 py-10 bg-background/50 relative z-20"
+        data-tsd-source="/src/routes/index.tsx:521:7"
+      >
+        <div
+          class="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-6 text-sm text-muted-foreground sm:flex-row"
+          data-tsd-source="/src/routes/index.tsx:522:9"
+        >
+          <div class="flex items-center gap-2" data-tsd-source="/src/routes/index.tsx:523:11">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              class="lucide lucide-globe size-4 text-primary"
+              aria-hidden="true"
+              data-tsd-source="/src/routes/index.tsx:524:13"
+            >
+              <circle cx="12" cy="12" r="10"></circle>
+              <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path>
+              <path d="M2 12h20"></path>
+            </svg>
+            <p data-tsd-source="/src/routes/index.tsx:525:13">
+              ©
+              <!-- -->2026<!-- -->
+              Wifi Billing. Wi-Fi &amp; PPPoE Billing for East African ISPs.
+            </p>
+          </div>
+          <div class="flex items-center gap-6" data-tsd-source="/src/routes/index.tsx:530:11">
+            <a
+              data-tsd-source="/src/routes/index.tsx:531:13"
+              href="/auth"
+              class="hover:text-foreground transition-colors"
+              >Sign in</a
+            ><a
+              title="Super Admin Portal"
+              aria-label="Super Admin Portal"
+              data-tsd-source="/src/routes/index.tsx:534:13"
+              href="/auth?redirect=%2Fsuperadmin"
+              class="text-muted-foreground/30 hover:text-muted-foreground transition-colors p-1.5 rounded-lg hover:bg-muted"
+              ><svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="lucide lucide-lock size-4"
+                aria-hidden="true"
+                data-tsd-source="/src/routes/index.tsx:541:15"
+              >
+                <rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect>
+                <path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg
+            ></a>
+          </div>
+        </div>
+      </footer>
+    </div>
+    <script>
+      (function (a, f) {
+        let l;
+        try {
+          l = JSON.parse(sessionStorage.getItem(a) || "{}");
+        } catch {
+          return;
+        }
+        const n = l?.[f || history.state?.__TSR_key];
+        let c = !1;
+        for (const t in n) {
+          const e = n[t],
+            o = e?.scrollX,
+            s = e?.scrollY;
+          if (Number.isFinite(o) && Number.isFinite(s)) {
+            if (t === "window") (scrollTo(o, s), (c = !0));
+            else if (t)
+              try {
+                const r = document.querySelector(t);
+                r && ((r.scrollLeft = o), (r.scrollTop = s));
+              } catch {}
+          }
+        }
+        if (c) return;
+        const i = location.hash.slice(1);
+        if (i) {
+          const t = history.state?.__hashScrollIntoViewOptions ?? !0;
+          if (t) {
+            const e = document.getElementById(i);
+            e && e.scrollIntoView(t);
+          }
+          return;
+        }
+        scrollTo(0, 0);
+      })("tsr-scroll-restoration-v1_3");
+      document.currentScript.remove();
+    </script>
+    <!--/$-->
+    <section
+      aria-label="Notifications alt+T"
+      tabindex="-1"
+      aria-live="polite"
+      aria-relevant="additions text"
+      aria-atomic="false"
+      data-react-aria-top-layer="true"
+    ></section>
+    <script class="$tsr" id="$tsr-stream-barrier">
+      (self.$R = self.$R || {})["tsr"] = [];
+      self.$_TSR = {
+        h() {
+          ((this.hydrated = !0), this.c());
+        },
+        e() {
+          ((this.streamEnded = !0), this.c());
+        },
+        c() {
+          this.hydrated && this.streamEnded && (delete self.$_TSR, delete self.$R.tsr);
+        },
+        p(e) {
+          this.initialized ? e() : this.buffer.push(e);
+        },
+        buffer: [],
+      };
+      $_TSR.router = (($R) =>
+        ($R[0] = {
+          manifest: ($R[1] = {
+            routes: ($R[2] = {
+              __root__: ($R[3] = {
+                preloads: ($R[4] = ["/@id/virtual:tanstack-start-dev-client-entry"]),
+                scripts: ($R[5] = [
+                  ($R[6] = {
+                    attrs: ($R[7] = {
+                      type: "module",
+                      async: !0,
+                      src: "/@id/virtual:tanstack-start-dev-client-entry",
+                    }),
+                  }),
+                ]),
+                css: ($R[8] = [
+                  ($R[9] = {
+                    href: "/@tanstack-start/styles.css?routes=__root__%2C%2F",
+                    "data-tanstack-router-dev-styles": !0,
+                  }),
+                ]),
+              }),
+            }),
+          }),
+          matches: ($R[10] = [
+            ($R[11] = { i: "__root__ ", u: 1788364640669, s: "success", ssr: !0 }),
+            ($R[12] = {
+              i: "  ",
+              u: 1788364640724,
+              s: "success",
+              l: ($R[13] = {
+                settings: ($R[14] = {
+                  subscriptionPriceKes: 1,
+                  trialDays: 3,
+                  supportPhone: "254768926965",
+                }),
+              }),
+              ssr: !0,
+            }),
+          ]),
+          lastMatchId: "  ",
+        }))($R["tsr"]);
+      $_TSR.e();
+      document.currentScript.remove();
+    </script>
+    <script type="module" async="" src="/@id/virtual:tanstack-start-dev-client-entry"></script>
+  </body>
+</html>
