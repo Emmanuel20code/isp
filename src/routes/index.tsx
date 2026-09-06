@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { getPublicSettings } from "@/lib/public.functions";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import {
@@ -266,14 +267,15 @@ function Landing() {
               </span>
             </div>
           </Link>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             <Badge
               variant="outline"
-              className="hidden sm:flex items-center gap-1.5 py-1 px-3 bg-card/50 border-primary/20 text-xs"
+              className="hidden lg:flex items-center gap-1.5 py-1 px-3 bg-card/50 border-primary/20 text-xs"
             >
               <span className="size-2 rounded-full bg-emerald-500 animate-ping" />
               Regional MikroTik & Payment Nodes Active
             </Badge>
+            <ThemeToggle />
             <Button asChild variant="ghost" size="sm" className="font-medium">
               <Link to="/auth">Sign in</Link>
             </Button>

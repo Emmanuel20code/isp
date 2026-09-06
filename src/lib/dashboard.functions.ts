@@ -172,16 +172,35 @@ export const getDashboard = createServerFn({ method: "GET" })
     const incomeToday = sumTxns(todayTxns) + sumCashVouchers(todayCashVouchers, todayTxns);
     const incomeMonth = sumTxns(monthTxns) + sumCashVouchers(monthCashVouchers, monthTxns);
 
-    const mappedRouters = (routers ?? []).map((r) => ({
-      ...r,
-      status: computeRouterStatus(r),
-    }));
+    const { calculateNetworkRevenue } = await import("@/lib/network.functions");
+    const revenueMetrics = await calculateNetworkRevenue(supabase, tenantId, (routers ?? []) as any);
+
+    const mappedRouters = (routers ?? []).map((r) => {
+      const rev = revenueMetrics.routers.find((ro) => ro.routerId === r.id);
+      return {
+        ...r,
+        status: computeRouterStatus(r),
+        revenue: {
+          incomeToday: rev?.incomeToday ?? 0,
+          txnCountToday: rev?.txnCountToday ?? 0,
+          incomeYesterday: rev?.incomeYesterday ?? 0,
+          incomeThisMonth: rev?.incomeThisMonth ?? 0,
+          txnCountThisMonth: rev?.txnCountThisMonth ?? 0,
+          incomeLastMonth: rev?.incomeLastMonth ?? 0,
+          incomeTotal: rev?.incomeTotal ?? 0,
+          txnCountTotal: rev?.txnCountTotal ?? 0,
+          shareOfTotalMonth: rev?.shareOfTotalMonth ?? 0,
+          shareOfTotalToday: rev?.shareOfTotalToday ?? 0,
+        },
+      };
+    });
 
     return {
       tenantId,
       routers: mappedRouters,
       packages: packages ?? [],
       activeSessions: activeSessions ?? [],
+      revenueMetrics,
       stats: {
         incomeToday,
         incomeMonth,

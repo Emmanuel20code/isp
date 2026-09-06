@@ -17,7 +17,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Loader2, Sun, Moon, Laptop, Check } from "lucide-react";
+import { useTheme } from "@/context/ThemeContext";
 
 export const Route = createFileRoute("/_authenticated/settings")({
   head: () => ({
@@ -42,6 +43,7 @@ export const Route = createFileRoute("/_authenticated/settings")({
 
 function SettingsPage() {
   const qc = useQueryClient();
+  const { theme, setTheme } = useTheme();
   const fetchContext = useServerFn(getMyContext);
   const save = useServerFn(updateTenantProfile);
   const { data, isPending } = useQuery({ queryKey: ["my-context"], queryFn: () => fetchContext() });
@@ -218,6 +220,96 @@ function SettingsPage() {
                   </p>
                 </div>
               )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Appearance & Theme</CardTitle>
+              <CardDescription>
+                Customize how the ISP management console looks on your device.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTheme("light");
+                    toast.success("Switched to Light mode");
+                  }}
+                  className={`flex flex-col items-start gap-2.5 rounded-lg border p-3.5 text-left transition-all ${
+                    theme === "light"
+                      ? "border-primary bg-primary/10 ring-2 ring-primary/20"
+                      : "border-border/80 bg-card hover:border-primary/40 hover:bg-muted/40"
+                  }`}
+                >
+                  <div className="flex w-full items-center justify-between">
+                    <div className="flex size-7 items-center justify-center rounded-md bg-amber-500/15 text-amber-600">
+                      <Sun className="size-4" />
+                    </div>
+                    {theme === "light" && <Check className="size-4 text-primary" />}
+                  </div>
+                  <div>
+                    <div className="text-sm font-semibold">Light Mode</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      Clean, high-contrast daytime interface
+                    </div>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTheme("dark");
+                    toast.success("Switched to Dark mode");
+                  }}
+                  className={`flex flex-col items-start gap-2.5 rounded-lg border p-3.5 text-left transition-all ${
+                    theme === "dark"
+                      ? "border-primary bg-primary/10 ring-2 ring-primary/20"
+                      : "border-border/80 bg-card hover:border-primary/40 hover:bg-muted/40"
+                  }`}
+                >
+                  <div className="flex w-full items-center justify-between">
+                    <div className="flex size-7 items-center justify-center rounded-md bg-sky-500/15 text-sky-400">
+                      <Moon className="size-4" />
+                    </div>
+                    {theme === "dark" && <Check className="size-4 text-primary" />}
+                  </div>
+                  <div>
+                    <div className="text-sm font-semibold">Dark Mode</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      Low-light midnight operations theme
+                    </div>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTheme("system");
+                    toast.success("Theme set to match System preferences");
+                  }}
+                  className={`flex flex-col items-start gap-2.5 rounded-lg border p-3.5 text-left transition-all ${
+                    theme === "system"
+                      ? "border-primary bg-primary/10 ring-2 ring-primary/20"
+                      : "border-border/80 bg-card hover:border-primary/40 hover:bg-muted/40"
+                  }`}
+                >
+                  <div className="flex w-full items-center justify-between">
+                    <div className="flex size-7 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                      <Laptop className="size-4" />
+                    </div>
+                    {theme === "system" && <Check className="size-4 text-primary" />}
+                  </div>
+                  <div>
+                    <div className="text-sm font-semibold">System Default</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      Synchronizes with your OS theme
+                    </div>
+                  </div>
+                </button>
+              </div>
             </CardContent>
           </Card>
 

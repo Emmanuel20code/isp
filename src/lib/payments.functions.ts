@@ -934,12 +934,19 @@ export async function activateCustomerPackage(
     throw new Error(`Failed to generate voucher: ${voucherErr?.message || "Unknown error"}`);
   }
 
-  // Link voucher and customer to transaction
+  // Link voucher, customer and router to transaction
+  const currentRaw = (txn.raw as Record<string, unknown>) || {};
   await db
     .from("transactions")
     .update({
       voucher_id: voucher.id,
       customer_id: customerId,
+      raw: {
+        ...currentRaw,
+        router_id: routerId,
+        voucher_code: voucher.code,
+        activated_at: new Date().toISOString(),
+      },
     })
     .eq("id", txn.id);
 

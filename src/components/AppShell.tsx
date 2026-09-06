@@ -6,6 +6,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
 import { getPublicSettings } from "@/lib/public.functions";
 import { useTenant } from "@/context/TenantContext";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -204,9 +205,7 @@ export function AppShell({
               <Search className="size-3.5" />
             </span>
           </div>
-          <Button variant="outline" size="sm" className="h-8 gap-1.5 rounded-sm text-xs">
-            <Sun className="size-3.5" /> Light
-          </Button>
+          <ThemeToggle />
           <span className="flex items-center gap-1 text-xs text-muted-foreground" title={country}>
             {currentFlag.flag} {currentFlag.code}
           </span>

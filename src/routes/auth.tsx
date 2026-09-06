@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { toast } from "sonner";
 import { Wifi, Loader2, ArrowLeft, KeyRound, Mail, CheckCircle2, Eye, EyeOff } from "lucide-react";
 import { registerAccountFn } from "@/lib/tenancy.functions";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 const searchSchema = z.object({
   mode: z.enum(["signin", "signup", "reset", "update-password"]).optional(),
@@ -310,9 +311,12 @@ function AuthPage() {
 
   return (
     <div
-      className="flex min-h-screen items-center justify-center px-5 py-12"
+      className="relative flex min-h-screen items-center justify-center px-5 py-12"
       style={{ background: "var(--gradient-hero)" }}
     >
+      <div className="absolute top-4 right-4 z-20">
+        <ThemeToggle />
+      </div>
       <div className="w-full max-w-md">
         <Link
           to="/"

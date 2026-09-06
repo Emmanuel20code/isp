@@ -69,9 +69,14 @@ import {
   Sparkles,
   ChevronRight,
   Activity,
+  DollarSign,
+  TrendingUp,
 } from "lucide-react";
 import { generateOnboardingCommand } from "@/lib/mikrotik";
 import { MacScannerModal } from "@/components/MacScannerModal";
+import { RouterRevenueModal } from "@/components/RouterRevenueModal";
+import { RouterIncomeLeaderboard } from "@/components/RouterIncomeLeaderboard";
+import type { RouterRevenueData } from "@/lib/network.functions";
 
 export const Route = createFileRoute("/_authenticated/routers")({
   head: () => ({
@@ -116,6 +121,7 @@ interface RouterCardProps {
     desired_configuration_version?: number;
     sync_status?: string;
     is_disabled?: boolean;
+    revenue?: RouterRevenueData;
   };
   tenantSlug: string;
   baseUrl: string;
@@ -127,6 +133,7 @@ interface RouterCardProps {
   onFixSsl: (id: string) => void;
   onHardenHotspot: (id: string) => void;
   onScanMacs: (id: string) => void;
+  onViewRevenue: (router: any) => void;
   isDeleting: boolean;
   isRefreshingTok: boolean;
   isSyncing: boolean;
@@ -145,6 +152,7 @@ function RouterCard({
   onFixSsl,
   onHardenHotspot,
   onScanMacs,
+  onViewRevenue,
   onToggleDisable,
   isDeleting,
   isRefreshingTok,
@@ -255,6 +263,23 @@ function RouterCard({
                           ? "Offline"
                           : "Pending"}
               </Badge>
+
+              {r.revenue && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onViewRevenue(r);
+                  }}
+                  className="flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 border border-emerald-500/20 transition-all cursor-pointer"
+                  title="Click to view daily & monthly revenue breakdown"
+                >
+                  <DollarSign className="size-3 text-emerald-500" />
+                  <span>Today: KES {r.revenue.incomeToday.toLocaleString()}</span>
+                  <span className="text-muted-foreground/60">|</span>
+                  <span>Month: KES {r.revenue.incomeThisMonth.toLocaleString()}</span>
+                </button>
+              )}
             </div>
             {!isExpanded && (
               <p className="text-[10px] text-muted-foreground font-medium">
@@ -265,6 +290,17 @@ function RouterCard({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap" onClick={(e) => e.stopPropagation()}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-[11px] gap-1.5 px-2 text-emerald-600 dark:text-emerald-400 border-emerald-500/25 bg-emerald-500/5 hover:bg-emerald-500/10 font-semibold"
+            onClick={() => onViewRevenue(r)}
+            title="View detailed daily & monthly income analytics for this router"
+          >
+            <TrendingUp className="size-3 text-emerald-500" />
+            Income Stats
+          </Button>
+
           <Button
             variant="outline"
             size="sm"
@@ -510,6 +546,80 @@ function RouterCard({
                   </p>
                 </div>
               </div>
+
+              {/* Router Financial Overview Card */}
+              {r.revenue && (
+                <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/[0.04] p-3 flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                      <DollarSign className="size-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-foreground">Router Financial Summary</span>
+                        <Badge variant="secondary" className="text-[10px] font-mono">
+                          {r.revenue.shareOfTotalMonth}% of Network Revenue
+                        </Badge>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        Real-time revenue attribution from Wi-Fi vouchers & customer packages
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-4 flex-wrap">
+                    <div className="text-right">
+                      <span className="text-[10px] uppercase font-bold text-muted-foreground block">
+                        Today's Income
+                      </span>
+                      <span className="text-xs font-bold text-foreground">
+                        KES {r.revenue.incomeToday.toLocaleString()}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground block">
+                        {r.revenue.txnCountToday} sales
+                      </span>
+                    </div>
+
+                    <div className="h-7 w-px bg-border hidden sm:block" />
+
+                    <div className="text-right">
+                      <span className="text-[10px] uppercase font-bold text-muted-foreground block">
+                        This Month
+                      </span>
+                      <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                        KES {r.revenue.incomeThisMonth.toLocaleString()}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground block">
+                        {r.revenue.txnCountThisMonth} sales
+                      </span>
+                    </div>
+
+                    <div className="h-7 w-px bg-border hidden sm:block" />
+
+                    <div className="text-right">
+                      <span className="text-[10px] uppercase font-bold text-muted-foreground block">
+                        All-Time Total
+                      </span>
+                      <span className="text-xs font-bold text-foreground">
+                        KES {r.revenue.incomeTotal.toLocaleString()}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground block">
+                        {r.revenue.txnCountTotal} total sales
+                      </span>
+                    </div>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-[11px] gap-1 px-2.5 bg-background hover:bg-muted font-semibold"
+                      onClick={() => onViewRevenue(r)}
+                    >
+                      <TrendingUp className="size-3 text-emerald-500" />
+                      Detailed Analytics
+                    </Button>
+                  </div>
+                </div>
+              )}
 
               {/* Quick Links & Advanced Toggle */}
               <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t text-xs">
@@ -1114,8 +1224,11 @@ function RoutersPage() {
   const [apGuideOpen, setApGuideOpen] = useState(false);
   const [macScannerOpen, setMacScannerOpen] = useState(false);
   const [selectedRouterForScan, setSelectedRouterForScan] = useState<string | null>(null);
+  const [selectedRouterForRevenue, setSelectedRouterForRevenue] = useState<any | null>(null);
+  const [leaderboardOpen, setLeaderboardOpen] = useState(false);
 
   const tenantSlug = ctx.data?.tenant?.slug || "wifi";
+  const revenueMetrics = data?.revenueMetrics;
 
   return (
     <AppShell isSuperAdmin={ctx.data?.isSuperAdmin ?? false}>
@@ -1125,10 +1238,18 @@ function RoutersPage() {
             <Server className="size-6 text-primary" /> MikroTik Routers
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Manage your network gateways, live telemetry, and one-click onboarding.
+            Manage your network gateways, live telemetry, and per-router daily/monthly income.
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setLeaderboardOpen(true)}
+            className="gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10 bg-emerald-500/5"
+          >
+            <TrendingUp className="size-3.5" /> Router Income Leaderboard
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -1146,11 +1267,11 @@ function RoutersPage() {
             onClick={() => setApGuideOpen(true)}
             className="gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10"
           >
-            <ShieldCheck className="size-3.5" /> Anti-Leak & Security Guide
+            <ShieldCheck className="size-3.5" /> Anti-Leak Guide
           </Button>
           <Link to="/datagrid">
             <Button variant="outline" size="sm" className="gap-1.5 text-xs font-semibold">
-              <Layers className="size-3.5 text-primary" /> Open Data Grid View
+              <Layers className="size-3.5 text-primary" /> Data Grid
             </Button>
           </Link>
           <Button
@@ -1163,6 +1284,67 @@ function RoutersPage() {
           </Button>
         </div>
       </div>
+
+      {/* Network Router Revenue Highlights */}
+      {revenueMetrics && (
+        <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="rounded-xl border border-border bg-card p-3.5 space-y-1 shadow-xs">
+            <div className="flex items-center justify-between text-muted-foreground">
+              <span className="text-[10px] uppercase font-bold tracking-wider">All Routers Today</span>
+              <DollarSign className="size-3.5 text-primary" />
+            </div>
+            <p className="text-xl font-bold tracking-tight text-foreground">
+              KES {revenueMetrics.totalIncomeToday.toLocaleString()}
+            </p>
+            <p className="text-[11px] text-muted-foreground">
+              {revenueMetrics.totalTxnsToday} sales across network today
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-border bg-card p-3.5 space-y-1 shadow-xs">
+            <div className="flex items-center justify-between text-muted-foreground">
+              <span className="text-[10px] uppercase font-bold tracking-wider">All Routers This Month</span>
+              <TrendingUp className="size-3.5 text-emerald-500" />
+            </div>
+            <p className="text-xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400">
+              KES {revenueMetrics.totalIncomeThisMonth.toLocaleString()}
+            </p>
+            <p className="text-[11px] text-muted-foreground">
+              {revenueMetrics.totalTxnsThisMonth} sales this month
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-border bg-card p-3.5 space-y-1 shadow-xs">
+            <div className="flex items-center justify-between text-muted-foreground">
+              <span className="text-[10px] uppercase font-bold tracking-wider">Top Earner Today</span>
+              <Server className="size-3.5 text-sky-500" />
+            </div>
+            <p className="text-sm font-bold text-foreground truncate">
+              {revenueMetrics.topRouterToday?.name || "No sales yet today"}
+            </p>
+            <p className="text-[11px] text-muted-foreground">
+              {revenueMetrics.topRouterToday
+                ? `KES ${revenueMetrics.topRouterToday.amount.toLocaleString()}`
+                : "—"}
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-border bg-card p-3.5 space-y-1 shadow-xs">
+            <div className="flex items-center justify-between text-muted-foreground">
+              <span className="text-[10px] uppercase font-bold tracking-wider">Top Earner Month</span>
+              <Server className="size-3.5 text-amber-500" />
+            </div>
+            <p className="text-sm font-bold text-foreground truncate">
+              {revenueMetrics.topRouterMonth?.name || "No sales yet this month"}
+            </p>
+            <p className="text-[11px] text-muted-foreground">
+              {revenueMetrics.topRouterMonth
+                ? `KES ${revenueMetrics.topRouterMonth.amount.toLocaleString()}`
+                : "—"}
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[360px_1fr]">
         {/* Left Form: Add Router */}
@@ -1252,6 +1434,7 @@ function RoutersPage() {
                 setSelectedRouterForScan(id);
                 setMacScannerOpen(true);
               }}
+              onViewRevenue={(router) => setSelectedRouterForRevenue(router)}
               onToggleDisable={(id, isDisabled) => toggleDisableMutation.mutate({ id, isDisabled })}
               isDeleting={deleteMutation.isPending && deleteMutation.variables === r.id}
               isRefreshingTok={
@@ -1479,6 +1662,26 @@ function RoutersPage() {
         open={macScannerOpen}
         onOpenChange={setMacScannerOpen}
         initialRouterId={selectedRouterForScan}
+      />
+
+      {/* Deep Router Revenue Analytics Modal */}
+      <RouterRevenueModal
+        open={Boolean(selectedRouterForRevenue)}
+        onOpenChange={(open) => {
+          if (!open) setSelectedRouterForRevenue(null);
+        }}
+        router={selectedRouterForRevenue}
+      />
+
+      {/* Network Router Income Leaderboard & Full CSV Export */}
+      <RouterIncomeLeaderboard
+        open={leaderboardOpen}
+        onOpenChange={setLeaderboardOpen}
+        metrics={revenueMetrics ?? null}
+        onSelectRouter={(id) => {
+          const found = data?.routers.find((r) => r.id === id);
+          if (found) setSelectedRouterForRevenue(found);
+        }}
       />
 
       <ChatWidget />

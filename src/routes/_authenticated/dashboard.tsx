@@ -59,6 +59,8 @@ import {
   CheckCircle2,
   XCircle,
   GripVertical,
+  DollarSign,
+  TrendingUp,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -254,12 +256,21 @@ function Dashboard() {
   }
 
   // Use a state for the tile order to handle drag updates locally
-  const [activeTileOrder, setActiveTileOrder] = useState<string[]>([]);
+  const [activeTileOrder, setActiveTileOrder] = useState<string[]>(DEFAULT_TILE_ORDER);
 
   useEffect(() => {
     const savedOrder = data?.tenant?.settings?.dashboard_order;
     if (savedOrder && Array.isArray(savedOrder)) {
-      setActiveTileOrder(savedOrder);
+      const valid = savedOrder.filter(
+        (k): k is string => typeof k === "string" && DEFAULT_TILE_ORDER.includes(k),
+      );
+      const uniqueSaved = Array.from(new Set(valid));
+      for (const defId of DEFAULT_TILE_ORDER) {
+        if (!uniqueSaved.includes(defId)) {
+          uniqueSaved.push(defId);
+        }
+      }
+      setActiveTileOrder(uniqueSaved);
     } else {
       setActiveTileOrder(DEFAULT_TILE_ORDER);
     }
@@ -453,8 +464,8 @@ function Dashboard() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Routers - System Wide</SelectItem>
-                {routers.map((r) => (
-                  <SelectItem key={r.id} value={r.id}>
+                {routers.map((r, idx) => (
+                  <SelectItem key={r.id || `router-select-${idx}`} value={r.id || `router-val-${idx}`}>
                     {r.name}
                   </SelectItem>
                 ))}
@@ -474,9 +485,9 @@ function Dashboard() {
             </p>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              {routers.map((r) => (
+              {routers.map((r, idx) => (
                 <Link
-                  key={r.id}
+                  key={r.id || `router-view-${idx}`}
                   to="/routers"
                   className="rounded-md border border-border bg-background/40 p-3 hover:border-primary/60"
                 >
@@ -505,7 +516,7 @@ function Dashboard() {
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
           <SortableContext items={activeTileOrder} strategy={rectSortingStrategy}>
             <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-              {activeTileOrder.map((id) => {
+              {activeTileOrder.map((id, idx) => {
                 let tile = null;
                 switch (id) {
                   case "total_online":
@@ -620,7 +631,7 @@ function Dashboard() {
                     break;
                 }
                 return (
-                  <SortableTile key={id} id={id}>
+                  <SortableTile key={`${id}-${idx}`} id={id}>
                     {tile || <div />}
                   </SortableTile>
                 );
@@ -666,7 +677,7 @@ function Dashboard() {
         </div>
 
         <Panel
-          title="Router Status"
+          title="Router Status & Live Telemetry"
           icon={Server}
           right={
             <div className="flex gap-2">
@@ -683,9 +694,9 @@ function Dashboard() {
             <p className="text-sm text-muted-foreground">No routers connected yet.</p>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
-              {routers.map((r) => (
+              {routers.map((r: any, idx: number) => (
                 <div
-                  key={r.id}
+                  key={r.id || `router-status-${idx}`}
                   className={`flex items-center gap-3 rounded-md border-l-4 bg-background/40 p-3 ${
                     r.status === "online"
                       ? "border-success"
@@ -716,6 +727,70 @@ function Dashboard() {
             </div>
           )}
         </Panel>
+
+        {/* Per-Router Income: Daily & Monthly Breakdown */}
+        {((board.data as any)?.revenueMetrics?.routers?.length ?? 0) > 0 && (
+          <Panel
+            title="Router Income Performance (Daily & Monthly)"
+            icon={DollarSign}
+            right={
+              <Link to="/routers" className="text-xs text-primary hover:underline font-semibold flex items-center gap-1">
+                <TrendingUp className="size-3.5" /> Full Router Analytics & Leaderboard
+              </Link>
+            }
+          >
+            <div className="space-y-3">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {((board.data as any)?.revenueMetrics?.routers || []).map((rb: any, idx: number) => (
+                  <div
+                    key={rb.id || `router-rev-${idx}`}
+                    className="rounded-lg border bg-background/50 p-3 flex flex-col justify-between gap-2.5 shadow-xs"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-bold text-foreground truncate flex items-center gap-1.5">
+                          <Server className="size-3.5 text-primary shrink-0" />
+                          {rb.name}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground truncate">
+                          {rb.location || "No site location specified"}
+                        </p>
+                      </div>
+                      <Badge variant="secondary" className="text-[10px] font-mono shrink-0">
+                        {rb.shareOfTotalMonth}% share
+                      </Badge>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t text-xs">
+                      <div>
+                        <span className="text-[10px] uppercase font-bold text-muted-foreground block">
+                          Today's Income
+                        </span>
+                        <span className="font-bold text-foreground">
+                          KES {rb.incomeToday.toLocaleString()}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground block">
+                          {rb.txnCountToday} sales
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[10px] uppercase font-bold text-muted-foreground block">
+                          This Month
+                        </span>
+                        <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                          KES {rb.incomeThisMonth.toLocaleString()}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground block">
+                          {rb.txnCountThisMonth} sales
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </Panel>
+        )}
 
         <Panel title="Monthly Registered Customers" icon={BarChart3}>
           <p className="py-10 text-center text-sm text-muted-foreground">
@@ -759,8 +834,8 @@ function Dashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {activeSessions.map((session) => (
-                    <tr key={session.id} className="hover:bg-muted/30">
+                  {activeSessions.map((session, idx) => (
+                    <tr key={session.id || `session-${idx}`} className="hover:bg-muted/30">
                       <td className="py-2.5 font-medium">{session.phone}</td>
                       <td className="py-2.5 text-muted-foreground">
                         {session.packages?.name || "Standard"}
@@ -800,9 +875,9 @@ function Dashboard() {
             </p>
           ) : (
             <div className="grid gap-2 sm:grid-cols-2">
-              {packages.map((p) => (
+              {packages.map((p, idx) => (
                 <div
-                  key={p.id}
+                  key={p.id || `pkg-${idx}`}
                   className="flex items-center justify-between gap-3 rounded-md border border-border/60 px-3 py-2"
                 >
                   <div className="min-w-0">

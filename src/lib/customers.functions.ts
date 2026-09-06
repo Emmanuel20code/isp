@@ -302,14 +302,86 @@ export const listTransactions = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
     const tenantId = await tenantOf(supabase, userId);
-    if (!tenantId) return { tenantId: null, transactions: [] };
-    const { data } = await supabase
-      .from("transactions")
-      .select(
-        "id, kind, status, phone, amount_kes, mpesa_receipt, failure_reason, created_at, package_id, packages (name, price_kes)",
-      )
-      .eq("tenant_id", tenantId)
-      .order("created_at", { ascending: false })
-      .limit(500);
-    return { tenantId, transactions: data ?? [] };
+    if (!tenantId) return { tenantId: null, transactions: [], routers: [] };
+
+    const [{ data: transactions }, { data: routers }] = await Promise.all([
+      supabase
+        .from("transactions")
+        .select(
+          `
+          id,
+          kind,
+          status,
+          phone,
+          amount_kes,
+          mpesa_receipt,
+          failure_reason,
+          created_at,
+          package_id,
+          voucher_id,
+          customer_id,
+          raw,
+          packages (name, price_kes),
+          vouchers (router_id, code, routers (id, name)),
+          customers (router_id, full_name, phone, routers (id, name))
+        `,
+        )
+        .eq("tenant_id", tenantId)
+        .order("created_at", { ascending: false })
+        .limit(600),
+      supabase
+        .from("routers")
+        .select("id, name, location, status")
+        .eq("tenant_id", tenantId)
+        .order("name", { ascending: true }),
+    ]);
+
+    const routerMap = new Map((routers ?? []).map((r) => [r.id, r.name]));
+    const singleRouterId = routers?.length === 1 ? routers[0].id : null;
+    const singleRouterName = routers?.length === 1 ? routers[0].name : null;
+
+    const mappedTransactions = (transactions ?? []).map((t) => {
+      const raw = typeof t.raw === "object" && t.raw ? (t.raw as Record<string, unknown>) : {};
+      const rawRouterId = (raw.router_id as string) || null;
+      
+      const vRouter = t.vouchers as unknown as { router_id?: string; routers?: { id?: string; name?: string } | null } | null;
+      const cRouter = t.customers as unknown as { router_id?: string; routers?: { id?: string; name?: string } | null } | null;
+
+      const resolvedRouterId =
+        rawRouterId ||
+        vRouter?.router_id ||
+        cRouter?.router_id ||
+        singleRouterId ||
+        null;
+
+      const resolvedRouterName =
+        (resolvedRouterId ? routerMap.get(resolvedRouterId) : null) ||
+        vRouter?.routers?.name ||
+        cRouter?.routers?.name ||
+        (singleRouterName && !resolvedRouterId ? singleRouterName : null) ||
+        "All / Default";
+
+      return {
+        id: t.id,
+        kind: t.kind,
+        status: t.status,
+        phone: t.phone,
+        amount_kes: t.amount_kes,
+        mpesa_receipt: t.mpesa_receipt,
+        failure_reason: t.failure_reason,
+        created_at: t.created_at,
+        package_id: t.package_id,
+        packages: t.packages,
+        router_id: resolvedRouterId,
+        router_name: resolvedRouterName,
+        voucher_id: t.voucher_id,
+        customer_id: t.customer_id,
+      };
+    });
+
+    return {
+      tenantId,
+      transactions: mappedTransactions,
+      routers: routers ?? [],
+    };
   });
