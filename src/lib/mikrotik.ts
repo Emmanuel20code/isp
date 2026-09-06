@@ -364,6 +364,12 @@ add server=hotspot1 dst-address=196.201.214.208 action=accept comment="Safaricom
 /ip hotspot walled-garden
 add server=hotspot1 dst-host="${domainOnly}" action=allow comment="Allow Portal Site"
 add server=hotspot1 dst-host="*.${domainOnly}" action=allow comment="Allow Portal Assets"
+add server=hotspot1 dst-host="connectivitycheck.gstatic.com" action=allow comment="Google Portal Probe"
+add server=hotspot1 dst-host="clients3.google.com" action=allow comment="Google Client Probe"
+add server=hotspot1 dst-host="connectivitycheck.android.com" action=allow comment="Android Portal Probe"
+add server=hotspot1 dst-host="captive.apple.com" action=allow comment="Apple Portal Probe"
+add server=hotspot1 dst-host="msftconnecttest.com" action=allow comment="Windows Portal Probe"
+add server=hotspot1 dst-host="detectportal.firefox.com" action=allow comment="Firefox Portal Probe"
 add server=hotspot1 dst-host="paystack.com" action=allow
 add server=hotspot1 dst-host="*.paystack.com" action=allow
 add server=hotspot1 dst-host="*.paystack.co" action=allow
@@ -578,27 +584,27 @@ add service-name="pppoe_billing" interface=hotspot-bridge default-profile=defaul
 # Remove existing pool named "PPPOE ACTIVE POOL" then add high-capacity range (16,711,676 IPs)
 /ip pool
 :foreach p in=[find where name="PPPOE ACTIVE POOL"] do={ remove $p }
-add name="PPPOE ACTIVE POOL" ranges=172.16.0.2-172.31.255.254 comment="WiFiBilling Active Subscribers Pool"
+add name="PPPOE ACTIVE POOL" ranges=10.0.0.2-10.9.255.255,10.11.0.1-10.255.255.254 comment="WiFiBilling 16M+ Active Subscribers Pool"
 # Remove existing pool named "expired_pppoe_pool" then add high-capacity expired pool (1,048,574 IPs)
 /ip pool
 :foreach p in=[find where name="expired_pppoe_pool"] do={ remove $p }
-add name="expired_pppoe_pool" ranges=10.250.0.2-10.250.255.254 comment="WiFiBilling Expired Subscribers Pool"
+add name="expired_pppoe_pool" ranges=172.16.0.2-172.31.255.254 comment="WiFiBilling 1M+ Expired Subscribers Pool"
 
-# Configure default PPP profile with gateway 10.0.0.1 and active pool
+# Configure default PPP profile with gateway 10.0.0.1 and 16M+ active pool
 /ppp profile set [find name=default] local-address=10.0.0.1 remote-address="PPPOE ACTIVE POOL" dns-server=8.8.8.8,1.1.1.1
 
-# Ensure NAT masquerade rule for entire PPPoE active subnet
+# Ensure NAT masquerade rule for entire PPPoE active subnet (10.0.0.0/8 supports all 16M+ connections)
 :if ([:len [/ip firewall nat find where comment="PPPOE NAT"]] = 0) do={
-    /ip firewall nat add chain=srcnat action=masquerade src-address=172.16.0.0/12 comment="PPPOE NAT"
+    /ip firewall nat add chain=srcnat action=masquerade src-address=10.0.0.0/8 comment="PPPOE NAT"
 } else={
-    /ip firewall nat set [find comment="PPPOE NAT"] src-address=172.16.0.0/12
+    /ip firewall nat set [find comment="PPPOE NAT"] src-address=10.0.0.0/8
 }
 
-# Ensure NAT masquerade for expired walled-garden subscribers
+# Ensure NAT masquerade for expired walled-garden subscribers (172.16.0.0/12 supports 1M+ connections)
 :if ([:len [/ip firewall nat find where comment="EXPIRED PPPOE NAT"]] = 0) do={
-    /ip firewall nat add chain=srcnat action=masquerade src-address=10.250.0.0/16 comment="EXPIRED PPPOE NAT"
+    /ip firewall nat add chain=srcnat action=masquerade src-address=172.16.0.0/12 comment="EXPIRED PPPOE NAT"
 } else={
-    /ip firewall nat set [find comment="EXPIRED PPPOE NAT"] src-address=10.250.0.0/16
+    /ip firewall nat set [find comment="EXPIRED PPPOE NAT"] src-address=172.16.0.0/12
 }
 
 :log info "PPPoE configuration applied successfully."
@@ -756,6 +762,11 @@ export function generateNetworkConfigurationScript(params: ScriptParams): string
     "*.wifibilling.site",
     "cloudflare.com",
     "*.cloudflare.com",
+    "connectivitycheck.gstatic.com",
+    "connectivitycheck.android.com",
+    "captive.apple.com",
+    "msftconnecttest.com",
+    "detectportal.firefox.com",
     ...(params.customWalledGarden ?? []),
   ].filter(Boolean);
 
@@ -852,22 +863,22 @@ export function generateNetworkConfigurationScript(params: ScriptParams): string
   };
 } on-error={};
 
-# 5. PPPoE Server Configuration on br-hotspot
+# 5. PPPoE Server Configuration on br-hotspot (Supporting 16M+ Connections)
 :do {
   :if ([:len [/ip pool find name="PPPOE ACTIVE POOL"]] = 0) do={
-    /ip pool add name="PPPOE ACTIVE POOL" ranges=172.16.0.2-172.31.255.254 comment="WiFiBilling Active Subscribers Pool";
+    /ip pool add name="PPPOE ACTIVE POOL" ranges=10.0.0.2-10.9.255.255,10.11.0.1-10.255.255.254 comment="WiFiBilling 16M+ Active Subscribers Pool";
   } else={
-    /ip pool set [find name="PPPOE ACTIVE POOL"] ranges=172.16.0.2-172.31.255.254;
+    /ip pool set [find name="PPPOE ACTIVE POOL"] ranges=10.0.0.2-10.9.255.255,10.11.0.1-10.255.255.254;
   };
   :if ([:len [/ip pool find name="expired_pppoe_pool"]] = 0) do={
-    /ip pool add name="expired_pppoe_pool" ranges=10.250.0.2-10.250.255.254 comment="WiFiBilling Expired Subscribers Pool";
+    /ip pool add name="expired_pppoe_pool" ranges=172.16.0.2-172.31.255.254 comment="WiFiBilling 1M+ Expired Subscribers Pool";
   } else={
-    /ip pool set [find name="expired_pppoe_pool"] ranges=10.250.0.2-10.250.255.254;
+    /ip pool set [find name="expired_pppoe_pool"] ranges=172.16.0.2-172.31.255.254;
   };
   :if ([:len [/ip pool find name="wfb-ppp-pool"]] = 0) do={
-    /ip pool add name="wfb-ppp-pool" ranges=172.16.0.2-172.31.255.254;
+    /ip pool add name="wfb-ppp-pool" ranges=10.0.0.2-10.9.255.255,10.11.0.1-10.255.255.254;
   } else={
-    /ip pool set [find name="wfb-ppp-pool"] ranges=172.16.0.2-172.31.255.254;
+    /ip pool set [find name="wfb-ppp-pool"] ranges=10.0.0.2-10.9.255.255,10.11.0.1-10.255.255.254;
   };
   :if ([:len [/ppp profile find name="wfb-ppp-prof"]] = 0) do={
     /ppp profile add name="wfb-ppp-prof" local-address=10.0.0.1 remote-address="PPPOE ACTIVE POOL" dns-server=8.8.8.8,1.1.1.1 comment="WiFiBilling PPPoE Profile";
@@ -879,22 +890,14 @@ export function generateNetworkConfigurationScript(params: ScriptParams): string
     /interface pppoe-server server add service-name="wfb-pppoe" interface="br-hotspot" authentication=pap,chap,mschap1,mschap2 default-profile="wfb-ppp-prof" disabled=no;
   };
   :if ([:len [/ip firewall nat find where comment="PPPOE NAT"]] = 0) do={
-    /ip firewall nat add chain=srcnat action=masquerade src-address=172.16.0.0/12 comment="PPPOE NAT";
+    /ip firewall nat add chain=srcnat action=masquerade src-address=10.0.0.0/8 comment="PPPOE NAT";
   } else={
-    /ip firewall nat set [find comment="PPPOE NAT"] src-address=172.16.0.0/12;
+    /ip firewall nat set [find comment="PPPOE NAT"] src-address=10.0.0.0/8;
   };
   :if ([:len [/ip firewall nat find where comment="EXPIRED PPPOE NAT"]] = 0) do={
-    /ip firewall nat add chain=srcnat action=masquerade src-address=10.250.0.0/16 comment="EXPIRED PPPOE NAT";
+    /ip firewall nat add chain=srcnat action=masquerade src-address=172.16.0.0/12 comment="EXPIRED PPPOE NAT";
   } else={
-    /ip firewall nat set [find comment="EXPIRED PPPOE NAT"] src-address=10.250.0.0/16;
-  };
-  :if ([:len [/ppp profile find name="expired-limited"]] = 0) do={
-    /ppp profile add name="expired-limited" local-address=10.0.0.1 remote-address="expired_pppoe_pool" dns-server=8.8.8.8,1.1.1.1 comment="WiFiBilling PPPoE Expired Redirect Profile";
-  } else={
-    /ppp profile set [find name="expired-limited"] local-address=10.0.0.1 remote-address="expired_pppoe_pool" dns-server=8.8.8.8,1.1.1.1;
-  };
-  :if ([:len [/ip firewall nat find where comment="EXPIRED PPPOE REDIRECT TO PORTAL"]] = 0) do={
-    /ip firewall nat add chain=dstnat protocol=tcp dst-port=80 src-address=10.250.0.0/16 action=dst-nat to-addresses=10.10.0.1 to-ports=80 comment="EXPIRED PPPOE REDIRECT TO PORTAL";
+    /ip firewall nat set [find comment="EXPIRED PPPOE NAT"] src-address=172.16.0.0/12;
   };
 } on-error={};
 
@@ -920,12 +923,17 @@ export function generateNetworkConfigurationScript(params: ScriptParams): string
   :do { /ip hotspot walled-garden remove [find dst-host="${domainOnly}"]; } on-error={};
   :do { /ip hotspot walled-garden remove [find dst-host="*.${domainOnly}"]; } on-error={};
 
-  # Ensure probe domains are NOT in walled garden so mobile OS detects captive portal popup immediately
-  :do { /ip hotspot walled-garden remove [find dst-host~"captive\\.apple|connectivitycheck|clients3|msftconnecttest|detectportal"]; } on-error={};
-
   # Allow all traffic to the billing domain
   /ip hotspot walled-garden add dst-host="${domainOnly}" action=allow comment="Allow Portal Site";
   /ip hotspot walled-garden add dst-host="*.${domainOnly}" action=allow comment="Allow Portal Assets";
+
+  # Allow OS Connectivity Checks ONLY (Strict probes for Captive Portal detection - no wildcard media leaks)
+  /ip hotspot walled-garden add dst-host="captive.apple.com" action=allow comment="Apple Portal Probe";
+  /ip hotspot walled-garden add dst-host="connectivitycheck.gstatic.com" action=allow comment="Google Portal Probe";
+  /ip hotspot walled-garden add dst-host="connectivitycheck.android.com" action=allow comment="Android Portal Probe";
+  /ip hotspot walled-garden add dst-host="clients3.google.com" action=allow comment="Google Client Probe";
+  /ip hotspot walled-garden add dst-host="msftconnecttest.com" action=allow comment="Windows Portal Probe";
+  /ip hotspot walled-garden add dst-host="detectportal.firefox.com" action=allow comment="Firefox Portal Probe";
 
   # Payment Gateway Domains
   /ip hotspot walled-garden add dst-host="paystack.com" action=allow comment="Paystack Gateway";
@@ -1196,201 +1204,4 @@ p { font-size: 14px; color: #94a3b8; margin: 0 0 20px; line-height: 1.5; }
   </script>
 </body>
 </html>`;
-}
-
-/**
- * Robust Direct Client for MikroTik RouterOS operations using node-routeros.
- * Supports enabling/disabling PPPoE secrets and syncing service profiles directly.
- */
-export class MikroTikClient {
-  private host: string;
-  private port: number;
-  private user: string;
-  private pass: string;
-  private timeout: number;
-
-  constructor(options: {
-    host: string;
-    port?: number;
-    user?: string;
-    pass?: string;
-    timeout?: number;
-  }) {
-    this.host = options.host;
-    this.port = options.port || 8728;
-    this.user = options.user || "admin";
-    this.pass = options.pass || "";
-    this.timeout = options.timeout || 4;
-  }
-
-  /**
-   * Directly enables a PPPoE secret on the router.
-   */
-  async enableUser(username: string): Promise<boolean> {
-    try {
-      const { RouterOSAPI } = await import("node-routeros");
-      const api = new RouterOSAPI({
-        host: this.host,
-        port: this.port,
-        user: this.user,
-        password: this.pass,
-        timeout: this.timeout,
-      });
-
-      await api.connect();
-      const secrets = await api.write("/ppp/secret/print", [`?name=${username}`]);
-      if (secrets && secrets.length > 0) {
-        const id = secrets[0][".id"];
-        await api.write("/ppp/secret/set", [`=.id=${id}`, "=disabled=no"]);
-        console.log(`[MikroTikClient] Enabled PPPoE secret for ${username} on ${this.host}`);
-
-        // Terminate any active sessions to enforce instantly
-        const active = await api.write("/ppp/active/print", [`?name=${username}`]);
-        if (active && active.length > 0) {
-          for (const session of active) {
-            await api.write("/ppp/active/remove", [`=.id=${session[".id"]}`]);
-          }
-        }
-        await api.close();
-        return true;
-      }
-      await api.close();
-      return false;
-    } catch (err) {
-      console.error(`[MikroTikClient] Failed to enable user ${username} on ${this.host}:`, err);
-      throw err;
-    }
-  }
-
-  /**
-   * Directly disables a PPPoE secret on the router and kicks any active connection.
-   */
-  async disableUser(username: string): Promise<boolean> {
-    try {
-      const { RouterOSAPI } = await import("node-routeros");
-      const api = new RouterOSAPI({
-        host: this.host,
-        port: this.port,
-        user: this.user,
-        password: this.pass,
-        timeout: this.timeout,
-      });
-
-      await api.connect();
-      const secrets = await api.write("/ppp/secret/print", [`?name=${username}`]);
-      if (secrets && secrets.length > 0) {
-        const id = secrets[0][".id"];
-        await api.write("/ppp/secret/set", [
-          `=.id=${id}`,
-          "=disabled=yes",
-          "=comment=Suspended PPPoE User (Expired/Unpaid)",
-        ]);
-        console.log(`[MikroTikClient] Disabled PPPoE secret for ${username} on ${this.host}`);
-
-        // Kick active connection to disconnect them immediately
-        const active = await api.write("/ppp/active/print", [`?name=${username}`]);
-        if (active && active.length > 0) {
-          for (const session of active) {
-            await api.write("/ppp/active/remove", [`=.id=${session[".id"]}`]);
-          }
-        }
-        await api.close();
-        return true;
-      }
-      await api.close();
-      return false;
-    } catch (err) {
-      console.error(`[MikroTikClient] Failed to disable user ${username} on ${this.host}:`, err);
-      throw err;
-    }
-  }
-
-  /**
-   * Dynamically creates/verifies a PPPoE profile and synchronizes the user's secret/status.
-   */
-  async syncProfile(
-    username: string,
-    profileName: string,
-    rateLimit?: string,
-    isPaid: boolean = true,
-  ): Promise<boolean> {
-    try {
-      const { RouterOSAPI } = await import("node-routeros");
-      const api = new RouterOSAPI({
-        host: this.host,
-        port: this.port,
-        user: this.user,
-        password: this.pass,
-        timeout: this.timeout,
-      });
-
-      await api.connect();
-
-      // Ensure profile exists if user is paid
-      if (isPaid && profileName && profileName !== "default") {
-        try {
-          const profiles = await api.write("/ppp/profile/print", [`?name=${profileName}`]);
-          if (!profiles || profiles.length === 0) {
-            const profileArgs = [
-              `=name=${profileName}`,
-              "=local-address=10.0.0.1",
-              "=remote-address=PPPOE ACTIVE POOL",
-              "=dns-server=8.8.8.8,1.1.1.1",
-            ];
-            if (rateLimit) {
-              profileArgs.push(`=rate-limit=${rateLimit}`);
-            }
-            await api.write("/ppp/profile/add", profileArgs);
-            console.log(`[MikroTikClient] Created PPP profile ${profileName} on ${this.host}`);
-          }
-        } catch (profileErr) {
-          console.warn(
-            `[MikroTikClient] Profile initialization warning for ${profileName} on ${this.host}:`,
-            profileErr,
-          );
-        }
-      }
-
-      // Sync secret
-      const secrets = await api.write("/ppp/secret/print", [`?name=${username}`]);
-      if (secrets && secrets.length > 0) {
-        const id = secrets[0][".id"];
-        const targetProfile = isPaid ? profileName : "expired-limited";
-        // Always keep the secret enabled so they can connect, get an IP from expired_pppoe_pool, and be redirected to wifibilling.site to make payments!
-        const disabledState = "no";
-        const commentMsg = isPaid
-          ? "Paid PPPoE User (Synced)"
-          : "Suspended PPPoE User (Expired/Unpaid - Redirecting to Portal)";
-
-        await api.write("/ppp/secret/set", [
-          `=.id=${id}`,
-          `=profile=${targetProfile}`,
-          `=disabled=${disabledState}`,
-          `=comment=${commentMsg}`,
-        ]);
-
-        console.log(
-          `[MikroTikClient] Synced secret ${username} -> ${targetProfile} (Paid: ${isPaid})`,
-        );
-
-        // Disconnect any active connection to apply changes instantly
-        const active = await api.write("/ppp/active/print", [`?name=${username}`]);
-        if (active && active.length > 0) {
-          for (const session of active) {
-            await api.write("/ppp/active/remove", [`=.id=${session[".id"]}`]);
-          }
-        }
-        await api.close();
-        return true;
-      }
-      await api.close();
-      return false;
-    } catch (err) {
-      console.error(
-        `[MikroTikClient] Failed to sync profile for ${username} on ${this.host}:`,
-        err,
-      );
-      throw err;
-    }
-  }
 }

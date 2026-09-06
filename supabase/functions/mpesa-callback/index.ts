@@ -360,18 +360,23 @@ async function grantCaptivePortalAccess(
       // Highly robust phone matching: format the transaction phone to various common Kenyan formats
       const cleanPhoneDigits = txn.phone.replace(/\D/g, "");
       let matchPhoneFormats = [txn.phone];
-
+      
       if (cleanPhoneDigits.startsWith("254") && cleanPhoneDigits.length === 12) {
         const mainPart = cleanPhoneDigits.slice(3); // e.g. 7XXXXXXXX
         matchPhoneFormats = [
           cleanPhoneDigits, // 2547XXXXXXXX
-          `0${mainPart}`, // 07XXXXXXXX
+          `0${mainPart}`,    // 07XXXXXXXX
           `+${cleanPhoneDigits}`, // +2547XXXXXXXX
-          mainPart, // 7XXXXXXXX
+          mainPart,         // 7XXXXXXXX
         ];
       } else if (cleanPhoneDigits.startsWith("0") && cleanPhoneDigits.length === 10) {
         const mainPart = cleanPhoneDigits.slice(1);
-        matchPhoneFormats = [cleanPhoneDigits, `254${mainPart}`, `+254${mainPart}`, mainPart];
+        matchPhoneFormats = [
+          cleanPhoneDigits,
+          `254${mainPart}`,
+          `+254${mainPart}`,
+          mainPart,
+        ];
       }
 
       const { data: matchedCustomers } = await supabase
@@ -498,7 +503,7 @@ async function grantCaptivePortalAccess(
             routerId,
             username: code,
             password: pppPassword,
-            profile: pkg.name || "default",
+            profile: pkg.name ?? "emmatech-pppoe-prof",
             rateLimit: `${pkg.speed_up_mbps ?? 10}M/${pkg.speed_down_mbps ?? 10}M`,
             comment: `M-Pesa ${txn.phone} - Renewal`,
           });

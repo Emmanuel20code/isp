@@ -22,13 +22,7 @@ export class MikrotikApiClient {
   private password: string;
   private port: number;
 
-  constructor(options: {
-    host: string;
-    username?: string;
-    password?: string;
-    port?: number;
-    timeout?: number;
-  }) {
+  constructor(options: { host: string; username?: string; password?: string; port?: number; timeout?: number }) {
     this.host = options.host;
     this.username = options.username || "admin";
     this.password = options.password || "";
@@ -54,10 +48,7 @@ export class MikrotikApiClient {
       console.log(`✅ Connected to MikroTik router at ${this.host}`);
 
       this.api.on("error", (err) => {
-        console.warn(
-          `[MikrotikApiClient] Router connection notice (${this.host}):`,
-          err?.message || err,
-        );
+        console.warn(`[MikrotikApiClient] Router connection notice (${this.host}):`, err?.message || err);
         this.isConnected = false;
       });
     } catch (error: any) {
@@ -74,9 +65,7 @@ export class MikrotikApiClient {
           `[MikrotikApiClient] Direct API connection to ${this.host}:${this.port} unavailable (${error.message || error.name}). Router uses agent polling sync.`,
         );
       } else {
-        console.warn(
-          `[MikrotikApiClient] Could not connect to MikroTik router at ${this.host}: ${error.message}`,
-        );
+        console.warn(`[MikrotikApiClient] Could not connect to MikroTik router at ${this.host}: ${error.message}`);
       }
       throw error;
     }
@@ -302,9 +291,7 @@ export class MikrotikApiClient {
       // If IP is missing, find host by MAC
       if (!targetIp && targetMac) {
         try {
-          const hosts = await this.api.write("/ip/hotspot/host/print", [
-            `?mac-address=${targetMac}`,
-          ]);
+          const hosts = await this.api.write("/ip/hotspot/host/print", [`?mac-address=${targetMac}`]);
           if (hosts && hosts.length > 0) {
             targetIp = hosts[0]["ip-address"] || hosts[0]["address"] || "";
           }
@@ -334,17 +321,13 @@ export class MikrotikApiClient {
         if (targetMac) loginArgs.push(`=mac-address=${targetMac}`);
 
         await this.api.write("/ip/hotspot/active/login", loginArgs);
-        console.log(
-          `[PAYMENT_FLOW][4/5] Router response received: Programmatic active login successful for user ${username} at IP ${targetIp} on ${this.host}`,
-        );
+        console.log(`[PAYMENT_FLOW][4/5] Router response received: Programmatic active login successful for user ${username} at IP ${targetIp} on ${this.host}`);
         return true;
       }
 
       return false;
     } catch (err: any) {
-      console.warn(
-        `[PAYMENT_FLOW][4/5] Direct active session login notice on ${this.host} for ${username}: ${err?.message || err}`,
-      );
+      console.warn(`[PAYMENT_FLOW][4/5] Direct active session login notice on ${this.host} for ${username}: ${err?.message || err}`);
       return false;
     }
   }
@@ -394,9 +377,7 @@ export class MikrotikApiClient {
           "=disabled=no",
           `=comment=${comment}`,
         ]);
-        console.log(
-          `[PAYMENT_FLOW][4/5] Router response received: Updated existing PPPoE secret for ${username} on ${this.host}`,
-        );
+        console.log(`[PAYMENT_FLOW][4/5] Router response received: Updated existing PPPoE secret for ${username} on ${this.host}`);
       } else {
         await this.api.write("/ppp/secret/add", [
           `=name=${username}`,
@@ -406,18 +387,13 @@ export class MikrotikApiClient {
           "=disabled=no",
           `=comment=${comment}`,
         ]);
-        console.log(
-          `[PAYMENT_FLOW][4/5] Router response received: Created fresh PPPoE secret for ${username} on ${this.host}`,
-        );
+        console.log(`[PAYMENT_FLOW][4/5] Router response received: Created fresh PPPoE secret for ${username} on ${this.host}`);
       }
 
       // 3. Kicking active PPPoE session forces client CPE / home router to reconnect immediately!
       await this.kickPPPoEActiveSession(username);
     } catch (error) {
-      console.error(
-        `[PAYMENT_FLOW][4/5] PPPoE upsert failed for user ${username} on ${this.host}:`,
-        error,
-      );
+      console.error(`[PAYMENT_FLOW][4/5] PPPoE upsert failed for user ${username} on ${this.host}:`, error);
       throw error;
     }
   }
@@ -432,9 +408,7 @@ export class MikrotikApiClient {
       if (activeSessions && activeSessions.length > 0) {
         for (const session of activeSessions) {
           await this.api.write("/ppp/active/remove", [`=.id=${session[".id"]}`]);
-          console.log(
-            `[PAYMENT_FLOW][4/5] Router response: Terminated old PPPoE session for ${username} on ${this.host} to force immediate reconnect.`,
-          );
+          console.log(`[PAYMENT_FLOW][4/5] Router response: Terminated old PPPoE session for ${username} on ${this.host} to force immediate reconnect.`);
         }
         return true;
       }
@@ -457,25 +431,21 @@ export class MikrotikApiClient {
       if (secrets && secrets.length > 0) {
         const secretId = secrets[0][".id"];
         const disabledState = enabled ? "no" : "yes";
-        await this.api.write("/ppp/secret/set", [`=.id=${secretId}`, `=disabled=${disabledState}`]);
-        console.log(
-          `[PPPoE Client] Successfully set enabled state to ${enabled} for user ${username} on ${this.host}`,
-        );
+        await this.api.write("/ppp/secret/set", [
+          `=.id=${secretId}`,
+          `=disabled=${disabledState}`,
+        ]);
+        console.log(`[PPPoE Client] Successfully set enabled state to ${enabled} for user ${username} on ${this.host}`);
 
         // Kick the active session to force status application
         await this.kickPPPoEActiveSession(username);
         return true;
       } else {
-        console.warn(
-          `[PPPoE Client] Cannot toggle state. User ${username} not found on ${this.host}`,
-        );
+        console.warn(`[PPPoE Client] Cannot toggle state. User ${username} not found on ${this.host}`);
         return false;
       }
     } catch (error) {
-      console.error(
-        `[PPPoE Client] Failed to set PPPoE user state for ${username} on ${this.host}:`,
-        error,
-      );
+      console.error(`[PPPoE Client] Failed to set PPPoE user state for ${username} on ${this.host}:`, error);
       throw error;
     }
   }
@@ -497,9 +467,7 @@ export class MikrotikApiClient {
       // Ensure target profile exists if user is paid and profile is custom
       if (isPaid && profileName && profileName !== "default") {
         try {
-          const existingProfiles = await this.api.write("/ppp/profile/print", [
-            `?name=${profileName}`,
-          ]);
+          const existingProfiles = await this.api.write("/ppp/profile/print", [`?name=${profileName}`]);
           if (!existingProfiles || existingProfiles.length === 0) {
             const profileArgs = [
               `=name=${profileName}`,
@@ -509,15 +477,10 @@ export class MikrotikApiClient {
             ];
             if (rateLimit) profileArgs.push(`=rate-limit=${rateLimit}`);
             await this.api.write("/ppp/profile/add", profileArgs);
-            console.log(
-              `[PPPoE Client] Created profile ${profileName} during sync on ${this.host}`,
-            );
+            console.log(`[PPPoE Client] Created profile ${profileName} during sync on ${this.host}`);
           }
         } catch (profileErr) {
-          console.warn(
-            `[PPPoE Client] Profile setup warning for ${profileName} on ${this.host}:`,
-            profileErr,
-          );
+          console.warn(`[PPPoE Client] Profile setup warning for ${profileName} on ${this.host}:`, profileErr);
         }
       }
 
@@ -525,14 +488,12 @@ export class MikrotikApiClient {
       const secrets = await this.api.write("/ppp/secret/print", [`?name=${username}`]);
       if (secrets && secrets.length > 0) {
         const secretId = secrets[0][".id"];
-
+        
         // If paid, enable secret and assign correct service profile.
-        // If unpaid, assign to 'expired-limited' profile and keep secret active so they can redirect to pay!
+        // If unpaid, assign to 'expired-limited' profile and disable secret depending on policy.
         const targetProfile = isPaid ? profileName : "expired-limited";
-        const disabledState = "no";
-        const commentMsg = isPaid
-          ? "Paid PPPoE User (Synced)"
-          : "Suspended PPPoE User (Expired/Unpaid - Redirecting to Portal)";
+        const disabledState = isPaid ? "no" : "yes";
+        const commentMsg = isPaid ? "Paid PPPoE User (Synced)" : "Suspended PPPoE User (Expired/Unpaid)";
 
         await this.api.write("/ppp/secret/set", [
           `=.id=${secretId}`,
@@ -540,24 +501,17 @@ export class MikrotikApiClient {
           `=disabled=${disabledState}`,
           `=comment=${commentMsg}`,
         ]);
-        console.log(
-          `[PPPoE Client] Synced PPPoE user ${username} (Paid: ${isPaid}, Profile: ${targetProfile}, Disabled: ${disabledState}) on ${this.host}`,
-        );
+        console.log(`[PPPoE Client] Synced PPPoE user ${username} (Paid: ${isPaid}, Profile: ${targetProfile}, Disabled: ${disabledState}) on ${this.host}`);
 
         // Kick session to apply new profile or status instantly
         await this.kickPPPoEActiveSession(username);
         return true;
       } else {
-        console.warn(
-          `[PPPoE Client] Cannot sync user. PPPoE secret for ${username} not found on ${this.host}`,
-        );
+        console.warn(`[PPPoE Client] Cannot sync user. PPPoE secret for ${username} not found on ${this.host}`);
         return false;
       }
     } catch (error) {
-      console.error(
-        `[PPPoE Client] Failed to sync PPPoE profile and status for ${username} on ${this.host}:`,
-        error,
-      );
+      console.error(`[PPPoE Client] Failed to sync PPPoE profile and status for ${username} on ${this.host}:`, error);
       throw error;
     }
   }
@@ -584,6 +538,17 @@ export class MikrotikApiClient {
         }
       }
 
+      // Also clean up host entries that are "authorized" but not in our active list
+      // This is less common but can happen with certain Mikrotik configs
+      const hostEntries = await this.api.write("/ip/hotspot/host/print", ["?authorized=true"]);
+      for (const host of hostEntries) {
+        const user = host.user;
+        if (user && !allowedSet.has(user)) {
+          await this.api.write("/ip/hotspot/host/remove", [`=.id=${host[".id"]}`]);
+          console.log(`🧹 Removed stale authorized host entry for user: ${user} on ${this.host}`);
+        }
+      }
+
       return { kicked: kickedCount };
     } catch (error: any) {
       const isTimeout =
@@ -594,14 +559,9 @@ export class MikrotikApiClient {
         error?.code === "EHOSTUNREACH";
 
       if (isTimeout) {
-        console.debug(
-          `[MikrotikApiClient] Direct session cleanup skipped for ${this.host} (router behind NAT / API unreachable).`,
-        );
+        console.debug(`[MikrotikApiClient] Direct session cleanup skipped for ${this.host} (router behind NAT / API unreachable).`);
       } else {
-        console.warn(
-          `[MikrotikApiClient] Session cleanup notice for ${this.host}:`,
-          error?.message || error,
-        );
+        console.warn(`[MikrotikApiClient] Session cleanup notice for ${this.host}:`, error?.message || error);
       }
       return { kicked: 0 };
     }
@@ -615,41 +575,37 @@ export class MikrotikApiClient {
     try {
       await this.connect();
 
-      // 1. PPPOE ACTIVE POOL (ranges: 172.16.0.2 - 172.31.255.254)
-      const activeRange = "172.16.0.2-172.31.255.254";
-      const existingActivePools = await this.api.write("/ip/pool/print", [
-        "?name=PPPOE ACTIVE POOL",
-      ]);
+      // 1. PPPOE ACTIVE POOL (16M+ hosts: 10.0.0.2 - 10.255.255.254 except 10.10.0.0/16 reserved for hotspot)
+      const activeRange = "10.0.0.2-10.9.255.255,10.11.0.1-10.255.255.254";
+      const existingActivePools = await this.api.write("/ip/pool/print", ["?name=PPPOE ACTIVE POOL"]);
       if (existingActivePools && existingActivePools.length > 0) {
         await this.api.write("/ip/pool/set", [
           `=.id=${existingActivePools[0][".id"]}`,
           `=ranges=${activeRange}`,
-          "=comment=WiFiBilling Active Subscribers Pool",
+          "=comment=WiFiBilling 16M+ Active Subscribers Pool",
         ]);
       } else {
         await this.api.write("/ip/pool/add", [
           "=name=PPPOE ACTIVE POOL",
           `=ranges=${activeRange}`,
-          "=comment=WiFiBilling Active Subscribers Pool",
+          "=comment=WiFiBilling 16M+ Active Subscribers Pool",
         ]);
       }
 
-      // 2. Expired PPPoE Pool (ranges: 10.250.0.2 - 10.250.255.254)
-      const expiredRange = "10.250.0.2-10.250.255.254";
-      const existingExpiredPools = await this.api.write("/ip/pool/print", [
-        "?name=expired_pppoe_pool",
-      ]);
+      // 2. Expired PPPoE Pool (1M+ hosts: 172.16.0.2 - 172.31.255.254)
+      const expiredRange = "172.16.0.2-172.31.255.254";
+      const existingExpiredPools = await this.api.write("/ip/pool/print", ["?name=expired_pppoe_pool"]);
       if (existingExpiredPools && existingExpiredPools.length > 0) {
         await this.api.write("/ip/pool/set", [
           `=.id=${existingExpiredPools[0][".id"]}`,
           `=ranges=${expiredRange}`,
-          "=comment=WiFiBilling Expired Subscribers Pool",
+          "=comment=WiFiBilling 1M+ Expired Subscribers Pool",
         ]);
       } else {
         await this.api.write("/ip/pool/add", [
           "=name=expired_pppoe_pool",
           `=ranges=${expiredRange}`,
-          "=comment=WiFiBilling Expired Subscribers Pool",
+          "=comment=WiFiBilling 1M+ Expired Subscribers Pool",
         ]);
       }
 
@@ -664,41 +620,39 @@ export class MikrotikApiClient {
         ]);
       }
 
-      // 4. NAT masquerade for PPPoE Active subnet (172.16.0.0/12)
+      // 4. NAT masquerade for 10.0.0.0/8 (PPPoE Active)
       const existingNat = await this.api.write("/ip/firewall/nat/print", ["?comment=PPPOE NAT"]);
       if (existingNat && existingNat.length > 0) {
         await this.api.write("/ip/firewall/nat/set", [
           `=.id=${existingNat[0][".id"]}`,
-          "=src-address=172.16.0.0/12",
+          "=src-address=10.0.0.0/8",
         ]);
       } else {
         await this.api.write("/ip/firewall/nat/add", [
           "=chain=srcnat",
           "=action=masquerade",
-          "=src-address=172.16.0.0/12",
+          "=src-address=10.0.0.0/8",
           "=comment=PPPOE NAT",
         ]);
       }
 
-      // 5. NAT masquerade for Expired subnet (10.250.0.0/16)
-      const existingExpiredNat = await this.api.write("/ip/firewall/nat/print", [
-        "?comment=EXPIRED PPPOE NAT",
-      ]);
+      // 5. NAT masquerade for 172.16.0.0/12 (Expired Walled-Garden)
+      const existingExpiredNat = await this.api.write("/ip/firewall/nat/print", ["?comment=EXPIRED PPPOE NAT"]);
       if (existingExpiredNat && existingExpiredNat.length > 0) {
         await this.api.write("/ip/firewall/nat/set", [
           `=.id=${existingExpiredNat[0][".id"]}`,
-          "=src-address=10.250.0.0/16",
+          "=src-address=172.16.0.0/12",
         ]);
       } else {
         await this.api.write("/ip/firewall/nat/add", [
           "=chain=srcnat",
           "=action=masquerade",
-          "=src-address=10.250.0.0/16",
+          "=src-address=172.16.0.0/12",
           "=comment=EXPIRED PPPOE NAT",
         ]);
       }
 
-      console.log(`[PPPoE Pool] PPPoE IP Pools successfully configured on ${this.host}`);
+      console.log(`[PPPoE Pool] 16M+ PPPoE IP Pool successfully configured on ${this.host}`);
     } catch (error) {
       console.warn(`[PPPoE Pool] Pool setup via API notice for ${this.host}:`, error);
       throw error;
@@ -715,8 +669,8 @@ export class MikrotikApiClient {
 
       // 1. Gateway IP address 10.10.0.1/16
       const existingAddresses = await this.api.write("/ip/address/print", []);
-      const gwAddr = (existingAddresses || []).find(
-        (a: any) => a.address && a.address.startsWith("10.10.0.1/"),
+      const gwAddr = (existingAddresses || []).find((a: any) =>
+        a.address && a.address.startsWith("10.10.0.1/"),
       );
       if (gwAddr) {
         if (gwAddr.address !== "10.10.0.1/16") {
@@ -783,12 +737,11 @@ export class MikrotikApiClient {
       // 4. DHCP Server Lease Time (30m for rapid lease recycling)
       const dhcpServers = await this.api.write("/ip/dhcp-server/print", []);
       for (const ds of dhcpServers || []) {
-        if (
-          ds["address-pool"] === "hs-pool" ||
-          ds["address-pool"] === "hotspot" ||
-          ds.name === "Hotspot_Gateway"
-        ) {
-          await this.api.write("/ip/dhcp-server/set", [`=.id=${ds[".id"]}`, "=lease-time=30m"]);
+        if (ds["address-pool"] === "hs-pool" || ds["address-pool"] === "hotspot" || ds.name === "Hotspot_Gateway") {
+          await this.api.write("/ip/dhcp-server/set", [
+            `=.id=${ds[".id"]}`,
+            "=lease-time=30m",
+          ]);
         }
       }
 

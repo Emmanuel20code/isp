@@ -193,10 +193,7 @@ export async function runBackgroundMaintenance(force = false): Promise<{
           fallbackRouters = rList || [];
         }
 
-        const { RouterManagementService } = await import("@/lib/router-management.server");
-        const routerManager = new RouterManagementService(supabaseAdmin);
         const commandsToQueue = [];
-
         for (const c of expiredCustomers) {
           if (!c.username) continue;
           const targetRids = c.router_id
@@ -205,19 +202,15 @@ export async function runBackgroundMaintenance(force = false): Promise<{
 
           for (const rid of targetRids) {
             if (c.kind === "pppoe") {
-              try {
-                await routerManager.togglePPPoEUserState({
-                  tenantId: c.tenant_id,
-                  routerId: rid,
+              commandsToQueue.push({
+                tenantId: c.tenant_id,
+                routerId: rid,
+                action: "pppoe.set_enabled",
+                payload: {
                   username: c.username,
                   enabled: false,
-                });
-              } catch (err) {
-                console.error(
-                  `[maintenance] Error toggling PPPoE status to expired for ${c.username} on router ${rid}:`,
-                  err,
-                );
-              }
+                },
+              });
             } else {
               commandsToQueue.push({
                 tenantId: c.tenant_id,
@@ -503,20 +496,15 @@ export async function cleanupGhostSessionsAcrossRouters(): Promise<{
       return { routersProcessed: 0, totalCleaned: 0 };
     }
 
-    // 2. Get all active customer usernames AND active vouchers across the system
-    const [activeCustomersRes, activeVouchersRes] = await Promise.all([
-      supabaseAdmin.from("customers").select("username").eq("status", "active"),
-      supabaseAdmin
-        .from("vouchers")
-        .select("code")
-        .eq("status", "active")
-        .gt("expires_at", new Date().toISOString()),
-    ]);
+    // 2. Get all active customer usernames across the system to form the "Allowed" list
+    const { data: activeCustomers } = await supabaseAdmin
+      .from("customers")
+      .select("username")
+      .eq("status", "active");
 
-    const allowedUsernames = [
-      ...(activeCustomersRes.data || []).map((c) => c.username),
-      ...(activeVouchersRes.data || []).map((v) => v.code),
-    ].filter((u): u is string => !!u);
+    const allowedUsernames = (activeCustomers || [])
+      .map((c) => c.username)
+      .filter((u): u is string => !!u);
 
     let routersProcessed = 0;
     let totalCleaned = 0;
