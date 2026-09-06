@@ -36,6 +36,22 @@ export const listDevices = createServerFn({ method: "GET" })
     return data ?? [];
   });
 
+export const listDeviceRouters = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+    const tenantId = await requireTenant(supabase, userId);
+
+    const { data: routers, error } = await supabase
+      .from("routers")
+      .select("id, name, status, last_seen_at")
+      .eq("tenant_id", tenantId)
+      .order("name", { ascending: true });
+
+    if (error) throw new Error(error.message);
+    return routers ?? [];
+  });
+
 export const addDevice = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((data: z.infer<typeof deviceSchema>) => deviceSchema.parse(data))
@@ -69,19 +85,31 @@ export const addDevice = createServerFn({ method: "POST" })
       throw new Error(error.message);
     }
 
+    // Determine target router(s) to bind
+    const targetRouterIds: string[] = [];
     if (data.routerId) {
+      targetRouterIds.push(data.routerId);
+    } else {
+      const { data: allRouters } = await supabase
+        .from("routers")
+        .select("id")
+        .eq("tenant_id", tenantId);
+      (allRouters ?? []).forEach((r: { id: string }) => targetRouterIds.push(r.id));
+    }
+
+    if (targetRouterIds.length > 0) {
       const { enqueueRouterCommands } = await import("@/lib/agent-commands.server");
-      await enqueueRouterCommands([
-        {
+      await enqueueRouterCommands(
+        targetRouterIds.map((rId) => ({
           tenantId,
-          routerId: data.routerId,
+          routerId: rId,
           action: "hotspot.bind_mac",
           payload: {
             mac: mac,
             comment: `emmatech-device:${row.id}`,
           },
-        },
-      ]);
+        })),
+      );
     }
 
     return row;
@@ -111,19 +139,32 @@ export const toggleDeviceStatus = createServerFn({ method: "POST" })
 
     if (error) throw new Error(error.message);
 
-    if (customer.router_id && customer.mac_address) {
-      const { enqueueRouterCommands } = await import("@/lib/agent-commands.server");
-      await enqueueRouterCommands([
-        {
-          tenantId,
-          routerId: customer.router_id,
-          action: data.status === "active" ? "hotspot.bind_mac" : "hotspot.unbind_mac",
-          payload: {
-            mac: customer.mac_address,
-            comment: `emmatech-device:${data.id}`,
-          },
-        },
-      ]);
+    if (customer.mac_address) {
+      const targetRouterIds: string[] = [];
+      if (customer.router_id) {
+        targetRouterIds.push(customer.router_id);
+      } else {
+        const { data: allRouters } = await supabase
+          .from("routers")
+          .select("id")
+          .eq("tenant_id", tenantId);
+        (allRouters ?? []).forEach((r: { id: string }) => targetRouterIds.push(r.id));
+      }
+
+      if (targetRouterIds.length > 0) {
+        const { enqueueRouterCommands } = await import("@/lib/agent-commands.server");
+        await enqueueRouterCommands(
+          targetRouterIds.map((rId) => ({
+            tenantId,
+            routerId: rId,
+            action: data.status === "active" ? "hotspot.bind_mac" : "hotspot.unbind_mac",
+            payload: {
+              mac: customer.mac_address,
+              comment: `emmatech-device:${data.id}`,
+            },
+          })),
+        );
+      }
     }
 
     return { success: true };
@@ -143,18 +184,31 @@ export const deleteDevice = createServerFn({ method: "POST" })
       .eq("tenant_id", tenantId)
       .single();
 
-    if (customer?.router_id && customer.mac_address) {
-      const { enqueueRouterCommands } = await import("@/lib/agent-commands.server");
-      await enqueueRouterCommands([
-        {
-          tenantId,
-          routerId: customer.router_id,
-          action: "hotspot.unbind_mac",
-          payload: {
-            mac: customer.mac_address,
-          },
-        },
-      ]);
+    if (customer?.mac_address) {
+      const targetRouterIds: string[] = [];
+      if (customer.router_id) {
+        targetRouterIds.push(customer.router_id);
+      } else {
+        const { data: allRouters } = await supabase
+          .from("routers")
+          .select("id")
+          .eq("tenant_id", tenantId);
+        (allRouters ?? []).forEach((r: { id: string }) => targetRouterIds.push(r.id));
+      }
+
+      if (targetRouterIds.length > 0) {
+        const { enqueueRouterCommands } = await import("@/lib/agent-commands.server");
+        await enqueueRouterCommands(
+          targetRouterIds.map((rId) => ({
+            tenantId,
+            routerId: rId,
+            action: "hotspot.unbind_mac",
+            payload: {
+              mac: customer.mac_address,
+            },
+          })),
+        );
+      }
     }
 
     const { error } = await supabase

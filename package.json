@@ -7,7 +7,7 @@
     "node": ">=20.0.0"
   },
   "scripts": {
-    "dev": "vite dev",
+    "dev": "vite dev --host 0.0.0.0 --port 3000",
     "build": "DEV_SERVER__PROJECT_PATH= LOVABLE_SANDBOX=0 NODE_ENV=production vite build",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",

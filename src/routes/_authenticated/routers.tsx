@@ -5,6 +5,7 @@ import { useState, useEffect } from "react";
 import {
   listNetwork,
   createRouter,
+  updateRouter,
   deleteRouter,
   regenerateRouterToken,
   forceRouterSync,
@@ -43,6 +44,7 @@ import { motion, AnimatePresence } from "motion/react";
 import {
   Loader2,
   Trash2,
+  Pencil,
   RefreshCw,
   Server,
   Radio,
@@ -114,6 +116,7 @@ interface RouterCardProps {
   };
   tenantSlug: string;
   baseUrl: string;
+  onEdit?: (router: { id: string; name: string; location?: string | null }) => void;
   onDelete: (id: string, name: string) => void;
   onRefreshTok: (id: string) => void;
   onForceSync: (id: string) => void;
@@ -129,6 +132,7 @@ function RouterCard({
   router: r,
   tenantSlug,
   baseUrl,
+  onEdit,
   onDelete,
   onRefreshTok,
   onForceSync,
@@ -181,9 +185,25 @@ function RouterCard({
 
           <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-2">
-              <CardTitle className="text-base font-semibold tracking-tight text-foreground flex items-center gap-2">
-                <Server className="size-4 text-primary" /> {r.name}
-              </CardTitle>
+              <div className="flex items-center gap-1.5">
+                <CardTitle className="text-base font-semibold tracking-tight text-foreground flex items-center gap-2">
+                  <Server className="size-4 text-primary" /> {r.name}
+                </CardTitle>
+                {onEdit && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEdit({ id: r.id, name: r.name, location: r.location });
+                    }}
+                    className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                    title="Edit Router Name"
+                    aria-label="Edit Router Name"
+                  >
+                    <Pencil className="size-3.5" />
+                  </button>
+                )}
+              </div>
               <Badge
                 className={
                   r.is_disabled
@@ -270,6 +290,19 @@ function RouterCard({
             )}
             Sync
           </Button>
+
+          {onEdit && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-[11px] gap-1.5 px-2"
+              onClick={() => onEdit({ id: r.id, name: r.name, location: r.location })}
+              title="Edit router name & location"
+            >
+              <Pencil className="size-3" />
+              Edit
+            </Button>
+          )}
 
           <Button
             variant="ghost"
@@ -874,6 +907,7 @@ function RoutersPage() {
   const fetchNetwork = useServerFn(listNetwork);
   const fetchContext = useServerFn(getMyContext);
   const add = useServerFn(createRouter);
+  const updateRouterFn = useServerFn(updateRouter);
   const remove = useServerFn(deleteRouter);
   const refreshTok = useServerFn(regenerateRouterToken);
   const forceSyncFn = useServerFn(forceRouterSync);
@@ -889,6 +923,44 @@ function RoutersPage() {
   const [name, setName] = useState("");
   const [location, setLocation] = useState("");
   const [routerToDelete, setRouterToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [routerToEdit, setRouterToEdit] = useState<{
+    id: string;
+    name: string;
+    location: string;
+  } | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editLocation, setEditLocation] = useState("");
+
+  const handleOpenEdit = (router: { id: string; name: string; location?: string | null }) => {
+    setRouterToEdit({
+      id: router.id,
+      name: router.name,
+      location: router.location || "",
+    });
+    setEditName(router.name);
+    setEditLocation(router.location || "");
+  };
+
+  const updateMutation = useMutation({
+    mutationFn: () => {
+      if (!routerToEdit) throw new Error("No router selected for editing");
+      return updateRouterFn({
+        data: {
+          id: routerToEdit.id,
+          name: editName.trim(),
+          location: editLocation.trim() || undefined,
+        },
+      });
+    },
+    onSuccess: async () => {
+      toast.success("Router name and details updated successfully");
+      setRouterToEdit(null);
+      await qc.invalidateQueries({ queryKey: ["network"] });
+      await qc.invalidateQueries({ queryKey: ["my-context"] });
+      await qc.invalidateQueries({ queryKey: ["device-routers"] });
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Could not update router"),
+  });
 
   const [baseUrl, setBaseUrl] = useState("");
   useEffect(() => {
@@ -1065,6 +1137,7 @@ function RoutersPage() {
               router={r}
               tenantSlug={tenantSlug}
               baseUrl={baseUrl}
+              onEdit={handleOpenEdit}
               onDelete={(id, name) => setRouterToDelete({ id, name })}
               onRefreshTok={(id) => refreshTokMutation.mutate(id)}
               onForceSync={(id) => forceSyncMutation.mutate(id)}
@@ -1080,6 +1153,89 @@ function RoutersPage() {
           ))}
         </div>
       </div>
+
+      {/* Edit Router Name & Location Dialog */}
+      <Dialog
+        open={Boolean(routerToEdit)}
+        onOpenChange={(open) => {
+          if (!open && !updateMutation.isPending) {
+            setRouterToEdit(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="size-5 text-primary" /> Edit Router
+            </DialogTitle>
+            <DialogDescription>
+              Update the display name and physical location for this MikroTik router.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (editName.trim().length >= 2) {
+                updateMutation.mutate();
+              }
+            }}
+            className="space-y-4 pt-2"
+          >
+            <div className="space-y-2">
+              <Label htmlFor="editRouterName">
+                Router Name <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="editRouterName"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                placeholder="e.g. Main Gateway or Station 1"
+                required
+                minLength={2}
+                maxLength={60}
+                autoFocus
+              />
+              <p className="text-[11px] text-muted-foreground">
+                This name identifies your router in Hotspot portals, PPPoE manager, and network
+                telemetry.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="editRouterLocation">Location (Optional)</Label>
+              <Input
+                id="editRouterLocation"
+                value={editLocation}
+                onChange={(e) => setEditLocation(e.target.value)}
+                placeholder="e.g. Server Room Rack 2, 2nd Floor"
+                maxLength={80}
+              />
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={updateMutation.isPending}
+                onClick={() => setRouterToEdit(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={updateMutation.isPending || editName.trim().length < 2}
+              >
+                {updateMutation.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 size-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  "Save Changes"
+                )}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Confirmation Alert Dialog */}
       <AlertDialog

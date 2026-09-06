@@ -336,8 +336,12 @@ export const updateRouter = createServerFn({ method: "POST" })
     z
       .object({
         id: z.string().uuid(),
-        name: z.string().min(2).max(60),
-        location: z.string().max(80).optional().nullable(),
+        name: z
+          .string()
+          .trim()
+          .min(2, "Router name must be at least 2 characters")
+          .max(60, "Router name must be 60 characters or less"),
+        location: z.string().trim().max(80).optional().nullable(),
       })
       .parse(input),
   )
@@ -345,11 +349,14 @@ export const updateRouter = createServerFn({ method: "POST" })
     const { supabase, userId } = context;
     const tenantId = await currentTenantId(supabase, userId);
 
+    const newName = data.name.trim();
+    const newLocation = data.location ? data.location.trim() : null;
+
     const { data: updated, error } = await supabase
       .from("routers")
       .update({
-        name: data.name,
-        location: data.location ?? null,
+        name: newName,
+        location: newLocation,
       })
       .eq("id", data.id)
       .eq("tenant_id", tenantId)
@@ -357,6 +364,22 @@ export const updateRouter = createServerFn({ method: "POST" })
       .single();
 
     if (error) throw new Error(error.message);
+
+    try {
+      const sanitizedIdentity = newName.replace(/["\r\n\\]/g, "");
+      await supabase.from("router_commands").insert({
+        tenant_id: tenantId,
+        router_id: data.id,
+        action: "raw.command",
+        payload: {
+          command: `:do { /system identity set name="${sanitizedIdentity}"; } on-error={};`,
+        },
+        status: "queued",
+      });
+    } catch {
+      // Non-fatal if command queue fails
+    }
+
     return updated;
   });
 

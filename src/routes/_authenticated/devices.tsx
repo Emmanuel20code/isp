@@ -1,8 +1,14 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
-import { listDevices, addDevice, toggleDeviceStatus, deleteDevice } from "@/lib/devices.functions";
+import {
+  listDevices,
+  listDeviceRouters,
+  addDevice,
+  toggleDeviceStatus,
+  deleteDevice,
+} from "@/lib/devices.functions";
 import { getMyContext } from "@/lib/tenancy.functions";
 import { AppShell } from "@/components/AppShell";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -48,12 +54,14 @@ function DevicesPage() {
   const queryClient = useQueryClient();
   const fetchContext = useServerFn(getMyContext);
   const fetchDevices = useServerFn(listDevices);
+  const fetchRouters = useServerFn(listDeviceRouters);
   const callAddDevice = useServerFn(addDevice);
   const callToggleStatus = useServerFn(toggleDeviceStatus);
   const callDeleteDevice = useServerFn(deleteDevice);
 
   const ctx = useQuery({ queryKey: ["my-context"], queryFn: () => fetchContext() });
   const devices = useQuery({ queryKey: ["devices"], queryFn: () => fetchDevices() });
+  const routersQuery = useQuery({ queryKey: ["device-routers"], queryFn: () => fetchRouters() });
 
   const [mac, setMac] = useState("");
   const [name, setName] = useState("");
@@ -62,23 +70,28 @@ function DevicesPage() {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [deviceToDelete, setDeviceToDelete] = useState<string | null>(null);
 
-  const routers = ctx.data?.routers ?? [];
+  const routers =
+    routersQuery.data && routersQuery.data.length > 0
+      ? routersQuery.data
+      : (ctx.data?.routers ?? []);
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
     if (!mac || !name) return;
     setIsSubmitting(true);
     try {
+      const targetRouterId = !routerId || routerId === "all" ? null : routerId;
       await callAddDevice({
         data: {
           fullName: name,
           macAddress: mac,
-          routerId: routerId || null,
+          routerId: targetRouterId,
         },
       });
       toast.success("Device bound successfully");
       setMac("");
       setName("");
+      setRouterId("");
       queryClient.invalidateQueries({ queryKey: ["devices"] });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to add device");
@@ -247,19 +260,64 @@ function DevicesPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="routerId">Router</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="routerId">Router</Label>
+                  <Link to="/routers" className="text-xs text-primary hover:underline">
+                    Manage Routers
+                  </Link>
+                </div>
                 <Select value={routerId} onValueChange={setRouterId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a router" />
+                  <SelectTrigger id="routerId">
+                    <SelectValue
+                      placeholder={
+                        routersQuery.isLoading ? "Loading routers..." : "Select a router (or All)"
+                      }
+                    />
                   </SelectTrigger>
                   <SelectContent>
-                    {routers.map((r: { id: string; name: string }) => (
-                      <SelectItem key={r.id} value={r.id}>
-                        {r.name}
+                    {routers.length > 0 ? (
+                      <>
+                        <SelectItem value="all">
+                          <span className="font-medium">All Routers (Network-wide bypass)</span>
+                        </SelectItem>
+                        {routers.map((r: { id: string; name: string; status?: string }) => (
+                          <SelectItem key={r.id} value={r.id}>
+                            <span className="flex items-center gap-2">
+                              <span>{r.name}</span>
+                              {r.status === "online" ? (
+                                <span className="text-[10px] bg-emerald-500/15 text-emerald-600 px-1.5 py-0.5 rounded font-medium">
+                                  Online
+                                </span>
+                              ) : (
+                                <span className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded">
+                                  Offline
+                                </span>
+                              )}
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </>
+                    ) : routersQuery.isLoading ? (
+                      <SelectItem value="loading" disabled>
+                        Loading routers...
                       </SelectItem>
-                    ))}
+                    ) : (
+                      <SelectItem value="all">
+                        <span className="font-medium">All Routers (Default)</span>
+                      </SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
+                {routers.length === 0 && !routersQuery.isLoading && (
+                  <p className="text-xs text-amber-500">
+                    No routers onboarded yet. Devices will bind automatically once a router is
+                    connected in{" "}
+                    <Link to="/routers" className="underline font-medium hover:text-amber-400">
+                      Routers
+                    </Link>
+                    .
+                  </p>
+                )}
               </div>
               <Button type="submit" disabled={isSubmitting || !mac || !name} className="mt-2">
                 {isSubmitting && <Loader2 className="mr-2 size-4 animate-spin" />}

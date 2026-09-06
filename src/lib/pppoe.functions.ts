@@ -4,10 +4,21 @@ import { enqueueRouterCommands } from "@/lib/agent-commands.server";
 import { startOfMonthUtc, startOfTodayUtc } from "@/lib/billing-helpers";
 import { computeRouterStatus } from "@/lib/mikrotik";
 
+async function requireTenant(supabase: Record<string, unknown>, userId: string): Promise<string> {
+  const { data } = await supabase
+    .from("tenant_members")
+    .select("tenant_id")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (!data?.tenant_id) throw new Error("No business found for this account");
+  return data.tenant_id;
+}
+
 export const getPPPoEStats = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { supabase, tenantId } = context;
+    const { supabase, userId } = context;
+    const tenantId = await requireTenant(supabase, userId);
 
     const dayStart = startOfTodayUtc().toISOString();
     const monthStart = startOfMonthUtc().toISOString();
@@ -46,7 +57,9 @@ export const getPPPoEStats = createServerFn({ method: "GET" })
         .eq("status", "suspended"),
       supabase
         .from("routers")
-        .select("id, name, status, last_seen_at, active_pppoe_users, public_ip, ros_version, onboarded_at, is_disabled, model, lan_subnet")
+        .select(
+          "id, name, status, last_seen_at, active_pppoe_users, public_ip, ros_version, onboarded_at, is_disabled, model, lan_subnet",
+        )
         .eq("tenant_id", tenantId)
         .order("created_at", { ascending: false }),
       // Only get transactions for PPPoE customers
@@ -93,10 +106,13 @@ export const getPPPoEStats = createServerFn({ method: "GET" })
 export const getPPPoERouters = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { supabase, tenantId } = context;
+    const { supabase, userId } = context;
+    const tenantId = await requireTenant(supabase, userId);
     const { data: routers } = await supabase
       .from("routers")
-      .select("id, name, status, last_seen_at, active_pppoe_users, public_ip, ros_version, onboarded_at, is_disabled, model, lan_subnet")
+      .select(
+        "id, name, status, last_seen_at, active_pppoe_users, public_ip, ros_version, onboarded_at, is_disabled, model, lan_subnet",
+      )
       .eq("tenant_id", tenantId)
       .order("created_at", { ascending: false });
 
@@ -109,7 +125,8 @@ export const getPPPoERouters = createServerFn({ method: "GET" })
 export const getPPPoECustomers = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { supabase, tenantId } = context;
+    const { supabase, userId } = context;
+    const tenantId = await requireTenant(supabase, userId);
     const { data } = await supabase
       .from("customers")
       .select(
@@ -142,11 +159,17 @@ export const savePPPoECustomer = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((data: PPPoECustomerInput) => data)
   .handler(async ({ context, data }) => {
-    const { supabase, tenantId } = context;
+    const { supabase, userId } = context;
+    const tenantId = await requireTenant(supabase, userId);
     const isNew = !data.id;
 
     let calculatedExpiry = data.expires_at;
-    let pkg: { name: string; duration_hours: number; speed_up_mbps: number; speed_down_mbps: number } | null = null;
+    let pkg: {
+      name: string;
+      duration_hours: number;
+      speed_up_mbps: number;
+      speed_down_mbps: number;
+    } | null = null;
 
     if (data.package_id) {
       const { data: pkgData } = await supabase
@@ -199,7 +222,9 @@ export const savePPPoECustomer = createServerFn({ method: "POST" })
             username: data.username,
             password: data.password || data.username,
             profile: pkg?.name || "default",
-            rate_limit: pkg ? `${pkg.speed_up_mbps || 10}M/${pkg.speed_down_mbps || 10}M` : undefined,
+            rate_limit: pkg
+              ? `${pkg.speed_up_mbps || 10}M/${pkg.speed_down_mbps || 10}M`
+              : undefined,
             disabled: (data.status || "active") !== "active",
             comment: `PPPoE: ${data.full_name} (${data.phone})`,
           },
@@ -214,7 +239,8 @@ export const suspendPPPoECustomer = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((data: { id: string; status: string }) => data)
   .handler(async ({ context, data }) => {
-    const { supabase, tenantId } = context;
+    const { supabase, userId } = context;
+    const tenantId = await requireTenant(supabase, userId);
     const { data: customer } = await supabase
       .from("customers")
       .select("*")
@@ -248,7 +274,8 @@ export const resetPPPoEPassword = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((data: { id: string; password?: string }) => data)
   .handler(async ({ context, data }) => {
-    const { supabase, tenantId } = context;
+    const { supabase, userId } = context;
+    const tenantId = await requireTenant(supabase, userId);
     const password = data.password || Math.random().toString(36).slice(-8);
 
     const { data: customer } = await supabase
@@ -281,7 +308,8 @@ export const syncPPPoERouter = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((data: { routerId: string }) => data)
   .handler(async ({ context, data }) => {
-    const { supabase, tenantId } = context;
+    const { supabase, userId } = context;
+    const tenantId = await requireTenant(supabase, userId);
     const { data: customers } = await supabase
       .from("customers")
       .select("*, packages(name)")
@@ -312,7 +340,8 @@ export const syncPPPoERouter = createServerFn({ method: "POST" })
 export const getPPPoEActiveSessions = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { supabase, tenantId } = context;
+    const { supabase, userId } = context;
+    const tenantId = await requireTenant(supabase, userId);
 
     // Fetch customers marked as active with PPPoE
     const { data: activeCustomers } = await supabase

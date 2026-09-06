@@ -82,6 +82,14 @@ export const getMyContext = createServerFn({ method: "GET" })
           .data
       : null;
 
+    const { data: tenantRouters } = tenantId
+      ? await supabase
+          .from("routers")
+          .select("id, name, status, last_seen_at")
+          .eq("tenant_id", tenantId)
+          .order("name", { ascending: true })
+      : { data: [] };
+
     // Automate maintenance check & immediate subscription recovery
     if (tenantId) {
       try {
@@ -119,14 +127,11 @@ export const getMyContext = createServerFn({ method: "GET" })
       tenantRole: memberships?.[0]?.role ?? null,
       isSuperAdmin,
       platform: settings ?? null,
+      routers: tenantRouters ?? [],
     };
   });
 
-async function withRetry<T>(
-  fn: () => Promise<T>,
-  maxRetries = 4,
-  baseDelay = 400,
-): Promise<T> {
+async function withRetry<T>(fn: () => Promise<T>, maxRetries = 4, baseDelay = 400): Promise<T> {
   let lastResult: T | undefined;
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
