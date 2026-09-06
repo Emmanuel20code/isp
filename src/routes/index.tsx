@@ -19,6 +19,7 @@ import {
   Activity,
   Cpu,
   Globe,
+  MessageCircle,
 } from "lucide-react";
 
 export const Route = createFileRoute("/")({
@@ -275,6 +276,17 @@ function Landing() {
               <span className="size-2 rounded-full bg-emerald-500 animate-ping" />
               Regional MikroTik & Payment Nodes Active
             </Badge>
+            <Button
+              asChild
+              variant="outline"
+              size="sm"
+              className="hidden md:flex items-center gap-1.5 border-emerald-500/30 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:text-emerald-300 dark:hover:bg-emerald-950/50"
+            >
+              <a href="https://wa.me/254768926965" target="_blank" rel="noreferrer">
+                <MessageCircle className="size-3.5" />
+                <span className="font-medium">+254 768 926 965</span>
+              </a>
+            </Button>
             <ThemeToggle />
             <Button asChild variant="ghost" size="sm" className="font-medium">
               <Link to="/auth">Sign in</Link>
@@ -527,6 +539,15 @@ function Landing() {
             <p>© {new Date().getFullYear()} Wifi Billing. Wi-Fi & PPPoE Billing for ISPs.</p>
           </div>
           <div className="flex items-center gap-6">
+            <a
+              href="https://wa.me/254768926965"
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-1.5 text-muted-foreground hover:text-emerald-500 transition-colors"
+            >
+              <MessageCircle className="size-4" />
+              <span>+254 768 926 965</span>
+            </a>
             <Link to="/auth" className="hover:text-foreground transition-colors">
               Sign in
             </Link>

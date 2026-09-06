@@ -166,7 +166,9 @@ async function handleScanReport(request: Request): Promise<Response> {
     router_id: router.id,
     tenant_id: router.tenant_id,
     ip_address: clientIp,
-    active_hotspot_users: parsedHosts.filter((h) => h.authorized === true || h.status === "authorized").length,
+    active_hotspot_users: parsedHosts.filter(
+      (h) => h.authorized === true || h.status === "authorized",
+    ).length,
     active_pppoe_users: 0,
     config_version: 1,
     raw: {

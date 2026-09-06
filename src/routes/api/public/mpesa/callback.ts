@@ -102,10 +102,7 @@ export const Route = createFileRoute("/api/public/mpesa/callback")({
               `[mpesa-callback] Successfully activated customer package for transaction ${txn.id}.`,
             );
           } catch (actErr) {
-            console.error(
-              "[mpesa-callback] Customer package activation error:",
-              actErr,
-            );
+            console.error("[mpesa-callback] Customer package activation error:", actErr);
           }
         }
 

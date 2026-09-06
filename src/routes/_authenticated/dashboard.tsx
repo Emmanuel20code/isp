@@ -465,7 +465,10 @@ function Dashboard() {
               <SelectContent>
                 <SelectItem value="all">All Routers - System Wide</SelectItem>
                 {routers.map((r, idx) => (
-                  <SelectItem key={r.id || `router-select-${idx}`} value={r.id || `router-val-${idx}`}>
+                  <SelectItem
+                    key={r.id || `router-select-${idx}`}
+                    value={r.id || `router-val-${idx}`}
+                  >
                     {r.name}
                   </SelectItem>
                 ))}
@@ -734,59 +737,64 @@ function Dashboard() {
             title="Router Income Performance (Daily & Monthly)"
             icon={DollarSign}
             right={
-              <Link to="/routers" className="text-xs text-primary hover:underline font-semibold flex items-center gap-1">
+              <Link
+                to="/routers"
+                className="text-xs text-primary hover:underline font-semibold flex items-center gap-1"
+              >
                 <TrendingUp className="size-3.5" /> Full Router Analytics & Leaderboard
               </Link>
             }
           >
             <div className="space-y-3">
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {((board.data as any)?.revenueMetrics?.routers || []).map((rb: any, idx: number) => (
-                  <div
-                    key={rb.id || `router-rev-${idx}`}
-                    className="rounded-lg border bg-background/50 p-3 flex flex-col justify-between gap-2.5 shadow-xs"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-bold text-foreground truncate flex items-center gap-1.5">
-                          <Server className="size-3.5 text-primary shrink-0" />
-                          {rb.name}
-                        </p>
-                        <p className="text-[10px] text-muted-foreground truncate">
-                          {rb.location || "No site location specified"}
-                        </p>
+                {((board.data as any)?.revenueMetrics?.routers || []).map(
+                  (rb: any, idx: number) => (
+                    <div
+                      key={rb.id || `router-rev-${idx}`}
+                      className="rounded-lg border bg-background/50 p-3 flex flex-col justify-between gap-2.5 shadow-xs"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-bold text-foreground truncate flex items-center gap-1.5">
+                            <Server className="size-3.5 text-primary shrink-0" />
+                            {rb.name}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground truncate">
+                            {rb.location || "No site location specified"}
+                          </p>
+                        </div>
+                        <Badge variant="secondary" className="text-[10px] font-mono shrink-0">
+                          {rb.shareOfTotalMonth}% share
+                        </Badge>
                       </div>
-                      <Badge variant="secondary" className="text-[10px] font-mono shrink-0">
-                        {rb.shareOfTotalMonth}% share
-                      </Badge>
-                    </div>
 
-                    <div className="grid grid-cols-2 gap-2 pt-2 border-t text-xs">
-                      <div>
-                        <span className="text-[10px] uppercase font-bold text-muted-foreground block">
-                          Today's Income
-                        </span>
-                        <span className="font-bold text-foreground">
-                          KES {rb.incomeToday.toLocaleString()}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground block">
-                          {rb.txnCountToday} sales
-                        </span>
-                      </div>
-                      <div className="text-right">
-                        <span className="text-[10px] uppercase font-bold text-muted-foreground block">
-                          This Month
-                        </span>
-                        <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                          KES {rb.incomeThisMonth.toLocaleString()}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground block">
-                          {rb.txnCountThisMonth} sales
-                        </span>
+                      <div className="grid grid-cols-2 gap-2 pt-2 border-t text-xs">
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-muted-foreground block">
+                            Today's Income
+                          </span>
+                          <span className="font-bold text-foreground">
+                            KES {rb.incomeToday.toLocaleString()}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground block">
+                            {rb.txnCountToday} sales
+                          </span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[10px] uppercase font-bold text-muted-foreground block">
+                            This Month
+                          </span>
+                          <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                            KES {rb.incomeThisMonth.toLocaleString()}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground block">
+                            {rb.txnCountThisMonth} sales
+                          </span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ),
+                )}
               </div>
             </div>
           </Panel>

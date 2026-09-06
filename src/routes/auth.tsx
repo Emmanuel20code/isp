@@ -165,7 +165,10 @@ function AuthPage() {
               } else {
                 throw fbError;
               }
-            } else if (fbData.user && (!fbData.user.identities || fbData.user.identities.length === 0)) {
+            } else if (
+              fbData.user &&
+              (!fbData.user.identities || fbData.user.identities.length === 0)
+            ) {
               isExisting = true;
               registrationSuccessful = true;
             } else {

@@ -343,16 +343,18 @@ export const listTransactions = createServerFn({ method: "GET" })
     const mappedTransactions = (transactions ?? []).map((t) => {
       const raw = typeof t.raw === "object" && t.raw ? (t.raw as Record<string, unknown>) : {};
       const rawRouterId = (raw.router_id as string) || null;
-      
-      const vRouter = t.vouchers as unknown as { router_id?: string; routers?: { id?: string; name?: string } | null } | null;
-      const cRouter = t.customers as unknown as { router_id?: string; routers?: { id?: string; name?: string } | null } | null;
+
+      const vRouter = t.vouchers as unknown as {
+        router_id?: string;
+        routers?: { id?: string; name?: string } | null;
+      } | null;
+      const cRouter = t.customers as unknown as {
+        router_id?: string;
+        routers?: { id?: string; name?: string } | null;
+      } | null;
 
       const resolvedRouterId =
-        rawRouterId ||
-        vRouter?.router_id ||
-        cRouter?.router_id ||
-        singleRouterId ||
-        null;
+        rawRouterId || vRouter?.router_id || cRouter?.router_id || singleRouterId || null;
 
       const resolvedRouterName =
         (resolvedRouterId ? routerMap.get(resolvedRouterId) : null) ||

@@ -35,12 +35,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Search,
   RefreshCw,
@@ -93,9 +88,7 @@ export function MacScannerModal({
   const callKick = useServerFn(kickScannedMac);
 
   const [activeTab, setActiveTab] = useState<"connected" | "nearby" | "cli">("connected");
-  const [selectedRouterId, setSelectedRouterId] = useState<string>(
-    initialRouterId || "all",
-  );
+  const [selectedRouterId, setSelectedRouterId] = useState<string>(initialRouterId || "all");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [nearbyTypeFilter, setNearbyTypeFilter] = useState<string>("all");
@@ -427,9 +420,7 @@ export function MacScannerModal({
                   >
                     <RefreshCw
                       className={`size-3.5 ${
-                        isConnectedFetching || triggerScanMutation.isPending
-                          ? "animate-spin"
-                          : ""
+                        isConnectedFetching || triggerScanMutation.isPending ? "animate-spin" : ""
                       }`}
                     />
                     Scan Live Hosts
@@ -442,10 +433,7 @@ export function MacScannerModal({
             <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 pt-1">
               {/* Router Selector */}
               <div className="sm:col-span-4">
-                <Select
-                  value={selectedRouterId}
-                  onValueChange={(val) => setSelectedRouterId(val)}
-                >
+                <Select value={selectedRouterId} onValueChange={(val) => setSelectedRouterId(val)}>
                   <SelectTrigger className="h-9 text-xs">
                     <div className="flex items-center gap-2 truncate">
                       <Layers className="size-3.5 text-muted-foreground shrink-0" />
@@ -456,13 +444,11 @@ export function MacScannerModal({
                     <SelectItem value="all">
                       <span className="font-semibold">All MikroTik Routers</span>
                     </SelectItem>
-                    {routers.map(
-                      (r: { id: string; name: string; location?: string | null }) => (
-                        <SelectItem key={r.id} value={r.id}>
-                          {r.name} {r.location ? `(${r.location})` : ""}
-                        </SelectItem>
-                      ),
-                    )}
+                    {routers.map((r: { id: string; name: string; location?: string | null }) => (
+                      <SelectItem key={r.id} value={r.id}>
+                        {r.name} {r.location ? `(${r.location})` : ""}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -470,17 +456,12 @@ export function MacScannerModal({
               {/* Dynamic Filter based on Tab */}
               {activeTab === "connected" ? (
                 <div className="sm:col-span-3">
-                  <Select
-                    value={statusFilter}
-                    onValueChange={(val) => setStatusFilter(val)}
-                  >
+                  <Select value={statusFilter} onValueChange={(val) => setStatusFilter(val)}>
                     <SelectTrigger className="h-9 text-xs">
                       <SelectValue placeholder="Filter by status" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">
-                        All States ({rawConnectedDevices.length})
-                      </SelectItem>
+                      <SelectItem value="all">All States ({rawConnectedDevices.length})</SelectItem>
                       <SelectItem value="authorized">
                         🟢 Authorized ({connectedData?.authorizedCount ?? 0})
                       </SelectItem>
@@ -574,7 +555,7 @@ export function MacScannerModal({
                   </Button>
                 </div>
                 <pre className="bg-background/90 p-2.5 rounded text-[11px] text-muted-foreground overflow-x-auto whitespace-pre leading-relaxed">
-{`# 1. Scan nearby Wi-Fi Access Points & BSSID MACs:
+                  {`# 1. Scan nearby Wi-Fi Access Points & BSSID MACs:
 /interface wireless scan [find default-name=wlan1] duration=10
 
 # 2. Over-the-air sniffer for nearby phones & client probes:
@@ -978,11 +959,11 @@ export function MacScannerModal({
                           <div className="sm:col-span-3 min-w-0 w-full space-y-1.5">
                             <div className="flex items-center justify-between text-[11px]">
                               <span className="font-mono font-bold text-foreground">
-                                {device.signalDbm !== 0 ? `${device.signalDbm} dBm` : "Ethernet Link"}
+                                {device.signalDbm !== 0
+                                  ? `${device.signalDbm} dBm`
+                                  : "Ethernet Link"}
                               </span>
-                              <span
-                                className={`font-semibold ${device.signalQuality.color}`}
-                              >
+                              <span className={`font-semibold ${device.signalQuality.color}`}>
                                 {device.signalQuality.rating}
                               </span>
                             </div>
@@ -1018,10 +999,7 @@ export function MacScannerModal({
                               {device.vendor}
                             </div>
                             <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground flex-wrap">
-                              <Badge
-                                variant="secondary"
-                                className="text-[10px] px-1.5 py-0 h-4"
-                              >
+                              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
                                 {device.channelText}
                               </Badge>
                               {device.neighborBoard && (
@@ -1086,10 +1064,7 @@ export function MacScannerModal({
       </Dialog>
 
       {/* Quick Bind Dialog */}
-      <Dialog
-        open={!!bindDeviceTarget}
-        onOpenChange={(open) => !open && setBindDeviceTarget(null)}
-      >
+      <Dialog open={!!bindDeviceTarget} onOpenChange={(open) => !open && setBindDeviceTarget(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -1097,8 +1072,8 @@ export function MacScannerModal({
               Bind MAC to Bypass Captive Portal
             </DialogTitle>
             <DialogDescription className="text-xs">
-              Grant this device direct internet access on your MikroTik hotspot without requiring
-              it to login through the captive portal.
+              Grant this device direct internet access on your MikroTik hotspot without requiring it
+              to login through the captive portal.
             </DialogDescription>
           </DialogHeader>
 
@@ -1141,7 +1116,11 @@ export function MacScannerModal({
               disabled={isBinding || !bindDeviceName.trim()}
               className="gap-1.5 font-semibold"
             >
-              {isBinding ? <RefreshCw className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
+              {isBinding ? (
+                <RefreshCw className="size-3.5 animate-spin" />
+              ) : (
+                <Check className="size-3.5" />
+              )}
               Confirm Bypass
             </Button>
           </div>

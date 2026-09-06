@@ -88,20 +88,34 @@ export interface NetworkRevenueMetrics {
 export async function calculateNetworkRevenue(
   supabase: Record<string, unknown>,
   tenantId: string,
-  routers: Array<{ id: string; name: string; location?: string | null; status?: string; public_ip?: string | null; model?: string | null }>,
+  routers: Array<{
+    id: string;
+    name: string;
+    location?: string | null;
+    status?: string;
+    public_ip?: string | null;
+    model?: string | null;
+  }>,
 ): Promise<NetworkRevenueMetrics> {
   const now = new Date();
 
   // Date boundaries
-  const startOfTodayMs = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).getTime();
+  const startOfTodayMs = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+  ).getTime();
   const startOfYesterdayMs = startOfTodayMs - 86_400_000;
-  const startOfThisMonthMs = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).getTime();
-  const startOfLastMonthMs = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)).getTime();
+  const startOfThisMonthMs = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+  ).getTime();
+  const startOfLastMonthMs = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1),
+  ).getTime();
 
   // Query successful customer payment transactions
   const { data: transactions } = await (supabase as any)
     .from("transactions")
-    .select(`
+    .select(
+      `
       id,
       amount_kes,
       created_at,
@@ -116,7 +130,8 @@ export async function calculateNetworkRevenue(
       packages (name, price_kes),
       vouchers (router_id, code),
       customers (router_id, full_name, phone)
-    `)
+    `,
+    )
     .eq("tenant_id", tenantId)
     .eq("kind", "customer_payment")
     .eq("status", "success")
@@ -152,7 +167,11 @@ export async function calculateNetworkRevenue(
   for (let i = 13; i >= 0; i--) {
     const d = new Date(now.getTime() - i * 86_400_000);
     const key = d.toISOString().slice(0, 10);
-    const label = d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+    const label = d.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      timeZone: "UTC",
+    });
     dayKeys.push({ key, label });
   }
 
@@ -160,7 +179,11 @@ export async function calculateNetworkRevenue(
   for (let i = 5; i >= 0; i--) {
     const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1));
     const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-    const label = d.toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
+    const label = d.toLocaleDateString("en-US", {
+      month: "short",
+      year: "numeric",
+      timeZone: "UTC",
+    });
     monthKeys.push({ key, label });
   }
 
@@ -206,13 +229,14 @@ export async function calculateNetworkRevenue(
   };
 
   // Process transactions
-  for (const t of (transactions || [])) {
+  for (const t of transactions || []) {
     const raw = typeof t.raw === "object" && t.raw ? (t.raw as Record<string, unknown>) : {};
     const rawRouterId = (raw.router_id as string) || null;
     const vRouter = t.vouchers as unknown as { router_id?: string } | null;
     const cRouter = t.customers as unknown as { router_id?: string } | null;
 
-    let targetRouterId = rawRouterId || vRouter?.router_id || cRouter?.router_id || singleRouterId || null;
+    let targetRouterId =
+      rawRouterId || vRouter?.router_id || cRouter?.router_id || singleRouterId || null;
     if (targetRouterId && !routerBuckets.has(targetRouterId)) {
       targetRouterId = null;
     }
@@ -297,9 +321,14 @@ export async function calculateNetworkRevenue(
 
   const routerSummaries: RouterRevenueData[] = routers.map((r) => {
     const bucket = routerBuckets.get(r.id)!;
-    const shareMonth = totalIncomeThisMonth > 0 ? Math.round((bucket.incomeThisMonth / totalIncomeThisMonth) * 100) : 0;
-    const shareToday = totalIncomeToday > 0 ? Math.round((bucket.incomeToday / totalIncomeToday) * 100) : 0;
-    const avg = bucket.txnCountTotal > 0 ? Math.round(bucket.incomeTotal / bucket.txnCountTotal) : 0;
+    const shareMonth =
+      totalIncomeThisMonth > 0
+        ? Math.round((bucket.incomeThisMonth / totalIncomeThisMonth) * 100)
+        : 0;
+    const shareToday =
+      totalIncomeToday > 0 ? Math.round((bucket.incomeToday / totalIncomeToday) * 100) : 0;
+    const avg =
+      bucket.txnCountTotal > 0 ? Math.round(bucket.incomeTotal / bucket.txnCountTotal) : 0;
 
     if (bucket.incomeToday > maxToday && bucket.incomeToday > 0) {
       maxToday = bucket.incomeToday;
@@ -410,7 +439,11 @@ export const listNetwork = createServerFn({ method: "GET" })
         .order("price_kes", { ascending: true }),
     ]);
 
-    const revenueMetrics = await calculateNetworkRevenue(supabase, tenantId, (routers ?? []) as any);
+    const revenueMetrics = await calculateNetworkRevenue(
+      supabase,
+      tenantId,
+      (routers ?? []) as any,
+    );
     const revMap = new Map(revenueMetrics.routers.map((r) => [r.routerId, r]));
 
     const mappedRouters = (routers ?? []).map((r) => {

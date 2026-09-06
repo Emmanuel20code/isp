@@ -921,7 +921,9 @@ export function CaptivePortalView({
                           <span className="text-sm font-black" style={{ color: accentColor }}>
                             {currency} {p.price_kes}
                           </span>
-                          <span className="text-[8px] text-slate-400">{p.speed_down_mbps} Mbps</span>
+                          <span className="text-[8px] text-slate-400">
+                            {p.speed_down_mbps} Mbps
+                          </span>
                         </button>
                       );
                     }
@@ -1252,11 +1254,10 @@ export function CaptivePortalView({
                     <AlertTriangle className="size-6" />
                   </div>
                   <div className="space-y-1.5">
-                    <h3 className="text-sm font-bold text-white">
-                      Payment Confirmation Pending
-                    </h3>
+                    <h3 className="text-sm font-bold text-white">Payment Confirmation Pending</h3>
                     <p className={`text-xs ${theme.textSecondary} px-2 leading-relaxed`}>
-                      We haven't received confirmation from {providerName} yet. If you already entered your PIN, it may take a few extra moments.
+                      We haven't received confirmation from {providerName} yet. If you already
+                      entered your PIN, it may take a few extra moments.
                     </p>
                   </div>
 
@@ -1279,8 +1280,7 @@ export function CaptivePortalView({
                         setVoucherModalOpen(true);
                       }}
                     >
-                      <Ticket className="mr-2 h-3.5 w-3.5" />
-                      I have an M-Pesa Receipt Code
+                      <Ticket className="mr-2 h-3.5 w-3.5" />I have an M-Pesa Receipt Code
                     </Button>
                     <Button
                       type="button"

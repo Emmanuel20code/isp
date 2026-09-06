@@ -22,7 +22,13 @@ export class MikrotikApiClient {
   private password: string;
   private port: number;
 
-  constructor(options: { host: string; username?: string; password?: string; port?: number; timeout?: number }) {
+  constructor(options: {
+    host: string;
+    username?: string;
+    password?: string;
+    port?: number;
+    timeout?: number;
+  }) {
     this.host = options.host;
     this.username = options.username || "admin";
     this.password = options.password || "";
@@ -48,7 +54,10 @@ export class MikrotikApiClient {
       console.log(`✅ Connected to MikroTik router at ${this.host}`);
 
       this.api.on("error", (err) => {
-        console.warn(`[MikrotikApiClient] Router connection notice (${this.host}):`, err?.message || err);
+        console.warn(
+          `[MikrotikApiClient] Router connection notice (${this.host}):`,
+          err?.message || err,
+        );
         this.isConnected = false;
       });
     } catch (error: any) {
@@ -65,7 +74,9 @@ export class MikrotikApiClient {
           `[MikrotikApiClient] Direct API connection to ${this.host}:${this.port} unavailable (${error.message || error.name}). Router uses agent polling sync.`,
         );
       } else {
-        console.warn(`[MikrotikApiClient] Could not connect to MikroTik router at ${this.host}: ${error.message}`);
+        console.warn(
+          `[MikrotikApiClient] Could not connect to MikroTik router at ${this.host}: ${error.message}`,
+        );
       }
       throw error;
     }
@@ -312,9 +323,14 @@ export class MikrotikApiClient {
         error?.code === "EHOSTUNREACH";
 
       if (isTimeout) {
-        console.debug(`[MikrotikApiClient] Direct session cleanup skipped for ${this.host} (router behind NAT / API unreachable).`);
+        console.debug(
+          `[MikrotikApiClient] Direct session cleanup skipped for ${this.host} (router behind NAT / API unreachable).`,
+        );
       } else {
-        console.warn(`[MikrotikApiClient] Session cleanup notice for ${this.host}:`, error?.message || error);
+        console.warn(
+          `[MikrotikApiClient] Session cleanup notice for ${this.host}:`,
+          error?.message || error,
+        );
       }
       return { kicked: 0 };
     }

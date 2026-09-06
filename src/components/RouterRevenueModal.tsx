@@ -202,7 +202,9 @@ export function RouterRevenueModal({
             {/* Monthly Income */}
             <div className="rounded-xl border border-border bg-card p-4 space-y-2 shadow-xs">
               <div className="flex items-center justify-between text-muted-foreground">
-                <span className="text-xs font-semibold uppercase tracking-wider">Income This Month</span>
+                <span className="text-xs font-semibold uppercase tracking-wider">
+                  Income This Month
+                </span>
                 <DollarSign className="size-4 text-emerald-500" />
               </div>
               <div className="space-y-1">
@@ -223,7 +225,8 @@ export function RouterRevenueModal({
                     ) : (
                       <TrendingDown className="size-3 mr-0.5" />
                     )}
-                    {monthVsLastMonth.percent > 0 ? `${monthVsLastMonth.percent}%` : "0%"} vs last mo.
+                    {monthVsLastMonth.percent > 0 ? `${monthVsLastMonth.percent}%` : "0%"} vs last
+                    mo.
                   </span>
                 </div>
               </div>
@@ -239,13 +242,15 @@ export function RouterRevenueModal({
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Yesterday:</span>
                   <span className="font-semibold text-foreground">
-                    {currency} {(rev?.incomeYesterday ?? 0).toLocaleString()} ({rev?.txnCountYesterday ?? 0})
+                    {currency} {(rev?.incomeYesterday ?? 0).toLocaleString()} (
+                    {rev?.txnCountYesterday ?? 0})
                   </span>
                 </div>
                 <div className="flex items-center justify-between pt-1 border-t border-border/50">
                   <span className="text-muted-foreground">Last Month:</span>
                   <span className="font-semibold text-foreground">
-                    {currency} {(rev?.incomeLastMonth ?? 0).toLocaleString()} ({rev?.txnCountLastMonth ?? 0})
+                    {currency} {(rev?.incomeLastMonth ?? 0).toLocaleString()} (
+                    {rev?.txnCountLastMonth ?? 0})
                   </span>
                 </div>
               </div>
@@ -254,7 +259,9 @@ export function RouterRevenueModal({
             {/* All Time & Contribution */}
             <div className="rounded-xl border border-border bg-card p-4 space-y-2 shadow-xs">
               <div className="flex items-center justify-between text-muted-foreground">
-                <span className="text-xs font-semibold uppercase tracking-wider">All-Time Totals</span>
+                <span className="text-xs font-semibold uppercase tracking-wider">
+                  All-Time Totals
+                </span>
                 <PieChartIcon className="size-4 text-sky-500" />
               </div>
               <div className="space-y-1">

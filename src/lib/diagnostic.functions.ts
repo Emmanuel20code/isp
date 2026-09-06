@@ -4,9 +4,7 @@ import { z } from "zod";
 
 export const diagnoseTenantSubscription = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) =>
-    z.object({ tenantId: z.string().uuid() }).parse(input),
-  )
+  .inputValidator((input: unknown) => z.object({ tenantId: z.string().uuid() }).parse(input))
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { tenantId } = data;
@@ -23,7 +21,9 @@ export const diagnoseTenantSubscription = createServerFn({ method: "POST" })
     // 1. Fetch tenant state
     const { data: tenant, error: tenantErr } = await supabaseAdmin
       .from("tenants")
-      .select("id, name, slug, subscription_status, subscription_start_at, subscription_end_at, trial_end_at, is_active")
+      .select(
+        "id, name, slug, subscription_status, subscription_start_at, subscription_end_at, trial_end_at, is_active",
+      )
       .eq("id", tenantId)
       .maybeSingle();
 
@@ -48,7 +48,10 @@ export const diagnoseTenantSubscription = createServerFn({ method: "POST" })
       console.error(`[Diagnostic] Error fetching current month transactions:`, txnsErr);
     }
 
-    console.log(`[Diagnostic] Successful SaaS subscription transactions this month (${monthTxns?.length ?? 0}):`, JSON.stringify(monthTxns, null, 2));
+    console.log(
+      `[Diagnostic] Successful SaaS subscription transactions this month (${monthTxns?.length ?? 0}):`,
+      JSON.stringify(monthTxns, null, 2),
+    );
 
     // 3. Fetch all successful SaaS subscription transactions overall
     const { data: allTxns } = await supabaseAdmin
@@ -60,9 +63,14 @@ export const diagnoseTenantSubscription = createServerFn({ method: "POST" })
       .order("created_at", { ascending: false })
       .limit(10);
 
-    console.log(`[Diagnostic] Recent successful SaaS transactions (overall top 10):`, JSON.stringify(allTxns, null, 2));
+    console.log(
+      `[Diagnostic] Recent successful SaaS transactions (overall top 10):`,
+      JSON.stringify(allTxns, null, 2),
+    );
 
-    const currentEndMs = tenant.subscription_end_at ? new Date(tenant.subscription_end_at).getTime() : 0;
+    const currentEndMs = tenant.subscription_end_at
+      ? new Date(tenant.subscription_end_at).getTime()
+      : 0;
     const nowMs = now.getTime();
     const hasPaidThisMonth = monthTxns && monthTxns.length > 0;
     const isFutureActive = currentEndMs > nowMs;
@@ -80,9 +88,10 @@ export const diagnoseTenantSubscription = createServerFn({ method: "POST" })
       isFutureActive,
       hasPaidThisMonth,
       redundantRenewalPrevented: isFutureActive && hasPaidThisMonth,
-      recommendation: (isFutureActive && hasPaidThisMonth)
-        ? "Subscription is active in the future and payment already processed this month. Redundant updates are successfully blocked."
-        : "Subscription may be expired or no payment recorded yet for this month.",
+      recommendation:
+        isFutureActive && hasPaidThisMonth
+          ? "Subscription is active in the future and payment already processed this month. Redundant updates are successfully blocked."
+          : "Subscription may be expired or no payment recorded yet for this month.",
     };
 
     console.log(`[Diagnostic] Analysis Result:`, JSON.stringify(analysis, null, 2));
@@ -108,7 +117,9 @@ export const getSubscriptionDiagnosticsDashboard = createServerFn({ method: "GET
 
     const { data: tenants, error: tenantsErr } = await supabaseAdmin
       .from("tenants")
-      .select("id, name, slug, subscription_status, subscription_start_at, subscription_end_at, trial_end_at, is_active");
+      .select(
+        "id, name, slug, subscription_status, subscription_start_at, subscription_end_at, trial_end_at, is_active",
+      );
 
     if (tenantsErr || !tenants) {
       return { success: false, error: tenantsErr?.message, items: [] };
@@ -129,7 +140,9 @@ export const getSubscriptionDiagnosticsDashboard = createServerFn({ method: "GET
         .eq("status", "success")
         .order("created_at", { ascending: true });
 
-      const verifiedReceipts = (txns ?? []).filter((t) => t.mpesa_receipt && t.mpesa_receipt.trim() !== "");
+      const verifiedReceipts = (txns ?? []).filter(
+        (t) => t.mpesa_receipt && t.mpesa_receipt.trim() !== "",
+      );
       const totalReceiptsCount = verifiedReceipts.length;
       let totalPaidKes = 0;
       let expectedDaysFromReceipts = 0;
@@ -157,7 +170,11 @@ export const getSubscriptionDiagnosticsDashboard = createServerFn({ method: "GET
       if (totalReceiptsCount > 0 && isExpired && tenant.subscription_status === "expired") {
         discrepancies.push("Has verified M-Pesa receipts but subscription is marked 'expired'");
       }
-      if (totalReceiptsCount === 0 && tenant.subscription_status === "active" && !tenant.trial_end_at) {
+      if (
+        totalReceiptsCount === 0 &&
+        tenant.subscription_status === "active" &&
+        !tenant.trial_end_at
+      ) {
         discrepancies.push("Active subscription with zero verified M-Pesa receipts");
       }
 
@@ -186,9 +203,7 @@ export const getSubscriptionDiagnosticsDashboard = createServerFn({ method: "GET
 
 export const diagnoseTenantByQuery = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) =>
-    z.object({ query: z.string().min(1) }).parse(input),
-  )
+  .inputValidator((input: unknown) => z.object({ query: z.string().min(1) }).parse(input))
   .handler(async ({ data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { query } = data;
@@ -199,7 +214,9 @@ export const diagnoseTenantByQuery = createServerFn({ method: "POST" })
     // 1. Find tenants matching name, slug, or associated user email via tenant_users / profiles
     const { data: tenants, error: tenantErr } = await supabaseAdmin
       .from("tenants")
-      .select("id, name, slug, subscription_status, subscription_start_at, subscription_end_at, trial_end_at, is_active");
+      .select(
+        "id, name, slug, subscription_status, subscription_start_at, subscription_end_at, trial_end_at, is_active",
+      );
 
     if (tenantErr || !tenants) {
       return { success: false, error: tenantErr?.message || "Failed to fetch tenants" };
@@ -209,7 +226,7 @@ export const diagnoseTenantByQuery = createServerFn({ method: "POST" })
       (t) =>
         t.name.toLowerCase().includes(cleanQuery) ||
         t.slug.toLowerCase().includes(cleanQuery) ||
-        t.id.toLowerCase() === cleanQuery
+        t.id.toLowerCase() === cleanQuery,
     );
 
     // Also search tenant users if query looks like email
@@ -235,7 +252,7 @@ export const diagnoseTenantByQuery = createServerFn({ method: "POST" })
     }
 
     const allMatchedIds = Array.from(
-      new Set([...matchedTenants.map((t) => t.id), ...userTenantIds])
+      new Set([...matchedTenants.map((t) => t.id), ...userTenantIds]),
     );
 
     const finalTenants = tenants.filter((t) => allMatchedIds.includes(t.id));
@@ -262,8 +279,10 @@ export const diagnoseTenantByQuery = createServerFn({ method: "POST" })
         .eq("status", "success")
         .order("created_at", { ascending: false });
 
-      const verifiedReceipts = (txns ?? []).filter((t) => t.mpesa_receipt && t.mpesa_receipt.trim() !== "");
-      
+      const verifiedReceipts = (txns ?? []).filter(
+        (t) => t.mpesa_receipt && t.mpesa_receipt.trim() !== "",
+      );
+
       const nowMs = Date.now();
       const endMs = tenant.subscription_end_at ? new Date(tenant.subscription_end_at).getTime() : 0;
       const remainingDays = endMs > nowMs ? Math.ceil((endMs - nowMs) / 86_400_000) : 0;
@@ -298,6 +317,3 @@ export const diagnoseTenantByQuery = createServerFn({ method: "POST" })
       results,
     };
   });
-
-
-

@@ -556,7 +556,9 @@ function RouterCard({
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-foreground">Router Financial Summary</span>
+                        <span className="text-xs font-bold text-foreground">
+                          Router Financial Summary
+                        </span>
                         <Badge variant="secondary" className="text-[10px] font-mono">
                           {r.revenue.shareOfTotalMonth}% of Network Revenue
                         </Badge>
@@ -695,7 +697,8 @@ function RouterCard({
                         <ShieldCheck className="size-3.5" /> Hotspot Anti-Free-Internet Lock
                       </span>
                       <p className="text-[11px] text-muted-foreground">
-                        Removes MAC cookies, disables trial uptime, sets 1 device per MAC, and clears rogue bindings.
+                        Removes MAC cookies, disables trial uptime, sets 1 device per MAC, and
+                        clears rogue bindings.
                       </p>
                     </div>
                     <Button
@@ -1290,7 +1293,9 @@ function RoutersPage() {
         <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div className="rounded-xl border border-border bg-card p-3.5 space-y-1 shadow-xs">
             <div className="flex items-center justify-between text-muted-foreground">
-              <span className="text-[10px] uppercase font-bold tracking-wider">All Routers Today</span>
+              <span className="text-[10px] uppercase font-bold tracking-wider">
+                All Routers Today
+              </span>
               <DollarSign className="size-3.5 text-primary" />
             </div>
             <p className="text-xl font-bold tracking-tight text-foreground">
@@ -1303,7 +1308,9 @@ function RoutersPage() {
 
           <div className="rounded-xl border border-border bg-card p-3.5 space-y-1 shadow-xs">
             <div className="flex items-center justify-between text-muted-foreground">
-              <span className="text-[10px] uppercase font-bold tracking-wider">All Routers This Month</span>
+              <span className="text-[10px] uppercase font-bold tracking-wider">
+                All Routers This Month
+              </span>
               <TrendingUp className="size-3.5 text-emerald-500" />
             </div>
             <p className="text-xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400">
@@ -1316,7 +1323,9 @@ function RoutersPage() {
 
           <div className="rounded-xl border border-border bg-card p-3.5 space-y-1 shadow-xs">
             <div className="flex items-center justify-between text-muted-foreground">
-              <span className="text-[10px] uppercase font-bold tracking-wider">Top Earner Today</span>
+              <span className="text-[10px] uppercase font-bold tracking-wider">
+                Top Earner Today
+              </span>
               <Server className="size-3.5 text-sky-500" />
             </div>
             <p className="text-sm font-bold text-foreground truncate">
@@ -1331,7 +1340,9 @@ function RoutersPage() {
 
           <div className="rounded-xl border border-border bg-card p-3.5 space-y-1 shadow-xs">
             <div className="flex items-center justify-between text-muted-foreground">
-              <span className="text-[10px] uppercase font-bold tracking-wider">Top Earner Month</span>
+              <span className="text-[10px] uppercase font-bold tracking-wider">
+                Top Earner Month
+              </span>
               <Server className="size-3.5 text-amber-500" />
             </div>
             <p className="text-sm font-bold text-foreground truncate">
@@ -1455,7 +1466,8 @@ function RoutersPage() {
         <DialogContent className="max-w-xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <ShieldCheck className="size-5 text-emerald-500" /> Hotspot Security & Anti-Leak Diagnostics
+              <ShieldCheck className="size-5 text-emerald-500" /> Hotspot Security & Anti-Leak
+              Diagnostics
             </DialogTitle>
             <DialogDescription>
               Why random phones/devices might connect without paying and how the system stops it.
@@ -1467,44 +1479,67 @@ function RoutersPage() {
                 <Check className="size-3.5" /> 1. Dashboard 1-Click Remote Hardening
               </h4>
               <p className="text-muted-foreground">
-                Clicking <strong className="text-foreground">"Fix Free Internet / Harden"</strong> on your router sends an instant command to:
+                Clicking <strong className="text-foreground">"Fix Free Internet / Harden"</strong>{" "}
+                on your router sends an instant command to:
               </p>
               <ul className="list-disc list-inside text-muted-foreground space-y-0.5 ml-1">
-                <li>Enforce <code className="text-emerald-500">addresses-per-mac=1</code> (blocks MAC spoofing & device cloning).</li>
-                <li>Disable <code className="text-emerald-500">mac-cookie</code> (stops devices from auto-reauthenticating for free after voucher expiry).</li>
-                <li>Set <code className="text-emerald-500">trial-uptime-limit=0s</code> (wipes free trial bypasses).</li>
+                <li>
+                  Enforce <code className="text-emerald-500">addresses-per-mac=1</code> (blocks MAC
+                  spoofing & device cloning).
+                </li>
+                <li>
+                  Disable <code className="text-emerald-500">mac-cookie</code> (stops devices from
+                  auto-reauthenticating for free after voucher expiry).
+                </li>
+                <li>
+                  Set <code className="text-emerald-500">trial-uptime-limit=0s</code> (wipes free
+                  trial bypasses).
+                </li>
                 <li>Wipe ghost cookies & rogue bypassed IP bindings from router memory.</li>
-                <li>Activate Anti-DNS-Tunnel NAT redirection (intercepts SlowDNS/DroidVPN port 53).</li>
+                <li>
+                  Activate Anti-DNS-Tunnel NAT redirection (intercepts SlowDNS/DroidVPN port 53).
+                </li>
               </ul>
             </div>
 
             <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg space-y-1.5">
               <h4 className="font-bold text-blue-700 dark:text-blue-300 flex items-center gap-1.5">
-                <ShieldCheck className="size-3.5" /> 2. Tunneling Apps (HTTP Custom, HA Tunnel, SlowDNS, DroidVPN)
+                <ShieldCheck className="size-3.5" /> 2. Tunneling Apps (HTTP Custom, HA Tunnel,
+                SlowDNS, DroidVPN)
               </h4>
               <p className="text-muted-foreground">
-                Tunneling apps exploit unauthenticated DNS (Port 53) or spoofed SNI headers in Walled Gardens to tunnel free data:
+                Tunneling apps exploit unauthenticated DNS (Port 53) or spoofed SNI headers in
+                Walled Gardens to tunnel free data:
               </p>
               <ul className="list-disc list-inside text-muted-foreground space-y-0.5 ml-1">
                 <li>
-                  <strong className="text-foreground">SlowDNS & DroidVPN (DNS Port 53)</strong>: Blocked by redirecting all DNS queries to the router's internal resolver, preventing direct UDP tunnel communication.
+                  <strong className="text-foreground">SlowDNS & DroidVPN (DNS Port 53)</strong>:
+                  Blocked by redirecting all DNS queries to the router's internal resolver,
+                  preventing direct UDP tunnel communication.
                 </li>
                 <li>
-                  <strong className="text-foreground">HTTP Custom & HA Tunnel Plus (SNI Spoofing)</strong>: Blocked by dropping QUIC (UDP 443) and restricting Walled Garden entries strictly to the captive portal and payment endpoints.
+                  <strong className="text-foreground">
+                    HTTP Custom & HA Tunnel Plus (SNI Spoofing)
+                  </strong>
+                  : Blocked by dropping QUIC (UDP 443) and restricting Walled Garden entries
+                  strictly to the captive portal and payment endpoints.
                 </li>
               </ul>
             </div>
 
             <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg space-y-1.5">
               <h4 className="font-bold text-amber-700 dark:text-amber-300 flex items-center gap-1.5">
-                <ShieldAlert className="size-3.5" /> 3. Access Point Double-NAT Check (Crucial Hardware Step)
+                <ShieldAlert className="size-3.5" /> 3. Access Point Double-NAT Check (Crucial
+                Hardware Step)
               </h4>
               <p className="text-muted-foreground">
                 If your Wi-Fi Access Points (e.g. TP-Link, Tenda, Mercusys) are operating in{" "}
-                <strong>Router / NAT Mode</strong> instead of <strong>Access Point / Bridge Mode</strong>:
+                <strong>Router / NAT Mode</strong> instead of{" "}
+                <strong>Access Point / Bridge Mode</strong>:
               </p>
               <p className="text-foreground font-medium">
-                The MikroTik only sees the single MAC address of the Access Point. As soon as ONE user buys a voucher, ALL other users connected to that AP get free internet!
+                The MikroTik only sees the single MAC address of the Access Point. As soon as ONE
+                user buys a voucher, ALL other users connected to that AP get free internet!
               </p>
               <div className="bg-background/80 p-2.5 rounded border border-amber-500/30 text-[11px] space-y-1">
                 <p className="font-bold text-amber-500">

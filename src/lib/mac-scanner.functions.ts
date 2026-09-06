@@ -89,7 +89,9 @@ export const listScannedMacs = createServerFn({ method: "GET" })
 
     if (rErr) throw new Error(rErr.message);
     const routerMap = new Map(
-      (routers ?? []).map((r: { id: string; name: string; status?: string; location?: string | null }) => [r.id, r]),
+      (routers ?? []).map(
+        (r: { id: string; name: string; status?: string; location?: string | null }) => [r.id, r],
+      ),
     );
 
     // 2. Fetch customers (hotspot, PPPoE, and bound Smart TVs)
@@ -188,8 +190,8 @@ export const listScannedMacs = createServerFn({ method: "GET" })
       const hostList: any[] = Array.isArray(raw.hosts)
         ? raw.hosts
         : Array.isArray((raw.body as Record<string, unknown>)?.hosts)
-        ? ((raw.body as Record<string, unknown>).hosts as any[])
-        : [];
+          ? ((raw.body as Record<string, unknown>).hosts as any[])
+          : [];
 
       for (const h of hostList) {
         const rawMac = h.mac || h.mac_address || h["mac-address"];
@@ -206,8 +208,10 @@ export const listScannedMacs = createServerFn({ method: "GET" })
             if (h.ip || h.address) existing.ip = String(h.ip || h.address);
             if (h.uptime) existing.uptime = String(h.uptime);
             if (h.bytes_in || h["bytes-in"]) existing.bytesIn = Number(h.bytes_in || h["bytes-in"]);
-            if (h.bytes_out || h["bytes-out"]) existing.bytesOut = Number(h.bytes_out || h["bytes-out"]);
-            if (h.hostname || h["host-name"]) existing.hostname = String(h.hostname || h["host-name"]);
+            if (h.bytes_out || h["bytes-out"])
+              existing.bytesOut = Number(h.bytes_out || h["bytes-out"]);
+            if (h.hostname || h["host-name"])
+              existing.hostname = String(h.hostname || h["host-name"]);
             if (h.authorized === true || h.status === "authorized") existing.status = "authorized";
             if (h.bypassed === true || h.status === "bypassed") {
               existing.status = "bypassed";
@@ -234,7 +238,11 @@ export const listScannedMacs = createServerFn({ method: "GET" })
           hostname: h.hostname || h["host-name"] || null,
           customerName: null,
           phone: null,
-          packageName: isByp ? "Bypassed Access" : isAuth ? "Active Hotspot Session" : "Guest (Captive Portal)",
+          packageName: isByp
+            ? "Bypassed Access"
+            : isAuth
+              ? "Active Hotspot Session"
+              : "Guest (Captive Portal)",
           status: isByp ? "bypassed" : isAuth ? "authorized" : "unauthenticated",
           expiresAt: null,
           lastSeen: hb.created_at,
@@ -411,7 +419,9 @@ export const listNearbyMacs = createServerFn({ method: "GET" })
     if (rErr) throw new Error(rErr.message);
 
     const routerMap = new Map(
-      (routers ?? []).map((r: { id: string; name: string; status?: string; location?: string | null }) => [r.id, r]),
+      (routers ?? []).map(
+        (r: { id: string; name: string; status?: string; location?: string | null }) => [r.id, r],
+      ),
     );
 
     // 2. Fetch latest router heartbeats with telemetry snapshots
@@ -443,8 +453,8 @@ export const listNearbyMacs = createServerFn({ method: "GET" })
       const neighborList: any[] = Array.isArray(raw.neighbors)
         ? raw.neighbors
         : Array.isArray((raw.body as Record<string, unknown>)?.neighbors)
-        ? ((raw.body as Record<string, unknown>).neighbors as any[])
-        : [];
+          ? ((raw.body as Record<string, unknown>).neighbors as any[])
+          : [];
 
       for (const n of neighborList) {
         const rawMac = n.mac || n.mac_address || n["mac-address"];
@@ -486,10 +496,10 @@ export const listNearbyMacs = createServerFn({ method: "GET" })
       const wirelessList: any[] = Array.isArray(raw.wireless_scan)
         ? raw.wireless_scan
         : Array.isArray(raw.wireless)
-        ? raw.wireless
-        : Array.isArray((raw.body as Record<string, unknown>)?.wireless_scan)
-        ? ((raw.body as Record<string, unknown>).wireless_scan as any[])
-        : [];
+          ? raw.wireless
+          : Array.isArray((raw.body as Record<string, unknown>)?.wireless_scan)
+            ? ((raw.body as Record<string, unknown>).wireless_scan as any[])
+            : [];
 
       for (const w of wirelessList) {
         const rawMac = w.mac || w.bssid || w.mac_address || w["mac-address"];
@@ -500,8 +510,12 @@ export const listNearbyMacs = createServerFn({ method: "GET" })
         seenNearbyKeys.add(uniqueKey);
 
         const vendorInfo = getMacVendor(cleanMac);
-        const sig = typeof w.signal === "number" ? w.signal : parseInt(String(w.signal || "-70"), 10);
-        const freq = typeof w.frequency === "number" ? w.frequency : parseInt(String(w.frequency || "2412"), 10);
+        const sig =
+          typeof w.signal === "number" ? w.signal : parseInt(String(w.signal || "-70"), 10);
+        const freq =
+          typeof w.frequency === "number"
+            ? w.frequency
+            : parseInt(String(w.frequency || "2412"), 10);
         const channelInfo = getFrequencyChannel(freq);
 
         nearbyList.push({

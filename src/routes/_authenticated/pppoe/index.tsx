@@ -146,7 +146,8 @@ function PPPoEManager() {
 
   const routerList = useMemo(() => {
     if (routers.data && routers.data.length > 0) return routers.data as RouterItem[];
-    if (stats.data?.routers && stats.data.routers.length > 0) return stats.data.routers as RouterItem[];
+    if (stats.data?.routers && stats.data.routers.length > 0)
+      return stats.data.routers as RouterItem[];
     return [] as RouterItem[];
   }, [routers.data, stats.data?.routers]);
 
@@ -175,7 +176,11 @@ function PPPoEManager() {
     e.preventDefault();
     setIsSaving(true);
     const formData = new FormData(e.currentTarget);
-    const passwordVal = (formData.get("password") as string) || generatedPassword || editingCustomer?.password || null;
+    const passwordVal =
+      (formData.get("password") as string) ||
+      generatedPassword ||
+      editingCustomer?.password ||
+      null;
     const data = {
       id: editingCustomer?.id,
       full_name: String(formData.get("full_name") || ""),
@@ -189,7 +194,9 @@ function PPPoEManager() {
 
     try {
       await saveCustomer(data);
-      toast.success(editingCustomer ? "Customer updated" : "Customer added & provisioned on MikroTik");
+      toast.success(
+        editingCustomer ? "Customer updated" : "Customer added & provisioned on MikroTik",
+      );
       queryClient.invalidateQueries({ queryKey: ["pppoe-customers"] });
       queryClient.invalidateQueries({ queryKey: ["pppoe-stats"] });
       queryClient.invalidateQueries({ queryKey: ["pppoe-routers"] });
@@ -244,9 +251,10 @@ function PPPoEManager() {
   const pppPackages =
     (packages.data as PackageItem[] | undefined)?.filter((p) => p.kind === "pppoe") || [];
 
-  const portalUrl = typeof window !== "undefined"
-    ? `${window.location.origin}/portal/${tenant.slug}?tab=pppoe`
-    : `/portal/${tenant.slug}?tab=pppoe`;
+  const portalUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/portal/${tenant.slug}?tab=pppoe`
+      : `/portal/${tenant.slug}?tab=pppoe`;
 
   const copyPortalLink = () => {
     navigator.clipboard.writeText(portalUrl);
@@ -262,7 +270,8 @@ function PPPoEManager() {
           <div>
             <h1 className="text-2xl font-display font-bold tracking-tight">PPPoE Manager</h1>
             <p className="text-sm text-muted-foreground">
-              Manage PPPoE fiber/wireless subscribers, provision secrets, and manage customer renewals.
+              Manage PPPoE fiber/wireless subscribers, provision secrets, and manage customer
+              renewals.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -272,7 +281,11 @@ function PPPoEManager() {
               className="gap-1.5 text-xs h-9"
               onClick={copyPortalLink}
             >
-              {copiedLink ? <Check className="size-4 text-emerald-500" /> : <Copy className="size-4" />}
+              {copiedLink ? (
+                <Check className="size-4 text-emerald-500" />
+              ) : (
+                <Copy className="size-4" />
+              )}
               PPPoE Portal URL
             </Button>
             <Button
@@ -298,7 +311,8 @@ function PPPoEManager() {
               <div>
                 <p className="font-semibold text-sm">Subscriber Self-Service & Renewal Portal</p>
                 <p className="text-xs text-muted-foreground">
-                  Expired PPPoE users can visit this link to enter their username/phone, pay via M-Pesa, and restore their connection instantly.
+                  Expired PPPoE users can visit this link to enter their username/phone, pay via
+                  M-Pesa, and restore their connection instantly.
                 </p>
               </div>
             </div>
@@ -309,15 +323,14 @@ function PPPoEManager() {
                 className="gap-1.5 text-xs h-8"
                 onClick={copyPortalLink}
               >
-                {copiedLink ? <Check className="size-3.5 text-emerald-600" /> : <Copy className="size-3.5" />}
+                {copiedLink ? (
+                  <Check className="size-3.5 text-emerald-600" />
+                ) : (
+                  <Copy className="size-3.5" />
+                )}
                 Copy Link
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-1.5 text-xs h-8"
-                asChild
-              >
+              <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" asChild>
                 <a href={portalUrl} target="_blank" rel="noreferrer">
                   Open Portal <ExternalLink className="size-3.5" />
                 </a>
@@ -426,14 +439,17 @@ function PPPoEManager() {
                               <span
                                 className={cn(
                                   "absolute -top-1 -right-1 size-2 rounded-full",
-                                  r.status === "online" ? "bg-emerald-500 animate-pulse" : "bg-muted-foreground/50",
+                                  r.status === "online"
+                                    ? "bg-emerald-500 animate-pulse"
+                                    : "bg-muted-foreground/50",
                                 )}
                               />
                             </div>
                             <div>
                               <p className="font-semibold text-sm leading-none">{r.name}</p>
                               <p className="text-xs text-muted-foreground mt-1">
-                                {r.public_ip || "MikroTik Agent"} {r.ros_version ? `• v${r.ros_version}` : ""}
+                                {r.public_ip || "MikroTik Agent"}{" "}
+                                {r.ros_version ? `• v${r.ros_version}` : ""}
                               </p>
                             </div>
                           </div>
@@ -476,14 +492,24 @@ function PPPoEManager() {
                 <CardContent className="space-y-4">
                   <div className="grid grid-cols-2 gap-3 text-sm">
                     <div className="p-3 rounded-lg border bg-background/30">
-                      <p className="text-xs text-muted-foreground font-medium">Active Subscribers</p>
-                      <p className="text-xl font-bold text-emerald-500 mt-1">{stats.data?.active || 0}</p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">Secrets enabled on MikroTik</p>
+                      <p className="text-xs text-muted-foreground font-medium">
+                        Active Subscribers
+                      </p>
+                      <p className="text-xl font-bold text-emerald-500 mt-1">
+                        {stats.data?.active || 0}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        Secrets enabled on MikroTik
+                      </p>
                     </div>
                     <div className="p-3 rounded-lg border bg-background/30">
                       <p className="text-xs text-muted-foreground font-medium">Expired / Pending</p>
-                      <p className="text-xl font-bold text-rose-500 mt-1">{stats.data?.expired || 0}</p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">Redirected to payment</p>
+                      <p className="text-xl font-bold text-rose-500 mt-1">
+                        {stats.data?.expired || 0}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        Redirected to payment
+                      </p>
                     </div>
                   </div>
                   <div className="rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground space-y-1">
@@ -491,7 +517,9 @@ function PPPoEManager() {
                       <Zap className="size-3.5 text-primary" /> Instant Activation
                     </p>
                     <p>
-                      When a PPPoE customer pays their renewal on M-Pesa, their account expiration date updates automatically and the router is instructed to activate the secret immediately.
+                      When a PPPoE customer pays their renewal on M-Pesa, their account expiration
+                      date updates automatically and the router is instructed to activate the secret
+                      immediately.
                     </p>
                   </div>
                 </CardContent>
@@ -549,7 +577,9 @@ function PPPoEManager() {
                       ) : filteredCustomers.length === 0 ? (
                         <tr>
                           <td colSpan={7} className="p-8 text-center text-muted-foreground">
-                            {searchTerm ? "No customers found matching your search." : "No PPPoE customers yet. Click 'Add PPPoE Customer' above to create one."}
+                            {searchTerm
+                              ? "No customers found matching your search."
+                              : "No PPPoE customers yet. Click 'Add PPPoE Customer' above to create one."}
                           </td>
                         </tr>
                       ) : (
@@ -576,7 +606,9 @@ function PPPoEManager() {
                                 <span className="text-muted-foreground text-xs">—</span>
                               )}
                             </td>
-                            <td className="p-3 text-xs font-medium">{c.routers?.name || "Any Router"}</td>
+                            <td className="p-3 text-xs font-medium">
+                              {c.routers?.name || "Any Router"}
+                            </td>
                             <td className="p-3">
                               <Badge
                                 variant={
@@ -616,7 +648,9 @@ function PPPoEManager() {
                                   </DropdownMenuItem>
                                   <DropdownMenuItem
                                     className={
-                                      c.status === "active" ? "text-destructive" : "text-emerald-600"
+                                      c.status === "active"
+                                        ? "text-destructive"
+                                        : "text-emerald-600"
                                     }
                                     onClick={() => handleSuspend(c.id, c.status)}
                                   >
@@ -703,7 +737,9 @@ function PPPoEManager() {
                         (sessions.data as SessionItem[] | undefined)?.map((s) => (
                           <tr key={s.id} className="hover:bg-muted/30">
                             <td className="p-3">
-                              <p className="font-semibold text-foreground">{s.customers?.full_name || "Unknown"}</p>
+                              <p className="font-semibold text-foreground">
+                                {s.customers?.full_name || "Unknown"}
+                              </p>
                               <p className="text-xs text-muted-foreground">
                                 {s.customers?.phone || "—"}
                               </p>
@@ -764,7 +800,8 @@ function PPPoEManager() {
                     <Router className="size-10 mx-auto text-muted-foreground/50 mb-3" />
                     <p className="font-semibold text-foreground">No Routers Configured</p>
                     <p className="text-xs text-muted-foreground max-w-sm mx-auto mt-1 mb-4">
-                      Connect your MikroTik router to enable automated PPPoE client creation, rate limiting, and session disconnection.
+                      Connect your MikroTik router to enable automated PPPoE client creation, rate
+                      limiting, and session disconnection.
                     </p>
                     <Button onClick={() => navigate({ to: "/routers" })}>
                       Add MikroTik Router
@@ -799,12 +836,16 @@ function PPPoEManager() {
                           <div className="rounded-md bg-muted/30 p-2 text-xs space-y-1 mb-3">
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">PPPoE Sessions:</span>
-                              <span className="font-semibold text-foreground">{r.active_pppoe_users ?? 0}</span>
+                              <span className="font-semibold text-foreground">
+                                {r.active_pppoe_users ?? 0}
+                              </span>
                             </div>
                             {r.ros_version && (
                               <div className="flex justify-between">
                                 <span className="text-muted-foreground">RouterOS:</span>
-                                <span className="font-medium text-foreground">v{r.ros_version}</span>
+                                <span className="font-medium text-foreground">
+                                  v{r.ros_version}
+                                </span>
                               </div>
                             )}
                           </div>
@@ -851,7 +892,8 @@ function PPPoEManager() {
                   {editingCustomer ? "Edit PPPoE Customer" : "Add New PPPoE Customer"}
                 </DialogTitle>
                 <DialogDescription>
-                  Enter customer credentials. The secret and speed profiles are instantly sent to your MikroTik router.
+                  Enter customer credentials. The secret and speed profiles are instantly sent to
+                  your MikroTik router.
                 </DialogDescription>
               </DialogHeader>
               <div className="grid gap-4 py-4">
@@ -901,7 +943,9 @@ function PPPoEManager() {
                       id="password"
                       name="password"
                       value={generatedPassword || undefined}
-                      defaultValue={generatedPassword ? undefined : (editingCustomer?.password || undefined)}
+                      defaultValue={
+                        generatedPassword ? undefined : editingCustomer?.password || undefined
+                      }
                       onChange={(e) => setGeneratedPassword(e.target.value)}
                       placeholder={editingCustomer ? "Leave blank to keep" : "••••••••"}
                       required={!editingCustomer && !generatedPassword}
@@ -910,7 +954,10 @@ function PPPoEManager() {
                 </div>
                 <div className="grid gap-2">
                   <Label htmlFor="package_id">Assigned PPPoE Package</Label>
-                  <Select name="package_id" defaultValue={editingCustomer?.package_id || (pppPackages[0]?.id || undefined)}>
+                  <Select
+                    name="package_id"
+                    defaultValue={editingCustomer?.package_id || pppPackages[0]?.id || undefined}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Select a PPPoE package" />
                     </SelectTrigger>
@@ -933,7 +980,10 @@ function PPPoEManager() {
                   <Label htmlFor="router_id">Target Router</Label>
                   <Select
                     name="router_id"
-                    defaultValue={editingCustomer?.router_id || (routerList.length === 1 ? routerList[0].id : undefined)}
+                    defaultValue={
+                      editingCustomer?.router_id ||
+                      (routerList.length === 1 ? routerList[0].id : undefined)
+                    }
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select a router" />

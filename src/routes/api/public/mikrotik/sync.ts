@@ -413,9 +413,7 @@ async function handleSyncRequest(request: Request): Promise<Response> {
         `:do { /ip hotspot profile set [find] login-by=http-chap,http-pap,cookie trial-uptime-limit=0s split-user-domain=no http-cookie-lifetime=1d use-radius=no ssl-certificate=none; } on-error={};`,
       );
       // 2. Enforce 1 device per MAC address on all hotspot servers
-      rscLines.push(
-        `:do { /ip hotspot set [find] addresses-per-mac=1 disabled=no; } on-error={};`,
-      );
+      rscLines.push(`:do { /ip hotspot set [find] addresses-per-mac=1 disabled=no; } on-error={};`);
       // 3. Wipe all stored MAC cookies (kills unauthorized cookie logins)
       rscLines.push(`:do { /ip hotspot cookie remove [find]; } on-error={};`);
       // 4. Remove default unpassworded 'admin' hotspot user if present
@@ -435,20 +433,36 @@ async function handleSyncRequest(request: Request): Promise<Response> {
       // 6. Anti-DNS-Tunneling: Force all client DNS requests (UDP/TCP 53) to the local router DNS resolver
       rscLines.push(`:do {`);
       rscLines.push(`  /ip hotspot walled-garden ip remove [find comment~"Allow DNS Queries"];`);
-      rscLines.push(`  :if ([:len [/ip firewall nat find comment="WiFiBilling: Anti-DNS-Tunnel-UDP"]] = 0) do={`);
-      rscLines.push(`    /ip firewall nat add chain=dstnat protocol=udp dst-port=53 action=redirect to-ports=53 comment="WiFiBilling: Anti-DNS-Tunnel-UDP" place-before=0;`);
+      rscLines.push(
+        `  :if ([:len [/ip firewall nat find comment="WiFiBilling: Anti-DNS-Tunnel-UDP"]] = 0) do={`,
+      );
+      rscLines.push(
+        `    /ip firewall nat add chain=dstnat protocol=udp dst-port=53 action=redirect to-ports=53 comment="WiFiBilling: Anti-DNS-Tunnel-UDP" place-before=0;`,
+      );
       rscLines.push(`  };`);
-      rscLines.push(`  :if ([:len [/ip firewall nat find comment="WiFiBilling: Anti-DNS-Tunnel-TCP"]] = 0) do={`);
-      rscLines.push(`    /ip firewall nat add chain=dstnat protocol=tcp dst-port=53 action=redirect to-ports=53 comment="WiFiBilling: Anti-DNS-Tunnel-TCP" place-before=0;`);
+      rscLines.push(
+        `  :if ([:len [/ip firewall nat find comment="WiFiBilling: Anti-DNS-Tunnel-TCP"]] = 0) do={`,
+      );
+      rscLines.push(
+        `    /ip firewall nat add chain=dstnat protocol=tcp dst-port=53 action=redirect to-ports=53 comment="WiFiBilling: Anti-DNS-Tunnel-TCP" place-before=0;`,
+      );
       rscLines.push(`  };`);
       rscLines.push(`} on-error={};`);
       // 7. Anti-Tunneling: Block QUIC (UDP 443) and rogue tunnel proxy ports
       rscLines.push(`:do {`);
-      rscLines.push(`  :if ([:len [/ip firewall filter find comment="block-quic-youtube-bypass"]] = 0) do={`);
-      rscLines.push(`    /ip firewall filter add chain=forward action=drop protocol=udp dst-port=443 comment="block-quic-youtube-bypass" place-before=0;`);
+      rscLines.push(
+        `  :if ([:len [/ip firewall filter find comment="block-quic-youtube-bypass"]] = 0) do={`,
+      );
+      rscLines.push(
+        `    /ip firewall filter add chain=forward action=drop protocol=udp dst-port=443 comment="block-quic-youtube-bypass" place-before=0;`,
+      );
       rscLines.push(`  };`);
-      rscLines.push(`  :if ([:len [/ip firewall raw find comment="block-quic-youtube-bypass"]] = 0) do={`);
-      rscLines.push(`    /ip firewall raw add chain=prerouting action=drop protocol=udp dst-port=443 comment="block-quic-youtube-bypass";`);
+      rscLines.push(
+        `  :if ([:len [/ip firewall raw find comment="block-quic-youtube-bypass"]] = 0) do={`,
+      );
+      rscLines.push(
+        `    /ip firewall raw add chain=prerouting action=drop protocol=udp dst-port=443 comment="block-quic-youtube-bypass";`,
+      );
       rscLines.push(`  };`);
       rscLines.push(`} on-error={};`);
       // 8. Flush active sessions and host table so unauthenticated devices immediately hit the captive portal
@@ -477,14 +491,18 @@ async function handleSyncRequest(request: Request): Promise<Response> {
       rscLines.push(`    :local hstat "unauthorized";`);
       rscLines.push(`    :if ($haut = true) do={ :set hstat "authorized" };`);
       rscLines.push(`    :if ($hbyp = true) do={ :set hstat "bypassed" };`);
-      rscLines.push(`    :set hsData ($hsData . $hm . "," . $hip . "," . $hup . "," . $hstat . "\\n");`);
+      rscLines.push(
+        `    :set hsData ($hsData . $hm . "," . $hip . "," . $hup . "," . $hstat . "\\n");`,
+      );
       rscLines.push(`  };`);
       rscLines.push(`  :foreach l in=[/ip dhcp-server lease find] do={`);
       rscLines.push(`    :local lm [/ip dhcp-server lease get $l mac-address];`);
       rscLines.push(`    :local lip [/ip dhcp-server lease get $l address];`);
       rscLines.push(`    :local lhn [/ip dhcp-server lease get $l host-name];`);
       rscLines.push(`    :local lst [/ip dhcp-server lease get $l status];`);
-      rscLines.push(`    :set hsData ($hsData . $lm . "," . $lip . "," . $lhn . "," . $lst . "\\n");`);
+      rscLines.push(
+        `    :set hsData ($hsData . $lm . "," . $lip . "," . $lhn . "," . $lst . "\\n");`,
+      );
       rscLines.push(`  };`);
       rscLines.push(`  :if ([:len $hsData] > 0) do={`);
       rscLines.push(
@@ -495,7 +513,9 @@ async function handleSyncRequest(request: Request): Promise<Response> {
     } else if (cmd.action === "wireless.scan_nearby" || cmd.action === "wireless.snoop") {
       const cleanBase = getPublicBaseUrl(request);
       const routerToken = router.onboard_token || router.agent_key;
-      rscLines.push(`:log info "WiFiBilling: Scanning nearby Over-the-Air Wireless MACs and BSSIDs...";`);
+      rscLines.push(
+        `:log info "WiFiBilling: Scanning nearby Over-the-Air Wireless MACs and BSSIDs...";`,
+      );
       rscLines.push(`:do {`);
       rscLines.push(`  :local nData "";`);
       rscLines.push(`  :foreach n in=[/ip neighbor find] do={`);
@@ -504,7 +524,9 @@ async function handleSyncRequest(request: Request): Promise<Response> {
       rscLines.push(`    :local nip [/ip neighbor get $n address];`);
       rscLines.push(`    :local nb [/ip neighbor get $n board];`);
       rscLines.push(`    :local nint [/ip neighbor get $n interface];`);
-      rscLines.push(`    :set nData ($nData . $nm . "," . $ni . "," . $nip . "," . $nb . "," . $nint . "\\n");`);
+      rscLines.push(
+        `    :set nData ($nData . $nm . "," . $ni . "," . $nip . "," . $nb . "," . $nint . "\\n");`,
+      );
       rscLines.push(`  };`);
       rscLines.push(`  :if ([:len $nData] > 0) do={`);
       rscLines.push(
@@ -512,12 +534,16 @@ async function handleSyncRequest(request: Request): Promise<Response> {
       );
       rscLines.push(`  };`);
       rscLines.push(`} on-error={ :log warning "WiFiBilling: Neighbor scan report failed"; };`);
-      rscLines.push(`:do { /interface wireless scan [find default-name=wlan1] duration=5; } on-error={};`);
+      rscLines.push(
+        `:do { /interface wireless scan [find default-name=wlan1] duration=5; } on-error={};`,
+      );
       rscLines.push(`:do { /interface wifi scan [find] duration=5; } on-error={};`);
     } else if (cmd.action === "neighbor.scan") {
       const cleanBase = getPublicBaseUrl(request);
       const routerToken = router.onboard_token || router.agent_key;
-      rscLines.push(`:log info "WiFiBilling: Scanning Layer-2 Network Neighbors (MNDP/CDP/LLDP)...";`);
+      rscLines.push(
+        `:log info "WiFiBilling: Scanning Layer-2 Network Neighbors (MNDP/CDP/LLDP)...";`,
+      );
       rscLines.push(`:do {`);
       rscLines.push(`  :local nData "";`);
       rscLines.push(`  :foreach n in=[/ip neighbor find] do={`);
@@ -526,7 +552,9 @@ async function handleSyncRequest(request: Request): Promise<Response> {
       rscLines.push(`    :local nip [/ip neighbor get $n address];`);
       rscLines.push(`    :local nb [/ip neighbor get $n board];`);
       rscLines.push(`    :local nint [/ip neighbor get $n interface];`);
-      rscLines.push(`    :set nData ($nData . $nm . "," . $ni . "," . $nip . "," . $nb . "," . $nint . "\\n");`);
+      rscLines.push(
+        `    :set nData ($nData . $nm . "," . $ni . "," . $nip . "," . $nb . "," . $nint . "\\n");`,
+      );
       rscLines.push(`  };`);
       rscLines.push(`  :if ([:len $nData] > 0) do={`);
       rscLines.push(

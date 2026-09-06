@@ -173,7 +173,11 @@ export const getDashboard = createServerFn({ method: "GET" })
     const incomeMonth = sumTxns(monthTxns) + sumCashVouchers(monthCashVouchers, monthTxns);
 
     const { calculateNetworkRevenue } = await import("@/lib/network.functions");
-    const revenueMetrics = await calculateNetworkRevenue(supabase, tenantId, (routers ?? []) as any);
+    const revenueMetrics = await calculateNetworkRevenue(
+      supabase,
+      tenantId,
+      (routers ?? []) as any,
+    );
 
     const mappedRouters = (routers ?? []).map((r) => {
       const rev = revenueMetrics.routers.find((ro) => ro.routerId === r.id);

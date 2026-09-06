@@ -832,6 +832,7 @@ export async function activateCustomerPackage(
   // 2. Find or create customer
   let customerId: string | null = null;
   let existingCustomer = null;
+  let totalUptimeHours = hours;
 
   if (rawObj.customer_id) {
     const { data } = await db
@@ -867,7 +868,7 @@ export async function activateCustomerPackage(
     if (existingCustomer.router_id) {
       routerId = existingCustomer.router_id;
     }
-    if (existingCustomer.kind === "pppoe" && existingCustomer.username) {
+    if (existingCustomer.username) {
       code = existingCustomer.username;
       pppPassword = existingCustomer.password || existingCustomer.username;
     }
@@ -878,6 +879,7 @@ export async function activateCustomerPackage(
       const nowMs = Date.now();
       if (currentExpiryMs > nowMs) {
         newExpiry = new Date(currentExpiryMs + hours * 3600 * 1000).toISOString();
+        totalUptimeHours = (currentExpiryMs - nowMs) / 3600_000 + hours;
       }
     }
 
@@ -989,7 +991,7 @@ export async function activateCustomerPackage(
             password: voucher.code,
             kind: "hotspot",
             profile: pkg.name ?? "default",
-            limitUptimeHours: hours,
+            limitUptimeHours: totalUptimeHours,
             rateLimit: `${pkg.speed_up_mbps ?? 5}M/${pkg.speed_down_mbps ?? 5}M`,
             sharedUsers: pkg.device_limit ?? 1,
             macAddress,

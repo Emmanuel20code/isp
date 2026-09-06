@@ -120,11 +120,16 @@ export function RouterIncomeLeaderboard({
       `${r.shareOfTotalMonth}%`,
     ]);
 
-    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
+    const csvContent =
+      "data:text/csv;charset=utf-8," +
+      [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `all_routers_income_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute(
+      "download",
+      `all_routers_income_${new Date().toISOString().slice(0, 10)}.csv`,
+    );
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -268,15 +273,24 @@ export function RouterIncomeLeaderboard({
                 <thead className="bg-muted/40 text-muted-foreground border-b font-medium">
                   <tr>
                     <th className="py-3 px-3.5">Router</th>
-                    <th className="py-3 px-3 text-right cursor-pointer" onClick={() => handleSort("today")}>
+                    <th
+                      className="py-3 px-3 text-right cursor-pointer"
+                      onClick={() => handleSort("today")}
+                    >
                       Today ({currency})
                     </th>
                     <th className="py-3 px-3 text-right">Yesterday</th>
-                    <th className="py-3 px-3 text-right cursor-pointer" onClick={() => handleSort("month")}>
+                    <th
+                      className="py-3 px-3 text-right cursor-pointer"
+                      onClick={() => handleSort("month")}
+                    >
                       This Month ({currency})
                     </th>
                     <th className="py-3 px-3 text-right">Last Month</th>
-                    <th className="py-3 px-3 text-right cursor-pointer" onClick={() => handleSort("total")}>
+                    <th
+                      className="py-3 px-3 text-right cursor-pointer"
+                      onClick={() => handleSort("total")}
+                    >
                       All-Time Total
                     </th>
                     <th className="py-3 px-3 text-center">Month Share</th>
@@ -299,7 +313,9 @@ export function RouterIncomeLeaderboard({
                               <Server className="size-3.5 text-primary" />
                             </div>
                             <div>
-                              <p className="font-semibold text-foreground text-xs">{r.routerName}</p>
+                              <p className="font-semibold text-foreground text-xs">
+                                {r.routerName}
+                              </p>
                               <p className="text-[10px] text-muted-foreground">
                                 {r.location || "Default Location"}
                               </p>
@@ -317,10 +333,10 @@ export function RouterIncomeLeaderboard({
                         </td>
 
                         <td className="py-3 px-3 text-right text-muted-foreground">
-                          <span>{currency} {r.incomeYesterday.toLocaleString()}</span>
-                          <span className="block text-[10px]">
-                            {r.txnCountYesterday} sales
+                          <span>
+                            {currency} {r.incomeYesterday.toLocaleString()}
                           </span>
+                          <span className="block text-[10px]">{r.txnCountYesterday} sales</span>
                         </td>
 
                         <td className="py-3 px-3 text-right">
@@ -333,10 +349,10 @@ export function RouterIncomeLeaderboard({
                         </td>
 
                         <td className="py-3 px-3 text-right text-muted-foreground">
-                          <span>{currency} {r.incomeLastMonth.toLocaleString()}</span>
-                          <span className="block text-[10px]">
-                            {r.txnCountLastMonth} sales
+                          <span>
+                            {currency} {r.incomeLastMonth.toLocaleString()}
                           </span>
+                          <span className="block text-[10px]">{r.txnCountLastMonth} sales</span>
                         </td>
 
                         <td className="py-3 px-3 text-right">
