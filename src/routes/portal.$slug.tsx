@@ -249,6 +249,7 @@ function PortalPage() {
           code: paymentStatus.code,
           packageName: paymentStatus.packageName,
           expiresAt: paymentStatus.expiresAt || null,
+          kind: paymentStatus.kind || "hotspot",
         });
       }
       setWaiting(false);
