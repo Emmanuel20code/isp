@@ -371,10 +371,10 @@ export const getPortalPurchase = createServerFn({ method: "POST" })
             await activateCustomerPackage(supabaseAdmin, txn.id, receipt ? String(receipt) : null);
           }
 
-          // Re-fetch to get the newly created voucher_id and customer/package details
+          // Re-fetch to get the newly created voucher_id
           const { data: freshTxn } = await supabaseAdmin
             .from("transactions")
-            .select("status, failure_reason, mpesa_receipt, voucher_id, package_id, customer_id, raw, packages(kind, name), customers(username, kind)")
+            .select("status, failure_reason, mpesa_receipt, voucher_id")
             .eq("id", txn.id)
             .maybeSingle();
 
@@ -382,40 +382,25 @@ export const getPortalPurchase = createServerFn({ method: "POST" })
             let code: string | null = null;
             let expiresAt: string | null = null;
             let packageName: string | null = null;
-            let kind: "hotspot" | "pppoe" = "hotspot";
-
-            const pkgObj = Array.isArray(freshTxn.packages) ? freshTxn.packages[0] : freshTxn.packages;
-            const custObj = Array.isArray(freshTxn.customers) ? freshTxn.customers[0] : freshTxn.customers;
-
-            if (pkgObj?.kind === "pppoe" || custObj?.kind === "pppoe") {
-              kind = "pppoe";
-            }
 
             if (freshTxn.voucher_id) {
               const { data: v } = await supabaseAdmin
                 .from("vouchers")
-                .select("code, expires_at, packages(name, kind)")
+                .select("code, expires_at, packages(name)")
                 .eq("id", freshTxn.voucher_id)
                 .maybeSingle();
-              code = custObj?.username || v?.code || null;
+              code = v?.code ?? null;
               expiresAt = v?.expires_at ?? null;
-              const vPkg = Array.isArray(v?.packages) ? v?.packages[0] : v?.packages;
-              packageName = vPkg?.name ?? pkgObj?.name ?? "Active Plan";
-              if (vPkg?.kind === "pppoe") kind = "pppoe";
-            } else if (custObj?.username) {
-              code = custObj.username;
+              packageName = Array.isArray(v?.packages) ? v?.packages[0]?.name : v?.packages?.name;
             }
-
             return {
               status: "success" as const,
               code,
               expiresAt,
-              packageName: packageName ?? pkgObj?.name ?? "Active Plan",
+              packageName: packageName ?? "Active Plan",
               receipt: freshTxn.mpesa_receipt,
               failureReason: null,
               isAuthorized: true,
-              kind,
-              username: custObj?.username || code,
             };
           }
         } else if (
@@ -450,43 +435,25 @@ export const getPortalPurchase = createServerFn({ method: "POST" })
     let code: string | null = null;
     let expiresAt: string | null = null;
     let packageName: string | null = null;
-    let kind: "hotspot" | "pppoe" = "hotspot";
-
-    const { data: fullTxn } = await supabaseAdmin
-      .from("transactions")
-      .select("packages(kind, name), customers(username, kind)")
-      .eq("id", txn.id)
-      .maybeSingle();
-
-    const fullPkg = Array.isArray(fullTxn?.packages) ? fullTxn?.packages[0] : fullTxn?.packages;
-    const fullCust = Array.isArray(fullTxn?.customers) ? fullTxn?.customers[0] : fullTxn?.customers;
-    if (fullPkg?.kind === "pppoe" || fullCust?.kind === "pppoe") kind = "pppoe";
 
     if (txn.voucher_id) {
       const { data: v } = await supabaseAdmin
         .from("vouchers")
-        .select("code, expires_at, packages(name, kind)")
+        .select("code, expires_at, packages(name)")
         .eq("id", txn.voucher_id)
         .maybeSingle();
-      code = fullCust?.username || v?.code || null;
+      code = v?.code ?? null;
       expiresAt = v?.expires_at ?? null;
-      const vPkg = Array.isArray(v?.packages) ? v?.packages[0] : v?.packages;
-      packageName = vPkg?.name ?? fullPkg?.name ?? "Active Plan";
-      if (vPkg?.kind === "pppoe") kind = "pppoe";
-    } else if (fullCust?.username) {
-      code = fullCust.username;
+      packageName = Array.isArray(v?.packages) ? v?.packages[0]?.name : v?.packages?.name;
     }
-
     return {
       status: effectiveStatus as "pending" | "success" | "failed" | "cancelled",
       code,
       expiresAt,
-      packageName: packageName ?? fullPkg?.name ?? "Active Plan",
+      packageName: packageName ?? "Active Plan",
       receipt: txn.mpesa_receipt,
       failureReason: txn.failure_reason,
       isAuthorized: effectiveStatus === "success",
-      kind,
-      username: fullCust?.username || code,
     };
   });
 

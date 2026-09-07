@@ -61,7 +61,6 @@ export interface CaptivePortalViewProps {
     code: string;
     packageName: string;
     expiresAt: string | null;
-    kind?: "hotspot" | "pppoe";
   } | null;
   onReset?: () => void;
   previewMode?: boolean;
@@ -507,10 +506,10 @@ export function CaptivePortalView({
       toast.info(
         `Connecting to payment gateway... Please check your phone for the ${providerName} PIN prompt.`,
       );
-      if (activeTab === "pppoe" || selectedPkg?.kind === "pppoe") {
+      if (activeTab === "pppoe" && pppoeCustomer) {
         onPay(selectedPkg.id, phone, {
-          username: pppoeCustomer?.username || pppoeQuery.trim() || undefined,
-          customerId: pppoeCustomer?.id,
+          username: pppoeCustomer.username,
+          customerId: pppoeCustomer.id,
         });
       } else {
         onPay(selectedPkg.id, phone);
@@ -527,11 +526,6 @@ export function CaptivePortalView({
   // Success / Active Access Screen
   if (activeCode || redeemedData) {
     const displayCode = activeCode || redeemedData?.code;
-    const isPPPoE =
-      activeTab === "pppoe" ||
-      redeemedData?.kind === "pppoe" ||
-      selectedPkg?.kind === "pppoe";
-
     return (
       <main
         className={`min-h-screen ${theme.bg} ${theme.textPrimary} flex flex-col justify-center py-8 px-6 transition-colors duration-300`}
@@ -574,16 +568,14 @@ export function CaptivePortalView({
               className="space-y-2"
             >
               <h1 className="text-3xl font-black tracking-tight text-white leading-tight">
-                {isPPPoE ? "PPPoE Account Renewed!" : "Payment Confirmed!"}
+                Payment Confirmed!
               </h1>
               <p className={`text-sm ${theme.textSecondary} font-medium`}>
-                {isPPPoE
-                  ? "Your fiber internet plan is now active."
-                  : "Your internet access is now active."}
+                Your internet access is now active.
               </p>
             </motion.div>
 
-            {/* High Impact Voucher / Account Card */}
+            {/* High Impact Voucher Card */}
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -622,21 +614,21 @@ export function CaptivePortalView({
                 </div>
 
                 <p className="text-[10px] font-black uppercase tracking-[0.3em] text-emerald-400/80">
-                  {isPPPoE ? "PPPoE Username" : "Your Access Code"}
+                  Your Access Code
                 </p>
 
                 <div className="flex items-center justify-center gap-4">
-                  <span className="text-4xl sm:text-5xl font-mono font-black tracking-[0.1em] text-white tabular-nums drop-shadow-sm break-all">
+                  <span className="text-5xl font-mono font-black tracking-[0.1em] text-white tabular-nums drop-shadow-sm">
                     {displayCode}
                   </span>
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="size-12 bg-white/5 hover:bg-white/10 text-emerald-400 border border-white/5 rounded-2xl transition-all flex-shrink-0"
+                    className="size-12 bg-white/5 hover:bg-white/10 text-emerald-400 border border-white/5 rounded-2xl transition-all"
                     onClick={() => {
                       if (displayCode) {
                         navigator.clipboard.writeText(displayCode);
-                        toast.success("Username copied to clipboard");
+                        toast.success("Code copied to clipboard");
                       }
                     }}
                   >
@@ -669,31 +661,8 @@ export function CaptivePortalView({
               </div>
             </motion.div>
 
-            {/* PPPoE Notice or Hotspot Auto Connect UI */}
-            {isPPPoE ? (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.6 }}
-                className="space-y-4"
-              >
-                <div className="p-5 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm space-y-3 text-center">
-                  <div className="flex items-center justify-center gap-2 text-emerald-400 font-bold text-sm">
-                    <Network className="size-5" />
-                    Existing Credentials Active
-                  </div>
-                  <p className="text-xs text-slate-300 font-medium leading-relaxed">
-                    Your PPPoE account <span className="font-mono font-bold text-white">{displayCode}</span> has been renewed using your existing saved credentials. Your router will automatically reconnect with high-speed internet.
-                  </p>
-                </div>
-                <Button
-                  className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-6 rounded-2xl shadow-xl transition-all"
-                  onClick={onReset}
-                >
-                  Done / Return to Portal
-                </Button>
-              </motion.div>
-            ) : activeVoucherCode ? (
+            {/* Auto Connect Engine UI */}
+            {activeVoucherCode && (
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -761,24 +730,22 @@ export function CaptivePortalView({
                   )}
                 </div>
               </motion.div>
-            ) : null}
-
-            {!isPPPoE && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.8 }}
-                className="pt-4"
-              >
-                <Button
-                  variant="ghost"
-                  className={`text-slate-500 hover:text-white font-bold text-xs uppercase tracking-widest`}
-                  onClick={onReset}
-                >
-                  Return to Portal
-                </Button>
-              </motion.div>
             )}
+
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.8 }}
+              className="pt-4"
+            >
+              <Button
+                variant="ghost"
+                className={`text-slate-500 hover:text-white font-bold text-xs uppercase tracking-widest`}
+                onClick={onReset}
+              >
+                Return to Portal
+              </Button>
+            </motion.div>
           </motion.div>
         </div>
 

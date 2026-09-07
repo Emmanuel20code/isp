@@ -238,20 +238,19 @@ export const savePPPoECustomer = createServerFn({ method: "POST" })
 
 export const suspendPPPoECustomer = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((data: any) => data)
+  .validator((data: { id: string; status: string }) => data)
   .handler(async ({ context, data }) => {
-    const raw = data?.data || data || {};
     const { supabase, userId } = context;
     const tenantId = await requireTenant(supabase, userId);
     const { data: customer } = await supabase
       .from("customers")
       .select("*")
-      .eq("id", raw.id)
+      .eq("id", data.id)
       .single();
 
     if (!customer) throw new Error("Customer not found");
 
-    await supabase.from("customers").update({ status: raw.status }).eq("id", raw.id);
+    await supabase.from("customers").update({ status: data.status }).eq("id", data.id);
 
     if (customer.router_id) {
       // On MikroTik, we assign the expired profile instead of disabling so they can be redirected
@@ -263,7 +262,7 @@ export const suspendPPPoECustomer = createServerFn({ method: "POST" })
           payload: {
             username: customer.username,
             disabled: false,
-            profile: raw.status === "active" ? (customer.package_id || "default") : "wfb-ppp-expired",
+            profile: data.status === "active" ? (customer.package_id || "default") : "wfb-ppp-expired",
           },
         },
       ]);
@@ -274,21 +273,20 @@ export const suspendPPPoECustomer = createServerFn({ method: "POST" })
 
 export const resetPPPoEPassword = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((data: any) => data)
+  .validator((data: { id: string; password?: string }) => data)
   .handler(async ({ context, data }) => {
-    const raw = data?.data || data || {};
     const { supabase, userId } = context;
     const tenantId = await requireTenant(supabase, userId);
-    const password = raw.password || Math.random().toString(36).slice(-8);
+    const password = data.password || Math.random().toString(36).slice(-8);
 
     const { data: customer } = await supabase
       .from("customers")
       .select("*")
-      .eq("id", raw.id)
+      .eq("id", data.id)
       .single();
     if (!customer) throw new Error("Customer not found");
 
-    await supabase.from("customers").update({ password }).eq("id", raw.id);
+    await supabase.from("customers").update({ password }).eq("id", data.id);
 
     if (customer.router_id) {
       await enqueueRouterCommands([
@@ -309,26 +307,22 @@ export const resetPPPoEPassword = createServerFn({ method: "POST" })
 
 export const syncPPPoERouter = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .validator((data: any) => data)
+  .validator((data: { routerId: string }) => data)
   .handler(async ({ context, data }) => {
-    const raw = data?.data || data || {};
-    const routerId = raw.routerId || raw.router_id;
-    if (!routerId) throw new Error("Missing routerId parameter");
-
     const { supabase, userId } = context;
     const tenantId = await requireTenant(supabase, userId);
     const { data: customers } = await supabase
       .from("customers")
       .select("*, packages(name)")
       .eq("tenant_id", tenantId)
-      .eq("router_id", routerId)
+      .eq("router_id", data.routerId)
       .eq("kind", "pppoe");
 
     if (!customers || customers.length === 0) return { success: true, synced: 0 };
 
     const commands = customers.map((c) => ({
       tenantId,
-      routerId,
+      routerId: data.routerId,
       action: "pppoe.create_user",
       payload: {
         username: c.username,
