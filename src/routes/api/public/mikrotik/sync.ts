@@ -443,25 +443,26 @@ async function handleSyncRequest(request: Request): Promise<Response> {
       rscLines.push(`    };`);
       rscLines.push(`  };`);
       rscLines.push(`} on-error={};`);
-      // 6. Anti-DNS-Tunneling: Force all client DNS requests (UDP/TCP 53) to the local router DNS resolver
+      // 6. Fix Captive Portal Detection: Remove any previously added manual DNS redirects
+      // Manual dstnat rules placed before the hotspot chain break MikroTik's native DNS interception
+      // which is required for captive portal detection to work properly on Android and iOS.
       rscLines.push(`:do {`);
-      rscLines.push(`  /ip hotspot walled-garden ip remove [find comment~"Allow DNS Queries"];`);
-      rscLines.push(
-        `  :if ([:len [/ip firewall nat find comment="WiFiBilling: Anti-DNS-Tunnel-UDP"]] = 0) do={`,
-      );
-      rscLines.push(
-        `    /ip firewall nat add chain=dstnat protocol=udp dst-port=53 action=redirect to-ports=53 comment="WiFiBilling: Anti-DNS-Tunnel-UDP" place-before=0;`,
-      );
-      rscLines.push(`  };`);
-      rscLines.push(
-        `  :if ([:len [/ip firewall nat find comment="WiFiBilling: Anti-DNS-Tunnel-TCP"]] = 0) do={`,
-      );
-      rscLines.push(
-        `    /ip firewall nat add chain=dstnat protocol=tcp dst-port=53 action=redirect to-ports=53 comment="WiFiBilling: Anti-DNS-Tunnel-TCP" place-before=0;`,
-      );
-      rscLines.push(`  };`);
+      rscLines.push(`  /ip firewall nat remove [find comment="WiFiBilling: Anti-DNS-Tunnel-UDP"];`);
+      rscLines.push(`  /ip firewall nat remove [find comment="WiFiBilling: Anti-DNS-Tunnel-TCP"];`);
       rscLines.push(`} on-error={};`);
-      // 7. Anti-Tunneling: Block QUIC (UDP 443) and rogue tunnel proxy ports
+      
+      // 7. Fix Captive Portal Detection: Remove OS probe domains from walled garden
+      // If probe domains are in walled garden, phones silently think they have internet and bypass the portal
+      rscLines.push(`:do {`);
+      rscLines.push(`  /ip hotspot walled-garden remove [find dst-host="captive.apple.com"];`);
+      rscLines.push(`  /ip hotspot walled-garden remove [find dst-host="connectivitycheck.gstatic.com"];`);
+      rscLines.push(`  /ip hotspot walled-garden remove [find dst-host="connectivitycheck.android.com"];`);
+      rscLines.push(`  /ip hotspot walled-garden remove [find dst-host="clients3.google.com"];`);
+      rscLines.push(`  /ip hotspot walled-garden remove [find dst-host="msftconnecttest.com"];`);
+      rscLines.push(`  /ip hotspot walled-garden remove [find dst-host="detectportal.firefox.com"];`);
+      rscLines.push(`} on-error={};`);
+
+      // 8. Anti-Tunneling: Block QUIC (UDP 443) and rogue tunnel proxy ports
       rscLines.push(`:do {`);
       rscLines.push(
         `  :if ([:len [/ip firewall filter find comment="block-quic-youtube-bypass"]] = 0) do={`,

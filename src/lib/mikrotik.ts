@@ -747,11 +747,6 @@ export function generateNetworkConfigurationScript(params: ScriptParams): string
     "*.wifibilling.site",
     "cloudflare.com",
     "*.cloudflare.com",
-    "connectivitycheck.gstatic.com",
-    "connectivitycheck.android.com",
-    "captive.apple.com",
-    "msftconnecttest.com",
-    "detectportal.firefox.com",
     ...(params.customWalledGarden ?? []),
   ].filter(Boolean);
 
@@ -881,14 +876,6 @@ export function generateNetworkConfigurationScript(params: ScriptParams): string
   # Allow all traffic to the billing domain
   /ip hotspot walled-garden add dst-host="${domainOnly}" action=allow comment="Allow Portal Site";
   /ip hotspot walled-garden add dst-host="*.${domainOnly}" action=allow comment="Allow Portal Assets";
-
-  # Allow OS Connectivity Checks ONLY (Strict probes for Captive Portal detection - no wildcard media leaks)
-  /ip hotspot walled-garden add dst-host="captive.apple.com" action=allow comment="Apple Portal Probe";
-  /ip hotspot walled-garden add dst-host="connectivitycheck.gstatic.com" action=allow comment="Google Portal Probe";
-  /ip hotspot walled-garden add dst-host="connectivitycheck.android.com" action=allow comment="Android Portal Probe";
-  /ip hotspot walled-garden add dst-host="clients3.google.com" action=allow comment="Google Client Probe";
-  /ip hotspot walled-garden add dst-host="msftconnecttest.com" action=allow comment="Windows Portal Probe";
-  /ip hotspot walled-garden add dst-host="detectportal.firefox.com" action=allow comment="Firefox Portal Probe";
 
   # Payment Gateway Domains
   /ip hotspot walled-garden add dst-host="paystack.com" action=allow comment="Paystack Gateway";
