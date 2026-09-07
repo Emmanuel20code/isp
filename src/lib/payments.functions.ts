@@ -863,14 +863,26 @@ export async function activateCustomerPackage(
     existingCustomer = data;
   }
 
+  const requestedUsername = rawObj.username ? String(rawObj.username).trim() : null;
+
+  if (pkg.kind === "pppoe") {
+    if (requestedUsername) {
+      code = requestedUsername;
+    } else if (existingCustomer && existingCustomer.kind === "pppoe" && existingCustomer.username) {
+      code = existingCustomer.username;
+    } else {
+      code = `pppoe_${txn.phone.slice(-6)}`;
+    }
+    pppPassword = existingCustomer?.password || code;
+  } else if (existingCustomer && existingCustomer.username) {
+    code = existingCustomer.username;
+    pppPassword = existingCustomer.password || existingCustomer.username;
+  }
+
   if (existingCustomer) {
     customerId = existingCustomer.id;
     if (existingCustomer.router_id) {
       routerId = existingCustomer.router_id;
-    }
-    if (existingCustomer.username) {
-      code = existingCustomer.username;
-      pppPassword = existingCustomer.password || existingCustomer.username;
     }
 
     let newExpiry = expiresAt;
@@ -888,23 +900,15 @@ export async function activateCustomerPackage(
       .update({
         package_id: txn.package_id,
         router_id: routerId,
-        username: code, // Retain exact existing username
+        kind: pkg.kind === "pppoe" ? "pppoe" : existingCustomer.kind,
+        username: code,
+        password: pppPassword,
         mac_address: macAddress || undefined,
         expires_at: newExpiry,
         status: "active",
       })
       .eq("id", customerId);
   } else {
-    // For PPPoE package, use supplied username or phone prefix rather than random voucher code if available
-    if (pkg.kind === "pppoe") {
-      if (rawObj.username) {
-        code = String(rawObj.username).trim();
-      } else {
-        code = `pppoe_${txn.phone.slice(-6)}`;
-      }
-      pppPassword = code;
-    }
-
     const { data: newCustomer } = await db
       .from("customers")
       .insert({
