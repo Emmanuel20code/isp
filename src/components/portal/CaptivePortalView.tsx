@@ -352,12 +352,30 @@ export function CaptivePortalView({
         } else if (next === 4) {
           setAutoConnectStatus("Finalizing connection...");
         }
+
+        // Active internet polling check
+        const checkInternet = () => {
+          const img = new Image();
+          img.onload = () => {
+            setAutoConnectStatus("Internet connected! Redirecting...");
+            setTimeout(() => {
+              window.location.href = redirectParams.linkOrig || "https://google.com";
+            }, 500);
+          };
+          // Cache-busting URL to check internet access
+          img.src = `https://www.google.com/favicon.ico?_t=${Date.now()}`;
+        };
+        
+        // Ping every 2 seconds
+        if (next % 2 === 0) {
+          checkInternet();
+        }
       }, 1000);
       return () => clearTimeout(timer);
     } else {
       handleAutoConnect();
     }
-  }, [autoConnectSeconds, handleAutoConnect]);
+  }, [autoConnectSeconds, handleAutoConnect, redirectParams.linkOrig]);
 
   const handlePackageClick = (pkg: PortalPackage) => {
     setSelectedPkg(pkg);
