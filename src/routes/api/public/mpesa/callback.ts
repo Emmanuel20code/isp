@@ -56,11 +56,21 @@ export const Route = createFileRoute("/api/public/mpesa/callback")({
 
         const wasPending = txn.status === "pending";
 
-        // Update transaction status and metadata
+        // 1. Atomic status claim to prevent double-activation race condition
+        const { data: claimedTxn } = await supabaseAdmin
+          .from("transactions")
+          .update({ status: success ? "success" : "failed" })
+          .eq("id", txn.id)
+          .eq("status", "pending")
+          .select("id")
+          .maybeSingle();
+
+        const wonActivationRace = !!claimedTxn;
+
+        // 2. Always update metadata (receipt, callback JSON) safely
         await supabaseAdmin
           .from("transactions")
           .update({
-            status: success ? "success" : txn.status === "success" ? "success" : "failed",
             mpesa_receipt: receiptNumber ?? txn.mpesa_receipt,
             failure_reason: success ? null : (cb?.ResultDesc ?? "Payment not completed"),
             raw: {
@@ -71,7 +81,7 @@ export const Route = createFileRoute("/api/public/mpesa/callback")({
           })
           .eq("id", txn.id);
 
-        if (success && txn.kind === "saas_subscription" && txn.tenant_id && wasPending) {
+        if (success && txn.kind === "saas_subscription" && txn.tenant_id && wonActivationRace) {
           const { activateTenantSubscription } = await import("@/lib/payments.functions");
           const actResult = await activateTenantSubscription(
             supabaseAdmin,
@@ -89,7 +99,7 @@ export const Route = createFileRoute("/api/public/mpesa/callback")({
           success &&
           txn.kind === "customer_payment" &&
           txn.package_id &&
-          (!txn.voucher_id || wasPending)
+          wonActivationRace
         ) {
           try {
             const { activateCustomerPackage } = await import("@/lib/payments.functions");

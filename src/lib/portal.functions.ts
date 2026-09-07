@@ -354,17 +354,22 @@ export const getPortalPurchase = createServerFn({ method: "POST" })
               (i: Record<string, unknown>) => i.Name === "MpesaReceiptNumber",
             )?.Value ?? null;
 
-          await supabaseAdmin
+          const { data: claimedTxn } = await supabaseAdmin
             .from("transactions")
             .update({
               status: "success",
               mpesa_receipt: receipt ? String(receipt) : null,
               failure_reason: null,
             })
-            .eq("checkout_request_id", data.checkoutRequestId);
+            .eq("checkout_request_id", data.checkoutRequestId)
+            .eq("status", "pending")
+            .select("id")
+            .maybeSingle();
 
-          const { activateCustomerPackage } = await import("@/lib/payments.functions");
-          await activateCustomerPackage(supabaseAdmin, txn.id, receipt ? String(receipt) : null);
+          if (claimedTxn) {
+            const { activateCustomerPackage } = await import("@/lib/payments.functions");
+            await activateCustomerPackage(supabaseAdmin, txn.id, receipt ? String(receipt) : null);
+          }
 
           // Re-fetch to get the newly created voucher_id
           const { data: freshTxn } = await supabaseAdmin
@@ -422,23 +427,6 @@ export const getPortalPurchase = createServerFn({ method: "POST" })
         }
       } catch (err) {
         // Ignore Daraja query errors to allow polling to continue seamlessly
-      }
-    }
-
-    if (txn.status === "success" && !txn.voucher_id) {
-      try {
-        const { activateCustomerPackage } = await import("@/lib/payments.functions");
-        await activateCustomerPackage(supabaseAdmin, txn.id, txn.mpesa_receipt);
-        const { data: freshTxn } = await supabaseAdmin
-          .from("transactions")
-          .select("id, status, failure_reason, mpesa_receipt, voucher_id")
-          .eq("id", txn.id)
-          .maybeSingle();
-        if (freshTxn?.voucher_id) {
-          txn.voucher_id = freshTxn.voucher_id;
-        }
-      } catch (actErr) {
-        console.error("[getPortalPurchase] On-demand activation error:", actErr);
       }
     }
 

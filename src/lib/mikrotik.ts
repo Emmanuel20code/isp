@@ -313,7 +313,7 @@ add address=10.10.0.1/24 interface=hotspot-bridge
 :if ([:len [/file find name="flash"]] > 0) do={ :set hsDir "flash/hotspot" }
 :foreach i in=[/ip hotspot profile find where name!="default"] do={ /ip hotspot profile remove $i }
 :foreach i in=[/ip hotspot profile find where name=hsprof1] do={ /ip hotspot profile remove $i }
-/ip hotspot profile add name="hsprof1" hotspot-address=10.10.0.1 dns-name="hotspot.lan" html-directory=$hsDir login-by=http-pap,cookie ssl-certificate=none
+/ip hotspot profile add name="hsprof1" hotspot-address=10.10.0.1 dns-name="hotspot.lan" html-directory=$hsDir login-by=mac-cookie,cookie,http-chap,http-pap ssl-certificate=none
 # Disable hotspot popups for unauthorized users to let them browse the portal smoothly
 /ip hotspot profile set [find name=hsprof1] use-radius=no
 
@@ -357,27 +357,11 @@ add server=hotspot1 dst-address=196.201.214.208 action=accept comment="Safaricom
   /ip hotspot walled-garden ip add dst-address=$portalIP action=accept comment="Allow Portal IP (Resolved)";
 } on-error={ :log warning "WiFiBilling: Could not resolve portal IP during setup"; }
 
-# ─── ANTI-DNS-TUNNEL NAT (Force all unauthenticated DNS to local resolver) ───
-:do {
-  :if ([:len [/ip firewall nat find where comment="WiFiBilling: Anti-DNS-Tunnel-UDP"]] = 0) do={
-    /ip firewall nat add chain=dstnat protocol=udp dst-port=53 action=redirect to-ports=53 comment="WiFiBilling: Anti-DNS-Tunnel-UDP" place-before=0
-  }
-  :if ([:len [/ip firewall nat find where comment="WiFiBilling: Anti-DNS-Tunnel-TCP"]] = 0) do={
-    /ip firewall nat add chain=dstnat protocol=tcp dst-port=53 action=redirect to-ports=53 comment="WiFiBilling: Anti-DNS-Tunnel-TCP" place-before=0
-  }
-} on-error={}
-
 # ─── WALLED-GARDEN (HTTP) ───────────────────────────────────────────────
 :foreach i in=[/ip hotspot walled-garden find where server=hotspot1] do={ /ip hotspot walled-garden remove $i }
 /ip hotspot walled-garden
 add server=hotspot1 dst-host="${domainOnly}" action=allow comment="Allow Portal Site"
 add server=hotspot1 dst-host="*.${domainOnly}" action=allow comment="Allow Portal Assets"
-add server=hotspot1 dst-host="connectivitycheck.gstatic.com" action=allow comment="Google Portal Probe"
-add server=hotspot1 dst-host="clients3.google.com" action=allow comment="Google Client Probe"
-add server=hotspot1 dst-host="connectivitycheck.android.com" action=allow comment="Android Portal Probe"
-add server=hotspot1 dst-host="captive.apple.com" action=allow comment="Apple Portal Probe"
-add server=hotspot1 dst-host="msftconnecttest.com" action=allow comment="Windows Portal Probe"
-add server=hotspot1 dst-host="detectportal.firefox.com" action=allow comment="Firefox Portal Probe"
 add server=hotspot1 dst-host="paystack.com" action=allow
 add server=hotspot1 dst-host="*.paystack.com" action=allow
 add server=hotspot1 dst-host="*.paystack.co" action=allow
@@ -937,12 +921,12 @@ export function generateNetworkConfigurationScript(params: ScriptParams): string
 
 :do {
   # Force all existing hotspot profiles to disable SSL, disable trial uptime, and use a local domain name
-  /ip hotspot profile set [find] hotspot-address=10.10.0.1 dns-name="hotspot.lan" html-directory="hotspot" login-by=http-chap,http-pap,cookie trial-uptime-limit=0s split-user-domain=no http-cookie-lifetime=1d use-radius=no ssl-certificate=none;
+  /ip hotspot profile set [find] hotspot-address=10.10.0.1 dns-name="hotspot.lan" html-directory="hotspot" login-by=mac-cookie,cookie,http-chap,http-pap trial-uptime-limit=0s split-user-domain=no http-cookie-lifetime=365d use-radius=no ssl-certificate=none;
   
   :if ([:len [/ip hotspot profile find name="billing_hsprof"]] = 0) do={
-    /ip hotspot profile add name="billing_hsprof" hotspot-address=10.10.0.1 dns-name="hotspot.lan" html-directory="hotspot" login-by=http-chap,http-pap,cookie trial-uptime-limit=0s split-user-domain=no http-cookie-lifetime=1d use-radius=no ssl-certificate=none;
+    /ip hotspot profile add name="billing_hsprof" hotspot-address=10.10.0.1 dns-name="hotspot.lan" html-directory="hotspot" login-by=mac-cookie,cookie,http-chap,http-pap trial-uptime-limit=0s split-user-domain=no http-cookie-lifetime=365d use-radius=no ssl-certificate=none;
   } else={
-    /ip hotspot profile set [find name="billing_hsprof"] hotspot-address=10.10.0.1 dns-name="hotspot.lan" html-directory="hotspot" login-by=http-chap,http-pap,cookie trial-uptime-limit=0s split-user-domain=no http-cookie-lifetime=1d use-radius=no ssl-certificate=none;
+    /ip hotspot profile set [find name="billing_hsprof"] hotspot-address=10.10.0.1 dns-name="hotspot.lan" html-directory="hotspot" login-by=mac-cookie,cookie,http-chap,http-pap trial-uptime-limit=0s split-user-domain=no http-cookie-lifetime=365d use-radius=no ssl-certificate=none;
   };
 } on-error={};
 

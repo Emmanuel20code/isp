@@ -269,9 +269,9 @@ export function CaptivePortalView({
       "http://login.wifibilling.site/login",
     ].filter(Boolean) as string[];
 
-    // Forcibly rewrite hotspot.local to the default IP to avoid name resolution failures
+    // Forcibly rewrite hotspot.local and hotspot.lan to the default IP to avoid name resolution failures
     const finalizedCandidates = candidates.map((url) =>
-      url.includes("hotspot.local") ? url.replace("hotspot.local", "10.10.0.1") : url,
+      url.replace("hotspot.local", "10.10.0.1").replace("hotspot.lan", "10.10.0.1"),
     );
 
     setAutoConnectAttempted(true);

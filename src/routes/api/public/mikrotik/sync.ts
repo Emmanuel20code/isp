@@ -423,7 +423,7 @@ async function handleSyncRequest(request: Request): Promise<Response> {
       );
       // 1. Enforce strict login-by on all hotspot profiles and disable trial uptime
       rscLines.push(
-        `:do { /ip hotspot profile set [find] login-by=http-chap,http-pap,cookie trial-uptime-limit=0s split-user-domain=no http-cookie-lifetime=1d use-radius=no ssl-certificate=none; } on-error={};`,
+        `:do { /ip hotspot profile set [find] login-by=mac-cookie,cookie,http-chap,http-pap trial-uptime-limit=0s split-user-domain=no http-cookie-lifetime=365d use-radius=no ssl-certificate=none; } on-error={};`,
       );
       // 2. Enforce 1 device per MAC address on all hotspot servers
       rscLines.push(`:do { /ip hotspot set [find] addresses-per-mac=1 disabled=no; } on-error={};`);
