@@ -71,6 +71,7 @@ function PortalPage() {
   }, [code, slug]);
 
   const [waiting, setWaiting] = useState(false);
+  const [userReset, setUserReset] = useState(false);
 
   // If we have a checkoutId on load, start waiting
   useEffect(() => {
@@ -149,6 +150,8 @@ function PortalPage() {
 
   // Effect to sync session data if found on load, OR clear if server says no session
   useEffect(() => {
+    if (userReset) return;
+
     // If server says there's an active session, sync it
     if (data?.activeSession) {
       // Only sync if we don't have one or if it's different from current
@@ -171,7 +174,7 @@ function PortalPage() {
     else if (data && !data.activeSession && !redeemedData && code) {
       setCode(null);
     }
-  }, [data, redeemedData, code]);
+  }, [data, redeemedData, code, userReset]);
 
   const pay = useMutation({
     mutationFn: ({
@@ -337,6 +340,12 @@ function PortalPage() {
         setRedeemedData(null);
         setCheckoutId(null);
         setWaiting(false);
+        setUserReset(true);
+        if (typeof window !== "undefined") {
+          localStorage.removeItem(`portal_redeemed_${slug}`);
+          localStorage.removeItem(`mpesa_code_${slug}`);
+          localStorage.removeItem(`mpesa_checkout_${slug}`);
+        }
       }}
     />
   );

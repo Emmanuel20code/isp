@@ -332,44 +332,42 @@ export function CaptivePortalView({
 
   useEffect(() => {
     if (activeVoucherCode && !autoConnectAttempted) {
-      // Allow the router's 10s-15s scheduler time to pull the provisioning sync command
-      // and perform a background `/ip hotspot active login` before we attempt fallback HTML POST
-      setAutoConnectSeconds(15);
-      setAutoConnectStatus("Payment confirmed! Connecting to internet...");
+      // Fast automatic reconnection upon payment confirmation
+      setAutoConnectSeconds(3);
+      setAutoConnectStatus("Payment confirmed! Reconnecting to internet...");
     }
   }, [activeVoucherCode, autoConnectAttempted]);
 
   useEffect(() => {
     if (autoConnectSeconds === null) return;
+
+    // Active internet polling check
+    const checkInternet = () => {
+      const img = new Image();
+      img.onload = () => {
+        setAutoConnectStatus("Internet connected! Redirecting...");
+        setTimeout(() => {
+          window.location.href = redirectParams.linkOrig || "https://google.com";
+        }, 500);
+      };
+      // Cache-busting URL to check internet access
+      img.src = `https://www.google.com/favicon.ico?_t=${Date.now()}`;
+    };
+
     if (autoConnectSeconds > 0) {
       const timer = setTimeout(() => {
         const next = autoConnectSeconds - 1;
         setAutoConnectSeconds(next);
-        if (next === 12) {
-          setAutoConnectStatus("Synchronizing with router...");
-        } else if (next === 8) {
-          setAutoConnectStatus("Provisioning internet access...");
-        } else if (next === 4) {
+        if (next === 2) {
+          setAutoConnectStatus("Submitting credentials to router...");
+          handleAutoConnect();
+        } else if (next === 1) {
+          setAutoConnectStatus("Authenticating hotspot connection...");
+        } else if (next === 0) {
           setAutoConnectStatus("Finalizing connection...");
         }
 
-        // Active internet polling check
-        const checkInternet = () => {
-          const img = new Image();
-          img.onload = () => {
-            setAutoConnectStatus("Internet connected! Redirecting...");
-            setTimeout(() => {
-              window.location.href = redirectParams.linkOrig || "https://google.com";
-            }, 500);
-          };
-          // Cache-busting URL to check internet access
-          img.src = `https://www.google.com/favicon.ico?_t=${Date.now()}`;
-        };
-        
-        // Ping every 2 seconds
-        if (next % 2 === 0) {
-          checkInternet();
-        }
+        checkInternet();
       }, 1000);
       return () => clearTimeout(timer);
     } else {
@@ -691,7 +689,7 @@ export function CaptivePortalView({
                       <div className="w-full bg-white/5 rounded-full h-2 overflow-hidden border border-white/5">
                         <div
                           className="h-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-all duration-1000 ease-linear shadow-[0_0_15px_rgba(16,185,129,0.3)]"
-                          style={{ width: `${(autoConnectSeconds / 15) * 100}%` }}
+                          style={{ width: `${(autoConnectSeconds / 3) * 100}%` }}
                         />
                       </div>
                       {!redirectParams.linkLogin && !redirectParams.ip && (
