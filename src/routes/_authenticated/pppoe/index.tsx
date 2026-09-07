@@ -193,7 +193,7 @@ function PPPoEManager() {
     };
 
     try {
-      await saveCustomer(data);
+      await saveCustomer({ data });
       toast.success(
         editingCustomer ? "Customer updated" : "Customer added & provisioned on MikroTik",
       );
@@ -213,7 +213,7 @@ function PPPoEManager() {
   const handleSuspend = async (id: string, currentStatus: string) => {
     const newStatus = currentStatus === "active" ? "suspended" : "active";
     try {
-      await suspendCustomer({ id, status: newStatus });
+      await suspendCustomer({ data: { id, status: newStatus } });
       toast.success(`Customer ${newStatus === "active" ? "activated" : "suspended"}`);
       queryClient.invalidateQueries({ queryKey: ["pppoe-customers"] });
       queryClient.invalidateQueries({ queryKey: ["pppoe-stats"] });
@@ -224,7 +224,7 @@ function PPPoEManager() {
 
   const handleResetPassword = async (id: string) => {
     try {
-      const res = await resetPassword({ id });
+      const res = await resetPassword({ data: { id } });
       toast.success(`Password reset successfully. New password: ${res.password}`);
       queryClient.invalidateQueries({ queryKey: ["pppoe-customers"] });
     } catch (err: unknown) {
@@ -233,9 +233,13 @@ function PPPoEManager() {
   };
 
   const handleSync = async (routerId: string) => {
+    if (!routerId) {
+      toast.error("Router ID is missing");
+      return;
+    }
     setIsSyncing(routerId);
     try {
-      const res = await syncRouter({ routerId });
+      const res = await syncRouter({ data: { routerId } });
       toast.success(`Successfully queued ${res.synced} synchronization commands`);
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Sync failed");
