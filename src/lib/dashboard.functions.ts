@@ -2,6 +2,42 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { startOfMonthUtc, startOfTodayUtc } from "@/lib/billing-helpers";
 import { computeRouterStatus } from "@/lib/mikrotik";
+import { z } from "zod";
+
+export const disconnectActiveSession = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({ customerId: z.string().uuid() }).parse(input))
+  .handler(async ({ data, context }) => {
+    const { supabase } = context;
+    const { enqueueRouterCommands } = await import("@/lib/agent-commands.server");
+
+    const { data: customer } = await supabase
+      .from("customers")
+      .select("id, tenant_id, router_id, username, phone, mac_address, kind")
+      .eq("id", data.customerId)
+      .maybeSingle();
+
+    if (!customer) throw new Error("Session customer not found");
+
+    if (customer.router_id) {
+      await enqueueRouterCommands([
+        {
+          tenantId: customer.tenant_id,
+          routerId: customer.router_id,
+          action: customer.kind === "pppoe" ? "pppoe.disconnect" : "hotspot.disconnect",
+          payload: {
+            username: customer.username || customer.phone,
+            mac: customer.mac_address,
+          },
+        },
+      ]);
+    }
+
+    return {
+      ok: true,
+      message: `Disconnect command sent to MikroTik for ${customer.phone || customer.username || "session"}`,
+    };
+  });
 
 export const getDashboard = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -62,6 +98,7 @@ export const getDashboard = createServerFn({ method: "GET" })
       { count: vouchersUnused },
       { count: vouchersActive },
       { data: activeSessions },
+      { data: heartbeats },
     ] = await Promise.all([
       supabase
         .from("routers")
@@ -141,11 +178,19 @@ export const getDashboard = createServerFn({ method: "GET" })
         .eq("status", "active"),
       supabase
         .from("customers")
-        .select("id, phone, expires_at, status, packages(name)")
+        .select(
+          "id, phone, full_name, username, mac_address, kind, status, expires_at, created_at, router_id, packages(id, name, speed_down_mbps, speed_up_mbps), routers(id, name, location, status, public_ip)",
+        )
         .eq("tenant_id", tenantId)
         .eq("status", "active")
         .order("expires_at", { ascending: true })
-        .limit(10),
+        .limit(20),
+      supabase
+        .from("router_heartbeats")
+        .select("id, router_id, raw, created_at")
+        .eq("tenant_id", tenantId)
+        .order("created_at", { ascending: false })
+        .limit(30),
     ]);
 
     const sumTxns = (rows: { amount_kes: number }[] | null) =>
@@ -199,11 +244,77 @@ export const getDashboard = createServerFn({ method: "GET" })
       };
     });
 
+    const routerMap = new Map((routers ?? []).map((r) => [r.id, r]));
+    const defaultRouter = routers && routers.length === 1 ? routers[0] : null;
+
+    // Parse live telemetry from latest heartbeats to enrich active sessions
+    const liveHosts = new Map<string, { ip?: string; uptime?: string; bytesIn?: number; bytesOut?: number }>();
+    for (const hb of heartbeats ?? []) {
+      const raw = hb.raw as any;
+      if (!raw) continue;
+      const hostList: any[] = Array.isArray(raw.hosts)
+        ? raw.hosts
+        : Array.isArray(raw.body?.hosts)
+          ? raw.body.hosts
+          : [];
+
+      for (const h of hostList) {
+        const rawMac = h.mac || h.mac_address || h["mac-address"];
+        if (!rawMac || typeof rawMac !== "string") continue;
+        const cleanMac = rawMac.toLowerCase().replace(/[^a-f0-9]/g, "");
+        if (!cleanMac) continue;
+
+        const uniqueKey = `${hb.router_id}-${cleanMac}`;
+        if (!liveHosts.has(uniqueKey)) {
+          liveHosts.set(uniqueKey, {
+            ip: h.ip || h.address || undefined,
+            uptime: h.uptime ? String(h.uptime) : undefined,
+            bytesIn: Number(h.bytes_in || h["bytes-in"]) || undefined,
+            bytesOut: Number(h.bytes_out || h["bytes-out"]) || undefined,
+          });
+        }
+      }
+    }
+
+    const mappedActiveSessions = (activeSessions ?? []).map((session: any) => {
+      const sessionRouter =
+        session.routers ||
+        (session.router_id ? routerMap.get(session.router_id) : null) ||
+        defaultRouter;
+
+      const cleanMac = session.mac_address
+        ? session.mac_address.toLowerCase().replace(/[^a-f0-9]/g, "")
+        : "";
+      const telemetry = session.router_id && cleanMac
+        ? liveHosts.get(`${session.router_id}-${cleanMac}`)
+        : null;
+
+      return {
+        ...session,
+        ip_address: telemetry?.ip || null,
+        bytes_in: telemetry?.bytesIn || null,
+        bytes_out: telemetry?.bytesOut || null,
+        uptime: telemetry?.uptime || null,
+        router_name: sessionRouter?.name || "All / Default Router",
+        router_location: sessionRouter?.location || null,
+        router_status: sessionRouter?.status || "online",
+        routers: sessionRouter
+          ? {
+              id: sessionRouter.id,
+              name: sessionRouter.name,
+              location: sessionRouter.location,
+              status: sessionRouter.status,
+              public_ip: sessionRouter.public_ip,
+            }
+          : null,
+      };
+    });
+
     return {
       tenantId,
       routers: mappedRouters,
       packages: packages ?? [],
-      activeSessions: activeSessions ?? [],
+      activeSessions: mappedActiveSessions,
       revenueMetrics,
       stats: {
         incomeToday,

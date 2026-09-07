@@ -4,7 +4,11 @@ import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useRef, useState, type ComponentType } from "react";
 import * as React from "react";
 import { ensureMyTenant, getMyContext } from "@/lib/tenancy.functions";
-import { getDashboard, updateDashboardSettings } from "@/lib/dashboard.functions";
+import {
+  getDashboard,
+  updateDashboardSettings,
+  disconnectActiveSession,
+} from "@/lib/dashboard.functions";
 import { checkAndUpdateSubscription } from "@/lib/payments.functions";
 import { computeBillingState } from "@/lib/subscription";
 import { formatPackageDuration } from "@/lib/billing-helpers";
@@ -14,6 +18,13 @@ import { RenewDialog } from "@/components/RenewDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import {
@@ -61,6 +72,14 @@ import {
   GripVertical,
   DollarSign,
   TrendingUp,
+  Info,
+  LogOut,
+  Globe,
+  Laptop,
+  Copy,
+  Radio,
+  ArrowUpRight,
+  ArrowDownRight,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -141,8 +160,43 @@ function Tile({
 interface ActiveSession {
   id: string;
   phone: string;
+  full_name?: string | null;
+  username?: string | null;
+  mac_address?: string | null;
+  ip_address?: string | null;
+  bytes_in?: number | null;
+  bytes_out?: number | null;
+  uptime?: string | null;
+  kind?: string | null;
+  status?: string | null;
   expires_at: string | null;
-  packages: { name: string } | null;
+  created_at?: string | null;
+  router_id?: string | null;
+  router_name?: string | null;
+  router_location?: string | null;
+  router_status?: string | null;
+  packages?: {
+    id?: string;
+    name?: string;
+    speed_down_mbps?: number;
+    speed_up_mbps?: number;
+  } | null;
+  routers?: {
+    id?: string;
+    name?: string;
+    location?: string | null;
+    status?: string;
+    public_ip?: string | null;
+    model?: string | null;
+  } | null;
+}
+
+function formatBytes(bytes?: number | null): string {
+  if (!bytes || bytes <= 0) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB", "TB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
 
 function SortableTile({ id, children }: { id: string; children: React.ReactElement }) {
@@ -190,9 +244,30 @@ function Dashboard() {
   const ensureTenant = useServerFn(ensureMyTenant);
   const saveSettings = useServerFn(updateDashboardSettings);
   const checkStatusFn = useServerFn(checkAndUpdateSubscription);
+  const disconnectFn = useServerFn(disconnectActiveSession);
+
   const [checkingPayment, setCheckingPayment] = useState(false);
+  const [selectedSession, setSelectedSession] = useState<ActiveSession | null>(null);
+  const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
+
   const queryClient = useQueryClient();
   const provisioning = useRef(false);
+
+  async function handleDisconnect(session: ActiveSession) {
+    setDisconnectingId(session.id);
+    try {
+      const res = await disconnectFn({ data: { customerId: session.id } });
+      toast.success(res.message || "Disconnect command sent to MikroTik router!");
+      await queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      if (selectedSession?.id === session.id) {
+        setSelectedSession(null);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to disconnect session");
+    } finally {
+      setDisconnectingId(null);
+    }
+  }
 
   const { data, isPending } = useQuery({
     queryKey: ["my-context"],
@@ -817,9 +892,14 @@ function Dashboard() {
           title="Recent Active Sessions"
           icon={Users}
           right={
-            <Link to="/customers" className="text-xs text-tile-foreground hover:underline">
-              View All Customers
-            </Link>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 font-mono font-semibold">
+                {activeSessions.length} Active
+              </Badge>
+              <Link to="/customers" className="text-xs text-tile-foreground hover:underline">
+                View All
+              </Link>
+            </div>
           }
         >
           {board.isPending ? (
@@ -829,35 +909,137 @@ function Dashboard() {
             </div>
           ) : activeSessions.length === 0 ? (
             <p className="py-6 text-center text-sm text-muted-foreground">
-              No active sessions found.
+              No active sessions found across your MikroTik routers.
             </p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b text-left text-muted-foreground">
-                    <th className="pb-2 font-medium">Customer</th>
-                    <th className="pb-2 font-medium">Package</th>
-                    <th className="pb-2 text-right font-medium">Time Left</th>
+                    <th className="pb-2.5 pr-4 font-medium">Customer / Device</th>
+                    <th className="pb-2.5 pr-4 font-medium">Router / MikroTik</th>
+                    <th className="pb-2.5 pr-4 font-medium">Package</th>
+                    <th className="pb-2.5 pr-4 font-medium">IP & MAC Details</th>
+                    <th className="pb-2.5 text-right font-medium">Time Left</th>
+                    <th className="pb-2.5 pr-4 text-right font-medium">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {activeSessions.map((session, idx) => (
-                    <tr key={session.id || `session-${idx}`} className="hover:bg-muted/30">
-                      <td className="py-2.5 font-medium">{session.phone}</td>
-                      <td className="py-2.5 text-muted-foreground">
-                        {session.packages?.name || "Standard"}
-                      </td>
-                      <td className="py-2.5 text-right">
-                        <Badge
-                          variant="secondary"
-                          className="font-mono text-[10px] bg-success/10 text-success border-none"
-                        >
-                          {formatTimeLeft(session.expires_at)}
-                        </Badge>
-                      </td>
-                    </tr>
-                  ))}
+                  {activeSessions.map((session, idx) => {
+                    const rName =
+                      session.router_name ||
+                      session.routers?.name ||
+                      (routers.length === 1 ? routers[0].name : "Main MikroTik");
+                    const isDevice = session.phone?.startsWith("DEVICE-");
+                    const displayName =
+                      session.full_name ||
+                      (isDevice ? session.phone : session.phone || session.username || "Guest");
+                    const mac =
+                      session.mac_address ||
+                      (isDevice ? session.phone?.replace("DEVICE-", "") : "—");
+                    const ip = session.ip_address || "Dynamic IP";
+
+                    return (
+                      <tr
+                        key={session.id || `session-${idx}`}
+                        className="hover:bg-muted/40 transition-colors group cursor-pointer"
+                        onClick={() => setSelectedSession(session)}
+                      >
+                        <td className="py-3 pr-4 font-medium">
+                          <div className="flex items-center gap-2">
+                            <span className="flex size-7 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-xs shrink-0">
+                              {isDevice ? <Laptop className="size-3.5" /> : <User className="size-3.5" />}
+                            </span>
+                            <div className="min-w-0">
+                              <p className="text-xs font-semibold text-foreground truncate">
+                                {displayName}
+                              </p>
+                              <p className="text-[10px] text-muted-foreground font-mono truncate">
+                                {session.kind === "pppoe" ? "PPPoE Subscriber" : session.phone}
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+
+                        <td className="py-3 pr-4">
+                          <div className="flex items-center gap-1.5">
+                            <Badge
+                              variant="outline"
+                              className="text-[11px] font-semibold gap-1 bg-background/80 border-border"
+                            >
+                              <Server className="size-3 text-primary shrink-0" />
+                              <span className="truncate max-w-[130px]">{rName}</span>
+                            </Badge>
+                          </div>
+                        </td>
+
+                        <td className="py-3 pr-4 text-muted-foreground">
+                          <div className="text-xs">
+                            <span className="font-semibold text-foreground">
+                              {session.packages?.name || "Standard"}
+                            </span>
+                            {session.packages?.speed_down_mbps && (
+                              <p className="text-[10px] text-muted-foreground font-mono">
+                                {session.packages.speed_down_mbps}M/{session.packages.speed_up_mbps || session.packages.speed_down_mbps}M
+                              </p>
+                            )}
+                          </div>
+                        </td>
+
+                        <td className="py-3 pr-4 text-xs font-mono">
+                          <div className="space-y-0.5">
+                            <p className="text-foreground font-medium flex items-center gap-1">
+                              <Globe className="size-3 text-muted-foreground shrink-0" />
+                              {ip}
+                            </p>
+                            <p className="text-[10px] text-muted-foreground truncate">
+                              MAC: {mac}
+                            </p>
+                          </div>
+                        </td>
+
+                        <td className="py-3 text-right">
+                          <Badge
+                            variant="secondary"
+                            className="font-mono text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-none font-semibold"
+                          >
+                            <Clock className="mr-1 size-3" />
+                            {formatTimeLeft(session.expires_at)}
+                          </Badge>
+                        </td>
+
+                        <td className="py-3 pr-4 text-right" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-xs gap-1 font-semibold hover:bg-primary/10 hover:text-primary"
+                              onClick={() => setSelectedSession(session)}
+                              title="View full MikroTik active session details"
+                            >
+                              <Info className="size-3.5" /> Details
+                            </Button>
+
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={disconnectingId === session.id}
+                              className="h-7 px-2 text-xs gap-1 text-destructive hover:bg-destructive/10 hover:text-destructive font-semibold"
+                              onClick={() => handleDisconnect(session)}
+                              title="Kick / Disconnect active session on MikroTik"
+                            >
+                              {disconnectingId === session.id ? (
+                                <Loader2 className="size-3.5 animate-spin" />
+                              ) : (
+                                <LogOut className="size-3.5" />
+                              )}
+                              Disconnect
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -907,6 +1089,151 @@ function Dashboard() {
           )}
         </Panel>
       </div>
+
+      {/* MikroTik Live Active Session Details Modal */}
+      <Dialog open={Boolean(selectedSession)} onOpenChange={(open) => !open && setSelectedSession(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <Server className="size-5 text-primary" /> MikroTik Live Active Session Details
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Live telemetry and connection status for this active subscriber on your MikroTik router.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedSession && (
+            <div className="space-y-4 pt-2">
+              <div className="rounded-xl border bg-card p-3.5 space-y-3">
+                <div className="flex items-center justify-between gap-2 border-b pb-2.5">
+                  <div>
+                    <p className="text-sm font-bold text-foreground">
+                      {selectedSession.full_name || selectedSession.phone || selectedSession.username}
+                    </p>
+                    <p className="text-xs text-muted-foreground font-mono">
+                      Phone / ID: {selectedSession.phone}
+                    </p>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-xs font-semibold"
+                  >
+                    Active Connection
+                  </Badge>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5 text-xs">
+                  <div className="rounded-lg bg-muted/40 p-2.5 space-y-1">
+                    <span className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1">
+                      <Server className="size-3 text-primary" /> Connected Router
+                    </span>
+                    <p className="font-semibold text-foreground truncate">
+                      {selectedSession.router_name || selectedSession.routers?.name || "Main MikroTik"}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground truncate">
+                      {selectedSession.router_location || selectedSession.routers?.location || "Primary Location"}
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg bg-muted/40 p-2.5 space-y-1">
+                    <span className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1">
+                      <ShoppingBag className="size-3 text-primary" /> Package / Plan
+                    </span>
+                    <p className="font-semibold text-foreground truncate">
+                      {selectedSession.packages?.name || "Standard Plan"}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground font-mono">
+                      {selectedSession.packages?.speed_down_mbps ? `${selectedSession.packages.speed_down_mbps} Mbps Limit` : "Standard Bandwidth"}
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg bg-muted/40 p-2.5 space-y-1">
+                    <span className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1">
+                      <Globe className="size-3 text-sky-500" /> Assigned IP
+                    </span>
+                    <p className="font-mono font-bold text-foreground">
+                      {selectedSession.ip_address || "Dynamic Lease"}
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg bg-muted/40 p-2.5 space-y-1">
+                    <span className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1">
+                      <Laptop className="size-3 text-amber-500" /> Device MAC
+                    </span>
+                    <p className="font-mono font-bold text-foreground text-[11px] truncate">
+                      {selectedSession.mac_address || (selectedSession.phone?.startsWith("DEVICE-") ? selectedSession.phone.replace("DEVICE-", "") : "Unknown MAC")}
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg bg-muted/40 p-2.5 space-y-1">
+                    <span className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1">
+                      <Clock className="size-3 text-emerald-500" /> Time Remaining
+                    </span>
+                    <p className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                      {formatTimeLeft(selectedSession.expires_at)}
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg bg-muted/40 p-2.5 space-y-1">
+                    <span className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1">
+                      <Radio className="size-3 text-purple-500" /> Session Type
+                    </span>
+                    <p className="font-bold text-foreground capitalize">
+                      {selectedSession.kind || "Hotspot"}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Traffic Usage */}
+                {(selectedSession.bytes_in || selectedSession.bytes_out) && (
+                  <div className="rounded-lg border bg-background/60 p-2.5 flex items-center justify-between text-xs">
+                    <span className="font-medium text-muted-foreground">Session Traffic:</span>
+                    <div className="flex items-center gap-3 font-mono">
+                      <span className="text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                        <ArrowDownRight className="size-3" /> {formatBytes(selectedSession.bytes_out)} ↓
+                      </span>
+                      <span className="text-sky-600 dark:text-sky-400 font-semibold flex items-center gap-1">
+                        <ArrowUpRight className="size-3" /> {formatBytes(selectedSession.bytes_in)} ↑
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between gap-2">
+                {selectedSession.mac_address && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs h-8 gap-1.5"
+                    onClick={() => {
+                      navigator.clipboard.writeText(selectedSession.mac_address!);
+                      toast.success("MAC address copied to clipboard!");
+                    }}
+                  >
+                    <Copy className="size-3.5" /> Copy MAC
+                  </Button>
+                )}
+
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="ml-auto text-xs h-8 gap-1.5 font-bold"
+                  disabled={disconnectingId === selectedSession.id}
+                  onClick={() => handleDisconnect(selectedSession)}
+                >
+                  {disconnectingId === selectedSession.id ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <LogOut className="size-3.5" />
+                  )}
+                  Kick / Disconnect from MikroTik
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </AppShell>
   );
 }
