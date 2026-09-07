@@ -95,12 +95,7 @@ export const Route = createFileRoute("/api/public/mpesa/callback")({
           );
         }
 
-        if (
-          success &&
-          txn.kind === "customer_payment" &&
-          txn.package_id &&
-          wonActivationRace
-        ) {
+        if (success && txn.kind === "customer_payment" && txn.package_id && wonActivationRace) {
           try {
             const { activateCustomerPackage } = await import("@/lib/payments.functions");
             await activateCustomerPackage(

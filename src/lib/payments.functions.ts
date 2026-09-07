@@ -854,44 +854,68 @@ export async function activateCustomerPackage(
   }
 
   if (!existingCustomer) {
-    const { data } = await db
-      .from("customers")
-      .select("id, username, password, kind, router_id, expires_at")
-      .eq("tenant_id", txn.tenant_id)
-      .eq("phone", txn.phone)
-      .maybeSingle();
-    existingCustomer = data;
+    // For PPPoE packages, prioritize matching existing PPPoE customer by phone
+    if (pkg.kind === "pppoe") {
+      const { data } = await db
+        .from("customers")
+        .select("id, username, password, kind, router_id, expires_at")
+        .eq("tenant_id", txn.tenant_id)
+        .eq("kind", "pppoe")
+        .eq("phone", txn.phone)
+        .maybeSingle();
+      existingCustomer = data;
+    }
+
+    if (!existingCustomer) {
+      const { data } = await db
+        .from("customers")
+        .select("id, username, password, kind, router_id, expires_at")
+        .eq("tenant_id", txn.tenant_id)
+        .eq("phone", txn.phone)
+        .maybeSingle();
+      existingCustomer = data;
+    }
   }
 
   const requestedUsername = rawObj.username ? String(rawObj.username).trim() : null;
 
   if (pkg.kind === "pppoe") {
-    if (requestedUsername) {
-      code = requestedUsername;
-    } else if (existingCustomer && existingCustomer.kind === "pppoe" && existingCustomer.username) {
+    if (existingCustomer && existingCustomer.username) {
+      // PRESERVE original PPPoE username & password! Never overwrite or replace with voucher code / phone number.
       code = existingCustomer.username;
+      pppPassword = existingCustomer.password || existingCustomer.username;
+    } else if (requestedUsername && !isValidKePhone(requestedUsername)) {
+      // New PPPoE subscriber with custom username requested (e.g. "house12")
+      code = requestedUsername;
+      pppPassword = pppPassword || generateVoucherCode(6);
     } else {
+      // New PPPoE subscriber without explicit username
       code = `pppoe_${txn.phone.slice(-6)}`;
+      pppPassword = generateVoucherCode(6);
     }
-    pppPassword = existingCustomer?.password || code;
   } else if (existingCustomer && existingCustomer.username) {
     code = existingCustomer.username;
     pppPassword = existingCustomer.password || existingCustomer.username;
   }
 
+  // Calculate extended expiry date
+  let calculatedExpiry = expiresAt; // default: now + duration_hours
   if (existingCustomer) {
     customerId = existingCustomer.id;
     if (existingCustomer.router_id) {
       routerId = existingCustomer.router_id;
     }
 
-    let newExpiry = expiresAt;
     if (existingCustomer.expires_at) {
       const currentExpiryMs = new Date(existingCustomer.expires_at).getTime();
       const nowMs = Date.now();
       if (currentExpiryMs > nowMs) {
-        newExpiry = new Date(currentExpiryMs + hours * 3600 * 1000).toISOString();
+        // Unexpired active account: Extend expiry starting from current expiration date!
+        calculatedExpiry = new Date(currentExpiryMs + hours * 3600 * 1000).toISOString();
         totalUptimeHours = (currentExpiryMs - nowMs) / 3600_000 + hours;
+      } else {
+        // Expired account: Extend starting from NOW
+        calculatedExpiry = new Date(nowMs + hours * 3600 * 1000).toISOString();
       }
     }
 
@@ -901,10 +925,10 @@ export async function activateCustomerPackage(
         package_id: txn.package_id,
         router_id: routerId,
         kind: pkg.kind === "pppoe" ? "pppoe" : existingCustomer.kind,
-        username: code,
-        password: pppPassword,
+        username: code, // Original preserved PPPoE username
+        password: pppPassword, // Original preserved PPPoE password
         mac_address: macAddress || undefined,
-        expires_at: newExpiry,
+        expires_at: calculatedExpiry,
         status: "active",
       })
       .eq("id", customerId);
@@ -921,7 +945,7 @@ export async function activateCustomerPackage(
         username: code,
         password: pppPassword,
         mac_address: macAddress,
-        expires_at: expiresAt,
+        expires_at: calculatedExpiry,
         status: "active",
       })
       .select("id")
@@ -929,18 +953,20 @@ export async function activateCustomerPackage(
     customerId = newCustomer?.id ?? null;
   }
 
-  // 3. Issue Voucher
+  // 3. Issue Voucher (Access Code / Voucher code used purely for transaction tracking for PPPoE)
+  const voucherTrackingCode = pkg.kind === "pppoe" ? `VCH-${generateVoucherCode(6)}` : code;
+
   const { data: voucher, error: voucherErr } = await db
     .from("vouchers")
     .insert({
       tenant_id: txn.tenant_id,
       package_id: txn.package_id,
       router_id: routerId,
-      code,
+      code: voucherTrackingCode,
       status: "active",
       phone: txn.phone,
       activated_at: new Date().toISOString(),
-      expires_at: expiresAt,
+      expires_at: calculatedExpiry,
     })
     .select("id, code")
     .maybeSingle();
@@ -984,18 +1010,18 @@ export async function activateCustomerPackage(
 
     for (const rId of targetRouterIds) {
       console.log(
-        `[Activation] Enqueuing provisioning command for router: ${rId}, code: ${voucher.code}, MAC: ${macAddress}, IP: ${ipAddress}`,
+        `[Activation] Enqueuing provisioning command for router: ${rId}, PPPoE Username: ${code}, MAC: ${macAddress}, IP: ${ipAddress}`,
       );
       try {
         if (pkg.kind === "pppoe") {
           await routerManager.provisionUser({
             tenantId: txn.tenant_id,
             routerId: rId,
-            username: code,
-            password: pppPassword,
+            username: code, // MUST BE the preserved PPPoE secret username!
+            password: pppPassword, // MUST BE the preserved PPPoE secret password!
             kind: "pppoe",
             profile: pkg.name ?? "emmatech-pppoe-prof",
-            comment: `M-Pesa ${txn.phone} - Renewal`,
+            comment: `M-Pesa ${txn.phone} - Renewal (${pkg.name})`,
           });
         } else {
           await routerManager.provisionUser({
