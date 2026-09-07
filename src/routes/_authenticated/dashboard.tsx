@@ -338,10 +338,10 @@ function Dashboard() {
   const online = routers.filter((r) => r.status === "online").length;
   const offline = routers.filter((r) => r.status === "offline").length;
 
-  const stats = board.data?.stats;
-  const totalOnlineUsers = stats?.hotspotOnlineNow ?? 0;
+  const totalOnlineUsers = routers.reduce((acc, r) => acc + (r.active_hotspot_users ?? 0), 0);
 
   const mpesaReady = Boolean(tenant.mpesa_shortcode);
+  const stats = board.data?.stats;
   const n = (v: number | undefined) => (v === undefined ? "—" : v.toLocaleString());
   const money = (v: number | undefined) =>
     v === undefined ? "—" : `${currency} ${v.toLocaleString()}`;
@@ -814,14 +814,11 @@ function Dashboard() {
         </Panel>
 
         <Panel
-          title="Active Hotspot Subscribers"
+          title="Recent Active Sessions"
           icon={Users}
           right={
-            <Link
-              to="/customers"
-              className="text-xs text-primary font-semibold hover:underline flex items-center gap-1"
-            >
-              View All Subscribers ({stats?.totalCustomers ?? activeSessions.length})
+            <Link to="/customers" className="text-xs text-tile-foreground hover:underline">
+              View All Customers
             </Link>
           }
         >
@@ -832,72 +829,35 @@ function Dashboard() {
             </div>
           ) : activeSessions.length === 0 ? (
             <p className="py-6 text-center text-sm text-muted-foreground">
-              No active subscribers found.
+              No active sessions found.
             </p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b text-left text-muted-foreground text-xs">
-                    <th className="pb-2 font-medium">Customer / User</th>
-                    <th className="pb-2 font-medium">Router</th>
+                  <tr className="border-b text-left text-muted-foreground">
+                    <th className="pb-2 font-medium">Customer</th>
                     <th className="pb-2 font-medium">Package</th>
-                    <th className="pb-2 text-right font-medium">Status & Time Left</th>
+                    <th className="pb-2 text-right font-medium">Time Left</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {activeSessions.map((session: any, idx: number) => {
-                    const isLive = Boolean(session.is_live_hotspot);
-                    return (
-                      <tr key={session.id || `session-${idx}`} className="hover:bg-muted/30">
-                        <td className="py-2.5">
-                          <div className="flex items-center gap-2">
-                            {isLive ? (
-                              <span className="relative flex h-2 w-2">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                              </span>
-                            ) : (
-                              <span className="h-2 w-2 rounded-full bg-muted-foreground/40" />
-                            )}
-                            <div>
-                              <p className="font-medium text-foreground text-xs">
-                                {session.full_name || session.username || "Hotspot Guest"}
-                              </p>
-                              <p className="text-[11px] text-muted-foreground font-mono">
-                                {session.phone}
-                              </p>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="py-2.5">
-                          <Badge variant="outline" className="text-[10px] font-medium py-0 h-5">
-                            {session.routers?.name || "All Routers"}
-                          </Badge>
-                        </td>
-                        <td className="py-2.5 text-xs text-muted-foreground">
-                          {session.packages?.name || "Standard Hotspot"}
-                        </td>
-                        <td className="py-2.5 text-right">
-                          {isLive ? (
-                            <Badge
-                              variant="secondary"
-                              className="font-mono text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
-                            >
-                              🟢 Connected · {formatTimeLeft(session.expires_at)}
-                            </Badge>
-                          ) : (
-                            <Badge
-                              variant="outline"
-                              className="font-mono text-[10px] text-muted-foreground border-border/80"
-                            >
-                              Active Plan · {formatTimeLeft(session.expires_at)}
-                            </Badge>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {activeSessions.map((session, idx) => (
+                    <tr key={session.id || `session-${idx}`} className="hover:bg-muted/30">
+                      <td className="py-2.5 font-medium">{session.phone}</td>
+                      <td className="py-2.5 text-muted-foreground">
+                        {session.packages?.name || "Standard"}
+                      </td>
+                      <td className="py-2.5 text-right">
+                        <Badge
+                          variant="secondary"
+                          className="font-mono text-[10px] bg-success/10 text-success border-none"
+                        >
+                          {formatTimeLeft(session.expires_at)}
+                        </Badge>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>

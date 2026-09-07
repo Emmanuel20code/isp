@@ -672,30 +672,19 @@ add name="expired_pppoe_pool" ranges=10.10.20.10-10.10.20.254
 `;
 
     case "heartbeat":
-      return `# WiFiBilling Heartbeat - Real-time Hotspot Active Reporting
+      return `# WiFiBilling Heartbeat - Active User Reporting
 # Router ID: ${params.routerId}
+# Consolidated heartbeat script (Telemetry + Users)
 :do {
   /system script remove [find name="heartbeat-telemetry"];
 } on-error={};
-/system script add name="heartbeat-telemetry" policy=read,write,test,ftp source=":do {
-  :local hsList \\"\\";
-  :foreach a in=[/ip hotspot active find] do={
-    :local u [/ip hotspot active get \\$a user];
-    :local m [/ip hotspot active get \\$a mac-address];
-    :local ip [/ip hotspot active get \\$a address];
-    :local ut [/ip hotspot active get \\$a uptime];
-    :local bi [/ip hotspot active get \\$a bytes-in];
-    :local bo [/ip hotspot active get \\$a bytes-out];
-    :set hsList (\\$hsList . \\$u . \\\",\\\" . \\$m . \\\",\\\" . \\$ip . \\\",\\\" . \\$ut . \\\",\\\" . \\$bi . \\\",\\\" . \\$bo . \\\";\\\");
-  };
-  /tool fetch mode=${fetchMode} http-method=post url=\\"${cleanBase}/api/public/mikrotik/heartbeat?token=${params.onboardToken}\\" http-data=(\\"identity=\\" . [/system identity get name] . \\"&ros_version=\\" . [/system package update get installed-version] . \\"&uptime=\\" . [/system resource get uptime] . \\"&cpu_load=\\" . [/system resource get cpu-load] . \\"&active_hotspot_users=\\" . [:len [/ip hotspot active find]] . \\"&active_pppoe_users=\\" . [:len [/ppp active find]] . \\"&hs_active=\\" . \\$hsList) check-certificate=no output=none;
-} on-error={}"
+/system script add name="heartbeat-telemetry" policy=read,write,test,ftp source=":do { /tool fetch mode=${fetchMode} http-method=post url=\\"${cleanBase}/api/public/mikrotik/heartbeat?token=${params.onboardToken}\\" http-data=(\\"identity=\\" . [/system identity get name] . \\"&ros_version=\\" . [/system package update get installed-version] . \\"&uptime=\\" . [/system resource get uptime] . \\"&cpu_load=\\" . [/system resource get cpu-load] . \\"&active_hotspot_users=\\" . [:len [/ip hotspot active find]] . \\"&active_pppoe_users=\\" . [:len [/ppp active find]]) check-certificate=no output=none; } on-error={}"
 # Heartbeat scheduler - every 30 seconds
 :do {
   /system scheduler remove [find name="heartbeat-telemetry"];
 } on-error={};
 /system scheduler add name="heartbeat-telemetry" interval=00:00:30 on-event="/system script run heartbeat-telemetry" policy=read,write,test,ftp
-:log info "Heartbeat hotspot active reporting script installed (router_id=${params.routerId}, every 30s)"
+:log info "Heartbeat telemetry script installed (router_id=${params.routerId}, every 30s)"
 `;
 
     case "syncfull":

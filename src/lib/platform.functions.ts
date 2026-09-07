@@ -374,7 +374,7 @@ const deleteTenantSchema = z.object({
 
 export const deleteTenantByAdmin = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) => deleteTenantSchema.parse(input))
+  .validator((input: unknown) => deleteTenantSchema.parse(input))
   .handler(async ({ data, context }) => {
     await assertSuperAdmin(context.supabase, context.userId, context.claims);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
