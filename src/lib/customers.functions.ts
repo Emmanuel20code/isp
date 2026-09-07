@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 import { generateVoucherCode, normalizeKePhone } from "@/lib/billing-helpers";
+import { computeRouterStatus } from "@/lib/mikrotik";
 
 async function tenantOf(supabase: Record<string, unknown>, userId: string): Promise<string | null> {
   const { data } = await supabase
@@ -127,9 +128,13 @@ export const listCustomers = createServerFn({ method: "GET" })
         .limit(20),
     ]);
 
-    const routerMap = new Map((routers ?? []).map((r) => [r.id, r]));
+    const computedRouters = (routers ?? []).map((r) => ({
+      ...r,
+      status: computeRouterStatus(r),
+    }));
+    const routerMap = new Map(computedRouters.map((r) => [r.id, r]));
 
-    // Extract live active hosts from recent router heartbeats
+    // Extract live active hosts ONLY from recent router heartbeats on actively ONLINE routers (< 90 seconds)
     const activeHostMap = new Map<
       string,
       {
@@ -140,15 +145,45 @@ export const listCustomers = createServerFn({ method: "GET" })
         bytes_out?: number;
         hostname?: string;
         last_seen?: string;
+        router_id?: string;
         router_name?: string;
+        user?: string;
       }
     >();
+
+    const rawActiveSessionsList: Array<{
+      user?: string;
+      mac?: string;
+      ip?: string;
+      uptime?: string;
+      bytes_in?: number;
+      bytes_out?: number;
+      hostname?: string;
+      last_seen?: string;
+      router_id?: string;
+      router_name?: string;
+    }> = [];
+
+    const nowMs = Date.now();
 
     for (const hb of heartbeats ?? []) {
       const raw = hb.raw as Record<string, unknown> | null;
       if (!raw) continue;
       const targetRouter = routerMap.get(hb.router_id);
-      const rName = targetRouter?.name || "Router";
+      if (!targetRouter) continue;
+
+      // CRITICAL CHECK: Telemetry is only valid if the router is actively ONLINE (< 90 seconds)
+      if (targetRouter.status !== "online") {
+        continue;
+      }
+
+      const hbTimestamp = hb.created_at || (hb as any).recorded_at || targetRouter.last_seen_at;
+      const hbTime = hbTimestamp ? new Date(hbTimestamp).getTime() : NaN;
+      if (isNaN(hbTime) || (nowMs - hbTime) / 1000 > 90) {
+        continue; // Heartbeat is stale (older than 90 seconds)
+      }
+
+      const rName = targetRouter.name || "Router";
 
       const hostList: any[] = Array.isArray(raw.hosts)
         ? raw.hosts
@@ -161,7 +196,7 @@ export const listCustomers = createServerFn({ method: "GET" })
           .toString()
           .trim()
           .toLowerCase();
-        const rawIp = (h.ip || h.address || "").toString();
+        const rawIp = (h.ip || h.address || "").toString().trim();
         const rawUser = (h.user || h.username || "").toString().trim();
         const telemetry = {
           ip: rawIp || undefined,
@@ -171,16 +206,29 @@ export const listCustomers = createServerFn({ method: "GET" })
           bytes_out: Number(h.bytes_out || h["bytes-out"]) || undefined,
           hostname: h.hostname || h["host-name"] || undefined,
           last_seen: hb.created_at,
+          router_id: hb.router_id,
           router_name: rName,
+          user: rawUser || undefined,
         };
 
         if (rawMac) activeHostMap.set(`mac:${rawMac.replace(/[:-]/g, "")}`, telemetry);
         if (rawUser) activeHostMap.set(`user:${rawUser.toLowerCase()}`, telemetry);
         if (rawIp) activeHostMap.set(`ip:${rawIp}`, telemetry);
+
+        // Deduplicate in raw list
+        const exists = rawActiveSessionsList.some(
+          (s) =>
+            (rawMac && s.mac === rawMac) ||
+            (rawIp && s.ip === rawIp) ||
+            (rawUser && s.user?.toLowerCase() === rawUser.toLowerCase()),
+        );
+        if (!exists) {
+          rawActiveSessionsList.push(telemetry);
+        }
       }
     }
 
-    let onlineCustomersCount = 0;
+    let onlineHotspotCount = 0;
     let activePlansCount = 0;
     let expiredCount = 0;
     let disabledCount = 0;
@@ -189,15 +237,14 @@ export const listCustomers = createServerFn({ method: "GET" })
     const customers = (rawCustomers ?? []).map((c: any) => {
       const timeInfo = formatRemainingTime(c.expires_at);
       const isStatusActive = c.status === "active";
-      const isOnline = isStatusActive && timeInfo.isOnline;
+      const hasActivePlan = isStatusActive && timeInfo.isOnline;
 
-      if (isOnline) onlineCustomersCount++;
-      if (isStatusActive) activePlansCount++;
+      if (hasActivePlan) activePlansCount++;
       if (c.status === "expired" || (!timeInfo.isOnline && isStatusActive)) expiredCount++;
       if (c.status === "disabled") disabledCount++;
-      if (isOnline && timeInfo.isExpiringSoon) expiringSoonCount++;
+      if (hasActivePlan && timeInfo.isExpiringSoon) expiringSoonCount++;
 
-      // Try matching live telemetry
+      // Match live telemetry from MikroTik router
       const cleanMac = (c.mac_address || "").replace(/[:-]/g, "").toLowerCase();
       const cleanPhone = (c.phone || "").replace(/\D/g, "");
       const cleanUser = (c.username || "").toLowerCase();
@@ -208,9 +255,27 @@ export const listCustomers = createServerFn({ method: "GET" })
         (cleanPhone ? activeHostMap.get(`user:${cleanPhone}`) : null) ||
         null;
 
+      // Crucial fix: Hotspot Online means physically connected & detected on the router!
+      const isHotspotOnline = Boolean(live);
+      if (isHotspotOnline) onlineHotspotCount++;
+
+      let connectionStatus: "hotspot_online" | "idle_subscribed" | "expired" | "disabled" = "idle_subscribed";
+      if (c.status === "disabled") {
+        connectionStatus = "disabled";
+      } else if (isHotspotOnline) {
+        connectionStatus = "hotspot_online";
+      } else if (hasActivePlan) {
+        connectionStatus = "idle_subscribed";
+      } else {
+        connectionStatus = "expired";
+      }
+
       return {
         ...c,
-        is_online: isOnline,
+        is_online: isHotspotOnline,
+        is_hotspot_online: isHotspotOnline,
+        has_active_plan: hasActivePlan,
+        connection_status: connectionStatus,
         time_left_seconds: timeInfo.seconds,
         time_left_formatted: timeInfo.formatted,
         is_expiring_soon: timeInfo.isExpiringSoon,
@@ -218,7 +283,17 @@ export const listCustomers = createServerFn({ method: "GET" })
       };
     });
 
-    // Process online voucher sessions
+    // Customer fast lookup by MAC/User/Phone
+    const custByMac = new Map<string, any>();
+    const custByUser = new Map<string, any>();
+    const custByPhone = new Map<string, any>();
+    for (const c of customers) {
+      if (c.mac_address) custByMac.set(c.mac_address.replace(/[:-]/g, "").toLowerCase(), c);
+      if (c.username) custByUser.set(c.username.toLowerCase(), c);
+      if (c.phone) custByPhone.set(c.phone.replace(/\D/g, ""), c);
+    }
+
+    // Process voucher sessions
     const now = Date.now();
     const onlineVouchers = (rawVouchers ?? [])
       .filter((v: any) => {
@@ -235,9 +310,13 @@ export const listCustomers = createServerFn({ method: "GET" })
           (cleanPhone ? activeHostMap.get(`user:${cleanPhone}`) : null) ||
           null;
 
+        const isHotspotOnline = Boolean(live);
+
         return {
           ...v,
-          is_online: true,
+          is_online: isHotspotOnline,
+          is_hotspot_online: isHotspotOnline,
+          has_active_plan: true,
           time_left_seconds: timeInfo.seconds,
           time_left_formatted: timeInfo.formatted,
           is_expiring_soon: timeInfo.isExpiringSoon,
@@ -245,21 +324,83 @@ export const listCustomers = createServerFn({ method: "GET" })
         };
       });
 
-    const onlineVouchersCount = onlineVouchers.length;
-    const totalOnlineNow = onlineCustomersCount + onlineVouchersCount;
+    const voucherByCode = new Map<string, any>();
+    for (const v of onlineVouchers) {
+      if (v.code) voucherByCode.set(v.code.toLowerCase(), v);
+    }
+
+    // Format bytes utility
+    const formatBytes = (bytes?: number) => {
+      if (!bytes || bytes <= 0) return "0 KB";
+      if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+      if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+      return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+    };
+
+    // Combine into unified Live Hotspot Active Sessions
+    const hotspotActiveSessions = rawActiveSessionsList.map((s, idx) => {
+      const cleanMac = (s.mac || "").replace(/[:-]/g, "").toLowerCase();
+      const cleanUser = (s.user || "").toLowerCase();
+
+      const matchedCustomer =
+        (cleanMac ? custByMac.get(cleanMac) : null) ||
+        (cleanUser ? custByUser.get(cleanUser) : null) ||
+        (cleanUser ? custByPhone.get(cleanUser) : null) ||
+        null;
+
+      const matchedVoucher = (cleanUser ? voucherByCode.get(cleanUser) : null) || null;
+
+      const type: "customer" | "voucher" | "guest" = matchedCustomer
+        ? "customer"
+        : matchedVoucher
+          ? "voucher"
+          : "guest";
+
+      const totalBytes = (s.bytes_in || 0) + (s.bytes_out || 0);
+
+      return {
+        id: `session-${idx}-${s.mac || s.ip || s.user}`,
+        user: s.user || matchedCustomer?.username || matchedCustomer?.phone || matchedVoucher?.code || "Hotspot User",
+        mac: s.mac || matchedCustomer?.mac_address || "—",
+        ip: s.ip || "—",
+        hostname: s.hostname || "—",
+        uptime: s.uptime || "Active",
+        bytes_in: s.bytes_in || 0,
+        bytes_out: s.bytes_out || 0,
+        bytes_formatted: formatBytes(totalBytes),
+        router_id: s.router_id || matchedCustomer?.router_id || null,
+        router_name: s.router_name || matchedCustomer?.routers?.name || "MikroTik Hotspot",
+        type,
+        matched_customer_id: matchedCustomer?.id || null,
+        matched_customer_name: matchedCustomer?.full_name || null,
+        matched_customer_phone: matchedCustomer?.phone || null,
+        matched_voucher_id: matchedVoucher?.id || null,
+        matched_voucher_code: matchedVoucher?.code || null,
+        package_name: matchedCustomer?.packages?.name || matchedVoucher?.packages?.name || "Hotspot Plan",
+        expires_at: matchedCustomer?.expires_at || matchedVoucher?.expires_at || null,
+        time_left_formatted: matchedCustomer?.time_left_formatted || matchedVoucher?.time_left_formatted || "Active Session",
+        is_expiring_soon: matchedCustomer?.is_expiring_soon || matchedVoucher?.is_expiring_soon || false,
+      };
+    });
+
+    // Strictly reflect verified live sessions from currently online MikroTik routers
+    const totalOnlineHotspotNow = hotspotActiveSessions.length;
 
     return {
       tenantId,
       customers,
       packages: packages ?? [],
-      routers: routers ?? [],
+      routers: computedRouters,
       onlineVouchers,
+      hotspotActiveSessions,
       stats: {
         totalCustomers: customers.length,
-        onlineCustomersCount,
-        onlineVouchersCount,
-        totalOnlineNow,
+        hotspotOnlineNow: totalOnlineHotspotNow,
+        onlineCustomersCount: onlineHotspotCount,
+        onlineVouchersCount: onlineVouchers.filter((v) => v.is_hotspot_online).length,
+        totalOnlineNow: totalOnlineHotspotNow,
         activePlansCount,
+        activeVouchersCount: onlineVouchers.length,
         expiredCount,
         disabledCount,
         expiringSoonCount,
@@ -473,6 +614,54 @@ export const disconnectCustomer = createServerFn({ method: "POST" })
           },
         },
       ]);
+    }
+
+    return { ok: true };
+  });
+
+export const disconnectHotspotSession = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z
+      .object({
+        routerId: z.string().uuid().optional().nullable(),
+        username: z.string().optional().nullable(),
+        mac: z.string().optional().nullable(),
+        customerId: z.string().uuid().optional().nullable(),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const tenantId = await requireTenant(supabase, userId);
+
+    const { enqueueRouterCommands } = await import("@/lib/agent-commands.server");
+
+    // If routerId is provided, enqueue specifically for that router
+    // Otherwise enqueue for all online tenant routers
+    let targetRouterIds: string[] = [];
+    if (data.routerId) {
+      targetRouterIds = [data.routerId];
+    } else {
+      const { data: routers } = await supabase
+        .from("routers")
+        .select("id")
+        .eq("tenant_id", tenantId);
+      targetRouterIds = (routers ?? []).map((r) => r.id);
+    }
+
+    const commands = targetRouterIds.map((rId) => ({
+      tenantId,
+      routerId: rId,
+      action: "hotspot.disconnect",
+      payload: {
+        username: data.username || undefined,
+        mac: data.mac || undefined,
+      },
+    }));
+
+    if (commands.length > 0) {
+      await enqueueRouterCommands(commands);
     }
 
     return { ok: true };

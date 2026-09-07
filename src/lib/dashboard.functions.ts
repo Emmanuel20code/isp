@@ -181,6 +181,62 @@ export const getDashboard = createServerFn({ method: "GET" })
       (routers ?? []) as any,
     );
 
+    // Compute live hotspot online users strictly from ONLINE routers (<90s heartbeats)
+    const routerMap = new Map((routers ?? []).map((r) => [r.id, r]));
+    const onlineRouterIds = (routers ?? [])
+      .filter((r) => computeRouterStatus(r) === "online")
+      .map((r) => r.id);
+
+    let hotspotOnlineNow = 0;
+    const activeMacs = new Set<string>();
+    const activeUsers = new Set<string>();
+
+    if (onlineRouterIds.length > 0) {
+      const { data: heartbeats } = await supabase
+        .from("router_heartbeats")
+        .select("raw, router_id, recorded_at, created_at")
+        .in("router_id", onlineRouterIds)
+        .order("created_at", { ascending: false });
+
+      const latestByRouter = new Map<string, any>();
+      const nowMs = Date.now();
+
+      for (const hb of heartbeats ?? []) {
+        if (!latestByRouter.has(hb.router_id)) {
+          const hbTimestamp = hb.created_at || hb.recorded_at;
+          const hbTime = hbTimestamp ? new Date(hbTimestamp).getTime() : NaN;
+          // Only accept fresh heartbeats from the last 90 seconds
+          if (!isNaN(hbTime) && (nowMs - hbTime) / 1000 <= 90) {
+            latestByRouter.set(hb.router_id, hb);
+          }
+        }
+      }
+
+      for (const hb of latestByRouter.values()) {
+        const hosts = (hb.raw as any)?.hosts;
+        if (Array.isArray(hosts)) {
+          for (const h of hosts) {
+            if (h.mac) activeMacs.add(h.mac.toLowerCase());
+            if (h.user) activeUsers.add(h.user.toLowerCase());
+          }
+        }
+      }
+      hotspotOnlineNow = activeMacs.size > 0 ? activeMacs.size : activeUsers.size;
+    }
+
+    const mappedActiveSessions = (activeSessions ?? []).map((s: any) => {
+      const cleanMac = (s.mac_address || "").toLowerCase();
+      const cleanUser = (s.username || "").toLowerCase();
+      const isLive =
+        (cleanMac && activeMacs.has(cleanMac)) ||
+        (cleanUser && activeUsers.has(cleanUser));
+
+      return {
+        ...s,
+        is_live_hotspot: Boolean(isLive),
+      };
+    });
+
     const mappedRouters = (routers ?? []).map((r) => {
       const rev = revenueMetrics.routers.find((ro) => ro.routerId === r.id);
       return {
@@ -205,11 +261,12 @@ export const getDashboard = createServerFn({ method: "GET" })
       tenantId,
       routers: mappedRouters,
       packages: packages ?? [],
-      activeSessions: activeSessions ?? [],
+      activeSessions: mappedActiveSessions,
       revenueMetrics,
       stats: {
         incomeToday,
         incomeMonth,
+        hotspotOnlineNow,
         activeHotspot: activeHotspot ?? 0,
         expiredHotspot: expiredHotspot ?? 0,
         activePPPoE: activePPPoE ?? 0,

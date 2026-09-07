@@ -10,6 +10,7 @@ import {
   deleteCustomers,
   renewCustomer,
   disconnectCustomer,
+  disconnectHotspotSession,
 } from "@/lib/customers.functions";
 import { getMyContext } from "@/lib/tenancy.functions";
 import { formatPackageDuration } from "@/lib/billing-helpers";
@@ -85,6 +86,7 @@ export function CustomersPage() {
   const bulkDeleteFn = useServerFn(deleteCustomers);
   const renewFn = useServerFn(renewCustomer);
   const disconnectFn = useServerFn(disconnectCustomer);
+  const disconnectHotspotFn = useServerFn(disconnectHotspotSession);
 
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [copiedText, setCopiedText] = useState<string | null>(null);
@@ -96,7 +98,7 @@ export function CustomersPage() {
       const f = p.get("filter");
       if (f) return f;
     }
-    return "online";
+    return "all";
   });
 
   const [searchTerm, setSearchTerm] = useState("");
@@ -111,9 +113,19 @@ export function CustomersPage() {
   const [renewSelectedPkgId, setRenewSelectedPkgId] = useState("");
   const [renewCustomHours, setRenewCustomHours] = useState<number | "">("");
 
-  // Disconnect Confirmation State
+  // Disconnect Customer Modal State
   const [disconnectModalCustomer, setDisconnectModalCustomer] = useState<any | null>(null);
   const [disconnectExpireCheck, setDisconnectExpireCheck] = useState(false);
+
+  // Disconnect Hotspot Session Modal State
+  const [disconnectHotspotTarget, setDisconnectHotspotTarget] = useState<{
+    routerId?: string | null;
+    routerName?: string;
+    username?: string | null;
+    mac?: string | null;
+    ip?: string | null;
+    displayName: string;
+  } | null>(null);
 
   // Add Customer Modal State
   const [isAddCustomerOpen, setIsAddCustomerOpen] = useState(false);
@@ -207,6 +219,17 @@ export function CustomersPage() {
     onError: (e) => toast.error(e instanceof Error ? e.message : "Could not disconnect customer"),
   });
 
+  const disconnectHotspotMutation = useMutation({
+    mutationFn: (payload: { routerId?: string | null; username?: string | null; mac?: string | null }) =>
+      disconnectHotspotFn({ data: payload }),
+    onSuccess: async () => {
+      toast.success("Hotspot session kick command dispatched to MikroTik router");
+      setDisconnectHotspotTarget(null);
+      await qc.invalidateQueries({ queryKey: ["customers"] });
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Could not kick hotspot session"),
+  });
+
   const handleCopy = (text: string, label: string) => {
     if (typeof navigator !== "undefined" && navigator.clipboard) {
       navigator.clipboard.writeText(text);
@@ -221,11 +244,42 @@ export function CustomersPage() {
     onlineCustomersCount: 0,
     onlineVouchersCount: 0,
     totalOnlineNow: 0,
+    hotspotOnlineNow: 0,
     activePlansCount: 0,
     expiredCount: 0,
     disabledCount: 0,
     expiringSoonCount: 0,
   };
+
+  // Filter live active hotspot sessions
+  const filteredHotspotSessions = useMemo(() => {
+    let list = data?.hotspotActiveSessions ?? [];
+    if (routerFilter !== "all") {
+      list = list.filter((s: any) => s.router_id === routerFilter);
+    }
+    if (searchTerm.trim()) {
+      const q = searchTerm.toLowerCase().trim();
+      list = list.filter((s: any) => {
+        const user = (s.user || "").toLowerCase();
+        const mac = (s.mac || "").toLowerCase();
+        const ip = (s.ip || "").toLowerCase();
+        const cName = (s.matched_customer_name || "").toLowerCase();
+        const cPhone = (s.matched_customer_phone || "").toLowerCase();
+        const vCode = (s.matched_voucher_code || "").toLowerCase();
+        const rName = (s.router_name || "").toLowerCase();
+        return (
+          user.includes(q) ||
+          mac.includes(q) ||
+          ip.includes(q) ||
+          cName.includes(q) ||
+          cPhone.includes(q) ||
+          vCode.includes(q) ||
+          rName.includes(q)
+        );
+      });
+    }
+    return list;
+  }, [data?.hotspotActiveSessions, routerFilter, searchTerm]);
 
   // Filter and sort customers
   const filteredCustomers = useMemo(() => {
@@ -394,14 +448,16 @@ export function CustomersPage() {
             <div>
               <p className="text-xs font-medium text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5">
                 <span className="size-2 rounded-full bg-emerald-500 animate-ping inline-block" />
-                🟢 Currently Online Now
+                🟢 Live MikroTik Hotspot
               </p>
               <div className="mt-1 flex items-baseline gap-2">
                 <span className="text-2xl font-black tracking-tight text-emerald-800 dark:text-emerald-200">
                   {isPending ? "..." : stats.totalOnlineNow}
                 </span>
                 <span className="text-[11px] text-muted-foreground">
-                  ({stats.onlineCustomersCount} subs + {stats.onlineVouchersCount} vouchers)
+                  {stats.totalOnlineNow === 0
+                    ? "(no live hosts)"
+                    : `(${stats.onlineCustomersCount} subs + ${stats.onlineVouchersCount} vouchers)`}
                 </span>
               </div>
             </div>
@@ -420,7 +476,7 @@ export function CustomersPage() {
         >
           <CardContent className="p-4 flex items-center justify-between">
             <div>
-              <p className="text-xs font-medium text-muted-foreground">Hotspot Subscribers</p>
+              <p className="text-xs font-medium text-muted-foreground">Subscribers Registry</p>
               <div className="mt-1 flex items-baseline gap-2">
                 <span className="text-2xl font-bold tracking-tight text-foreground">
                   {isPending ? "..." : stats.totalCustomers}
@@ -454,7 +510,7 @@ export function CustomersPage() {
                 <span className="text-2xl font-bold tracking-tight text-amber-800 dark:text-amber-200">
                   {isPending ? "..." : stats.onlineVouchersCount}
                 </span>
-                <span className="text-[11px] text-muted-foreground">live guest sessions</span>
+                <span className="text-[11px] text-muted-foreground">live guest devices</span>
               </div>
             </div>
             <div className="rounded-xl bg-amber-500/20 p-2.5 text-amber-600 dark:text-amber-400">
@@ -496,18 +552,6 @@ export function CustomersPage() {
         {/* Navigation Filter Tabs */}
         <div className="flex flex-wrap items-center gap-1.5 border-b pb-2">
           <Button
-            variant={activeTab === "online" ? "default" : "ghost"}
-            size="sm"
-            onClick={() => setActiveTab("online")}
-            className={`h-8 gap-1.5 text-xs font-semibold rounded-full px-3 ${
-              activeTab === "online" ? "bg-emerald-600 hover:bg-emerald-700 text-white" : ""
-            }`}
-          >
-            <span className="size-2 rounded-full bg-emerald-400 inline-block animate-pulse" />
-            🟢 Online Now ({stats.onlineCustomersCount})
-          </Button>
-
-          <Button
             variant={activeTab === "all" ? "default" : "ghost"}
             size="sm"
             onClick={() => setActiveTab("all")}
@@ -526,6 +570,18 @@ export function CustomersPage() {
           </Button>
 
           <Button
+            variant={activeTab === "online" ? "default" : "ghost"}
+            size="sm"
+            onClick={() => setActiveTab("online")}
+            className={`h-8 gap-1.5 text-xs font-semibold rounded-full px-3 ${
+              activeTab === "online" ? "bg-emerald-600 hover:bg-emerald-700 text-white" : ""
+            }`}
+          >
+            <span className="size-2 rounded-full bg-emerald-400 inline-block animate-pulse" />
+            🟢 Live Hotspot ({stats.totalOnlineNow})
+          </Button>
+
+          <Button
             variant={activeTab === "vouchers_online" ? "default" : "ghost"}
             size="sm"
             onClick={() => setActiveTab("vouchers_online")}
@@ -533,7 +589,7 @@ export function CustomersPage() {
               activeTab === "vouchers_online" ? "bg-amber-600 hover:bg-amber-700 text-white font-semibold" : ""
             }`}
           >
-            🎟️ Voucher Guests Online ({stats.onlineVouchersCount})
+            🎟️ Live Vouchers ({stats.onlineVouchersCount})
           </Button>
 
           <Button
@@ -634,8 +690,252 @@ export function CustomersPage() {
           )}
         </div>
 
-        {/* Content View: Voucher Guests Online */}
-        {activeTab === "vouchers_online" ? (
+        {/* Content View: Dedicated Hotspot Online Live Sessions */}
+        {activeTab === "online" ? (
+          <div className="space-y-3">
+            <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-3 text-xs text-emerald-800 dark:text-emerald-300 flex flex-wrap items-center justify-between gap-2">
+              <span className="flex items-center gap-2">
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                </span>
+                <strong className="font-semibold">Live MikroTik Hotspot Sessions:</strong> Devices & customers currently connected and authenticated on your Wi-Fi access points.
+              </span>
+              <Badge variant="outline" className="bg-emerald-500/20 text-emerald-800 dark:text-emerald-200 border-none font-bold">
+                {filteredHotspotSessions.length} Hotspot Connected
+              </Badge>
+            </div>
+
+            {isPending ? (
+              <div className="space-y-2.5">
+                <Skeleton className="h-24 w-full rounded-xl" />
+                <Skeleton className="h-24 w-full rounded-xl" />
+                <Skeleton className="h-24 w-full rounded-xl" />
+              </div>
+            ) : filteredHotspotSessions.length === 0 ? (
+              <Card>
+                <CardContent className="py-12 text-center text-muted-foreground">
+                  <Wifi className="mx-auto size-10 text-muted-foreground/40 mb-2" />
+                  <p className="font-semibold text-foreground text-base">No Hotspot Users Connected Right Now</p>
+                  <p className="text-xs mt-1 max-w-sm mx-auto">
+                    {searchTerm
+                      ? `No connected sessions match "${searchTerm}".`
+                      : "When customers, vouchers, or guest devices authenticate on your MikroTik hotspot, their live session, IP, MAC address, uptime, and bandwidth show up here automatically."}
+                  </p>
+                  {searchTerm && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setSearchTerm("")}
+                      className="mt-4 text-xs"
+                    >
+                      Clear Search
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid gap-3">
+                {filteredHotspotSessions.map((session: any, idx: number) => {
+                  const displayName =
+                    session.matched_customer_name ||
+                    session.matched_voucher_code ||
+                    session.user ||
+                    "Connected Device";
+
+                  return (
+                    <Card
+                      key={`hs-session-${session.mac || session.user || idx}`}
+                      className="border-emerald-500/40 bg-card hover:border-emerald-500 transition-all shadow-xs"
+                    >
+                      <CardContent className="p-4">
+                        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3.5">
+                          {/* Session Info */}
+                          <div className="flex items-start gap-3 min-w-0">
+                            <div className="rounded-xl bg-emerald-500/15 p-2.5 text-emerald-600 dark:text-emerald-400 mt-0.5">
+                              <Wifi className="size-5" />
+                            </div>
+
+                            <div className="min-w-0 flex-1 space-y-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="font-bold text-foreground text-sm truncate">
+                                  {displayName}
+                                </span>
+
+                                <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 font-bold text-[10px] gap-1">
+                                  <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse inline-block" />
+                                  🟢 Hotspot Online
+                                </Badge>
+
+                                {session.is_customer ? (
+                                  <Badge variant="outline" className="bg-primary/5 text-primary text-[10px] font-medium border-primary/20">
+                                    👤 Subscriber
+                                  </Badge>
+                                ) : session.is_voucher ? (
+                                  <Badge variant="outline" className="bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-medium border-amber-500/20">
+                                    🎟️ Voucher Guest
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="secondary" className="text-[10px]">
+                                    Device Session
+                                  </Badge>
+                                )}
+
+                                {session.package_name && (
+                                  <Badge variant="secondary" className="text-[10px]">
+                                    📦 {session.package_name}
+                                  </Badge>
+                                )}
+
+                                {session.time_left_formatted && (
+                                  <Badge
+                                    variant="outline"
+                                    className={`text-[10px] font-mono font-medium ${
+                                      session.is_expiring_soon
+                                        ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30 animate-pulse"
+                                        : "bg-emerald-500/5 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                                    }`}
+                                  >
+                                    ⏳ {session.time_left_formatted}
+                                  </Badge>
+                                )}
+                              </div>
+
+                              {/* Details Row: Phone, Router, IP, MAC */}
+                              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                                {session.phone && (
+                                  <span className="flex items-center gap-1 font-mono text-foreground font-medium">
+                                    <Smartphone className="size-3 text-muted-foreground" />
+                                    {session.phone}
+                                    <a
+                                      href={`tel:${session.phone}`}
+                                      className="text-primary hover:underline ml-1"
+                                      title="Call customer"
+                                    >
+                                      <PhoneCall className="size-3 inline" />
+                                    </a>
+                                    <a
+                                      href={`https://wa.me/${session.phone.replace(/\D/g, "")}`}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="text-emerald-600 dark:text-emerald-400 hover:underline ml-1"
+                                      title="WhatsApp customer"
+                                    >
+                                      <MessageSquare className="size-3 inline" />
+                                    </a>
+                                  </span>
+                                )}
+
+                                {session.user && (
+                                  <span>
+                                    Username: <strong className="text-foreground">{session.user}</strong>
+                                  </span>
+                                )}
+
+                                <span>
+                                  📡 Router:{" "}
+                                  <strong className="text-foreground">
+                                    {session.router_name || "MikroTik Gateway"}
+                                  </strong>
+                                </span>
+
+                                {session.ip && (
+                                  <span className="font-mono text-[11px] bg-muted/60 px-1.5 py-0.5 rounded text-foreground">
+                                    IP: {session.ip}
+                                  </span>
+                                )}
+
+                                {session.mac && (
+                                  <span className="flex items-center gap-1 font-mono text-[11px] bg-muted/60 px-1.5 py-0.5 rounded">
+                                    MAC: {session.mac}
+                                    <button
+                                      onClick={() => handleCopy(session.mac, "MAC address")}
+                                      className="hover:text-foreground"
+                                      title="Copy MAC address"
+                                    >
+                                      {copiedText === session.mac ? (
+                                        <Check className="size-3 text-emerald-500" />
+                                      ) : (
+                                        <Copy className="size-3" />
+                                      )}
+                                    </button>
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Telemetry metrics: Uptime, Bytes in/out */}
+                              {(session.uptime || session.bytes_in || session.bytes_out) && (
+                                <div className="mt-1 flex flex-wrap items-center gap-3 pt-1 border-t border-dashed text-[11px] text-emerald-700 dark:text-emerald-300">
+                                  {session.uptime && (
+                                    <span className="flex items-center gap-1 font-medium">
+                                      ⏱️ Session Uptime: <strong>{session.uptime}</strong>
+                                    </span>
+                                  )}
+                                  {session.bytes_in && (
+                                    <span>
+                                      ⬇️ Download: <strong>{session.bytes_in}</strong>
+                                    </span>
+                                  )}
+                                  {session.bytes_out && (
+                                    <span>
+                                      ⬆️ Upload: <strong>{session.bytes_out}</strong>
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Action Controls for Hotspot Session */}
+                          <div className="flex flex-wrap items-center gap-2 self-end lg:self-center">
+                            {session.matched_customer_id && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-8 gap-1 text-xs border-primary/40 text-primary hover:bg-primary/10"
+                                onClick={() => {
+                                  const c = data?.customers.find((cust: any) => cust.id === session.matched_customer_id);
+                                  if (c) {
+                                    setRenewModalCustomer(c);
+                                    setRenewSelectedPkgId(c.package_id || "");
+                                    setRenewCustomHours("");
+                                  }
+                                }}
+                              >
+                                <Zap className="size-3.5 text-amber-500" />
+                                Renew Plan
+                              </Button>
+                            )}
+
+                            {/* Kick / Disconnect Hotspot Session */}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 gap-1 text-xs border-rose-500/30 text-rose-600 dark:text-rose-400 hover:bg-rose-500/10"
+                              onClick={() => {
+                                setDisconnectHotspotTarget({
+                                  routerId: session.router_id,
+                                  routerName: session.router_name,
+                                  username: session.user,
+                                  mac: session.mac,
+                                  ip: session.ip,
+                                  displayName,
+                                });
+                              }}
+                            >
+                              <PowerOff className="size-3.5" />
+                              Kick / Disconnect
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        ) : activeTab === "vouchers_online" ? (
           <div className="space-y-3">
             <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-3 text-xs text-amber-800 dark:text-amber-300 flex items-center justify-between">
               <span className="flex items-center gap-2">
@@ -809,11 +1109,11 @@ export function CustomersPage() {
                                 {isOnline ? (
                                   <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 font-bold text-[11px] gap-1 px-2 py-0.5">
                                     <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse inline-block" />
-                                    🟢 Online Now
+                                    🟢 Hotspot Live
                                   </Badge>
                                 ) : c.status === "active" ? (
-                                  <Badge variant="outline" className="text-muted-foreground text-[10px]">
-                                    ⚪ Active (Not connected)
+                                  <Badge variant="outline" className="text-muted-foreground bg-muted/30 text-[10px]">
+                                    Active Plan
                                   </Badge>
                                 ) : c.status === "expired" ? (
                                   <Badge className="bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/30 text-[10px]">
@@ -1251,6 +1551,75 @@ export function CustomersPage() {
               >
                 {disconnectMutation.isPending && <Loader2 className="mr-2 size-4 animate-spin" />}
                 Disconnect Now
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* Disconnect Live Hotspot Session Modal */}
+      {disconnectHotspotTarget && (
+        <Dialog
+          open={!!disconnectHotspotTarget}
+          onOpenChange={(open) => !open && setDisconnectHotspotTarget(null)}
+        >
+          <DialogContent className="sm:max-w-[440px]">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-rose-600">
+                <PowerOff className="size-5" />
+                Kick Hotspot Session?
+              </DialogTitle>
+              <DialogDescription>
+                This will immediately terminate the active hotspot connection on router{" "}
+                <strong>{disconnectHotspotTarget.routerName || "MikroTik Router"}</strong>.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-3 py-2">
+              <div className="rounded-lg bg-rose-500/10 border border-rose-500/20 p-3 text-xs text-rose-700 dark:text-rose-300 space-y-1">
+                <div>
+                  Target: <strong>{disconnectHotspotTarget.displayName}</strong>
+                </div>
+                {disconnectHotspotTarget.username && (
+                  <div>
+                    Hotspot Username: <strong>{disconnectHotspotTarget.username}</strong>
+                  </div>
+                )}
+                {disconnectHotspotTarget.mac && (
+                  <div>
+                    MAC Address: <strong>{disconnectHotspotTarget.mac}</strong>
+                  </div>
+                )}
+                {disconnectHotspotTarget.ip && (
+                  <div>
+                    IP Address: <strong>{disconnectHotspotTarget.ip}</strong>
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                The device will be removed from the MikroTik active hotspot host table. If their plan is still valid, they can re-login unless their plan is expired or disabled.
+              </p>
+            </div>
+
+            <DialogFooter className="border-t pt-3">
+              <Button variant="outline" onClick={() => setDisconnectHotspotTarget(null)}>
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={disconnectHotspotMutation.isPending}
+                onClick={() => {
+                  disconnectHotspotMutation.mutate({
+                    routerId: disconnectHotspotTarget.routerId,
+                    username: disconnectHotspotTarget.username,
+                    mac: disconnectHotspotTarget.mac,
+                  });
+                }}
+              >
+                {disconnectHotspotMutation.isPending && (
+                  <Loader2 className="mr-2 size-4 animate-spin" />
+                )}
+                Kick Session Now
               </Button>
             </DialogFooter>
           </DialogContent>

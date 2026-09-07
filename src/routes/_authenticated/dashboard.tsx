@@ -338,10 +338,10 @@ function Dashboard() {
   const online = routers.filter((r) => r.status === "online").length;
   const offline = routers.filter((r) => r.status === "offline").length;
 
-  const totalOnlineUsers = routers.reduce((acc, r) => acc + (r.active_hotspot_users ?? 0), 0);
+  const stats = board.data?.stats;
+  const totalOnlineUsers = stats?.hotspotOnlineNow ?? 0;
 
   const mpesaReady = Boolean(tenant.mpesa_shortcode);
-  const stats = board.data?.stats;
   const n = (v: number | undefined) => (v === undefined ? "—" : v.toLocaleString());
   const money = (v: number | undefined) =>
     v === undefined ? "—" : `${currency} ${v.toLocaleString()}`;
@@ -814,15 +814,14 @@ function Dashboard() {
         </Panel>
 
         <Panel
-          title="Recent Active Sessions (Currently Online)"
+          title="Active Hotspot Subscribers"
           icon={Users}
           right={
             <Link
               to="/customers"
               className="text-xs text-primary font-semibold hover:underline flex items-center gap-1"
             >
-              <span className="size-2 rounded-full bg-emerald-500 animate-pulse inline-block" />
-              View All Online Customers ({activeSessions.length})
+              View All Subscribers ({stats?.totalCustomers ?? activeSessions.length})
             </Link>
           }
         >
@@ -833,7 +832,7 @@ function Dashboard() {
             </div>
           ) : activeSessions.length === 0 ? (
             <p className="py-6 text-center text-sm text-muted-foreground">
-              No active online sessions found.
+              No active subscribers found.
             </p>
           ) : (
             <div className="overflow-x-auto">
@@ -847,42 +846,58 @@ function Dashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {activeSessions.map((session: any, idx: number) => (
-                    <tr key={session.id || `session-${idx}`} className="hover:bg-muted/30">
-                      <td className="py-2.5">
-                        <div className="flex items-center gap-2">
-                          <span className="relative flex h-2 w-2">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                          </span>
-                          <div>
-                            <p className="font-medium text-foreground text-xs">
-                              {session.full_name || session.username || "Hotspot Guest"}
-                            </p>
-                            <p className="text-[11px] text-muted-foreground font-mono">
-                              {session.phone}
-                            </p>
+                  {activeSessions.map((session: any, idx: number) => {
+                    const isLive = Boolean(session.is_live_hotspot);
+                    return (
+                      <tr key={session.id || `session-${idx}`} className="hover:bg-muted/30">
+                        <td className="py-2.5">
+                          <div className="flex items-center gap-2">
+                            {isLive ? (
+                              <span className="relative flex h-2 w-2">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                              </span>
+                            ) : (
+                              <span className="h-2 w-2 rounded-full bg-muted-foreground/40" />
+                            )}
+                            <div>
+                              <p className="font-medium text-foreground text-xs">
+                                {session.full_name || session.username || "Hotspot Guest"}
+                              </p>
+                              <p className="text-[11px] text-muted-foreground font-mono">
+                                {session.phone}
+                              </p>
+                            </div>
                           </div>
-                        </div>
-                      </td>
-                      <td className="py-2.5">
-                        <Badge variant="outline" className="text-[10px] font-medium py-0 h-5">
-                          {session.routers?.name || "All Routers"}
-                        </Badge>
-                      </td>
-                      <td className="py-2.5 text-xs text-muted-foreground">
-                        {session.packages?.name || "Standard Hotspot"}
-                      </td>
-                      <td className="py-2.5 text-right">
-                        <Badge
-                          variant="secondary"
-                          className="font-mono text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
-                        >
-                          🟢 Online · {formatTimeLeft(session.expires_at)}
-                        </Badge>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td className="py-2.5">
+                          <Badge variant="outline" className="text-[10px] font-medium py-0 h-5">
+                            {session.routers?.name || "All Routers"}
+                          </Badge>
+                        </td>
+                        <td className="py-2.5 text-xs text-muted-foreground">
+                          {session.packages?.name || "Standard Hotspot"}
+                        </td>
+                        <td className="py-2.5 text-right">
+                          {isLive ? (
+                            <Badge
+                              variant="secondary"
+                              className="font-mono text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+                            >
+                              🟢 Connected · {formatTimeLeft(session.expires_at)}
+                            </Badge>
+                          ) : (
+                            <Badge
+                              variant="outline"
+                              className="font-mono text-[10px] text-muted-foreground border-border/80"
+                            >
+                              Active Plan · {formatTimeLeft(session.expires_at)}
+                            </Badge>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

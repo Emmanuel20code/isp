@@ -14,6 +14,44 @@ const heartbeatSchema = z.object({
   configuration_version: z.number().int().optional(),
 });
 
+function parseHotspotActive(raw: unknown) {
+  if (!raw || typeof raw !== "string") return [];
+  const entries = raw.split(";").map((s) => s.trim()).filter(Boolean);
+  const list: Array<{
+    user?: string;
+    mac?: string;
+    ip?: string;
+    uptime?: string;
+    bytes_in?: number;
+    bytes_out?: number;
+    authorized: boolean;
+    status: string;
+  }> = [];
+
+  for (const entry of entries) {
+    const parts = entry.split(",");
+    const user = parts[0]?.trim();
+    const mac = parts[1]?.trim();
+    const ip = parts[2]?.trim();
+    const uptime = parts[3]?.trim();
+    const bytesIn = Number(parts[4]) || undefined;
+    const bytesOut = Number(parts[5]) || undefined;
+    if (user || mac || ip) {
+      list.push({
+        user: user || undefined,
+        mac: mac || undefined,
+        ip: ip || undefined,
+        uptime: uptime || undefined,
+        bytes_in: bytesIn,
+        bytes_out: bytesOut,
+        authorized: true,
+        status: "authorized",
+      });
+    }
+  }
+  return list;
+}
+
 function json(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
     status,
@@ -215,6 +253,8 @@ export const Route = createFileRoute("/api/public/mikrotik/heartbeat")({
           })
           .eq("id", router.id);
 
+        const parsedHosts = parseHotspotActive(body.hs_active || url.searchParams.get("hs_active"));
+
         // Store telemetry snapshot (sample)
         await supabaseAdmin.from("router_heartbeats").insert({
           router_id: router.id,
@@ -230,7 +270,10 @@ export const Route = createFileRoute("/api/public/mikrotik/heartbeat")({
           active_pppoe_users: Number(body.active_pppoe_users) || 0,
           config_version: router.configuration_version,
           ip_address: clientIp,
-          raw: body as never,
+          raw: {
+            ...body,
+            hosts: parsedHosts.length > 0 ? parsedHosts : (body.hosts as unknown),
+          } as never,
         });
 
         // Check if there are pending queued commands
