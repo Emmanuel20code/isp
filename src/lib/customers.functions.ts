@@ -18,33 +18,252 @@ async function requireTenant(supabase: Record<string, unknown>, userId: string):
   return id;
 }
 
+function formatRemainingTime(expiresAt: string | null): {
+  formatted: string;
+  seconds: number | null;
+  isOnline: boolean;
+  isExpiringSoon: boolean;
+} {
+  if (!expiresAt) {
+    return { formatted: "Never expires", seconds: null, isOnline: true, isExpiringSoon: false };
+  }
+  const diffMs = new Date(expiresAt).getTime() - Date.now();
+  if (diffMs <= 0) {
+    const agoSec = Math.floor(Math.abs(diffMs) / 1000);
+    let agoStr = "just now";
+    if (agoSec >= 86400) agoStr = `${Math.floor(agoSec / 86400)}d ago`;
+    else if (agoSec >= 3600) agoStr = `${Math.floor(agoSec / 3600)}h ago`;
+    else if (agoSec >= 60) agoStr = `${Math.floor(agoSec / 60)}m ago`;
+    return { formatted: `Expired (${agoStr})`, seconds: 0, isOnline: false, isExpiringSoon: false };
+  }
+
+  const diffSec = Math.floor(diffMs / 1000);
+  const days = Math.floor(diffSec / 86400);
+  const hours = Math.floor((diffSec % 86400) / 3600);
+  const minutes = Math.floor((diffSec % 3600) / 60);
+
+  let formatted = "";
+  if (days > 0) {
+    formatted = `${days}d ${hours}h left`;
+  } else if (hours > 0) {
+    formatted = `${hours}h ${minutes}m left`;
+  } else {
+    formatted = `${minutes}m left`;
+  }
+
+  return {
+    formatted,
+    seconds: diffSec,
+    isOnline: true,
+    isExpiringSoon: diffSec < 3600, // less than 1 hour left
+  };
+}
+
 export const listCustomers = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
     const tenantId = await tenantOf(supabase, userId);
-    if (!tenantId) return { tenantId: null, customers: [], packages: [], routers: [] };
-    const [{ data: customers }, { data: packages }, { data: routers }] = await Promise.all([
+    if (!tenantId) {
+      return {
+        tenantId: null,
+        customers: [],
+        packages: [],
+        routers: [],
+        onlineVouchers: [],
+        stats: {
+          totalCustomers: 0,
+          onlineCustomersCount: 0,
+          onlineVouchersCount: 0,
+          totalOnlineNow: 0,
+          activePlansCount: 0,
+          expiredCount: 0,
+          disabledCount: 0,
+          expiringSoonCount: 0,
+        },
+      };
+    }
+
+    const [
+      { data: rawCustomers },
+      { data: packages },
+      { data: routers },
+      { data: rawVouchers },
+      { data: heartbeats },
+    ] = await Promise.all([
       supabase
         .from("customers")
         .select(
-          "id, full_name, phone, kind, status, username, expires_at, package_id, router_id, created_at",
+          "id, full_name, phone, kind, status, username, mac_address, expires_at, package_id, router_id, created_at, updated_at, packages(id, name, kind, price_kes, duration_hours), routers(id, name, status, location)",
         )
         .eq("tenant_id", tenantId)
         .eq("kind", "hotspot")
         .order("created_at", { ascending: false }),
       supabase
         .from("packages")
-        .select("id, name, kind, price_kes, duration_hours")
+        .select("id, name, kind, price_kes, duration_hours, is_active")
         .eq("tenant_id", tenantId)
-        .eq("kind", "hotspot"),
-      supabase.from("routers").select("id, name").eq("tenant_id", tenantId),
+        .eq("kind", "hotspot")
+        .order("price_kes", { ascending: true }),
+      supabase
+        .from("routers")
+        .select("id, name, status, location, active_hotspot_users, active_pppoe_users, last_seen_at")
+        .eq("tenant_id", tenantId)
+        .order("name", { ascending: true }),
+      supabase
+        .from("vouchers")
+        .select(
+          "id, code, status, phone, package_id, router_id, expires_at, activated_at, created_at, packages(id, name, price_kes, duration_hours), routers(id, name, status, location)",
+        )
+        .eq("tenant_id", tenantId)
+        .in("status", ["active", "used"])
+        .order("expires_at", { ascending: false })
+        .limit(100),
+      supabase
+        .from("router_heartbeats")
+        .select("id, router_id, raw, created_at")
+        .eq("tenant_id", tenantId)
+        .order("created_at", { ascending: false })
+        .limit(20),
     ]);
+
+    const routerMap = new Map((routers ?? []).map((r) => [r.id, r]));
+
+    // Extract live active hosts from recent router heartbeats
+    const activeHostMap = new Map<
+      string,
+      {
+        ip?: string;
+        mac?: string;
+        uptime?: string;
+        bytes_in?: number;
+        bytes_out?: number;
+        hostname?: string;
+        last_seen?: string;
+        router_name?: string;
+      }
+    >();
+
+    for (const hb of heartbeats ?? []) {
+      const raw = hb.raw as Record<string, unknown> | null;
+      if (!raw) continue;
+      const targetRouter = routerMap.get(hb.router_id);
+      const rName = targetRouter?.name || "Router";
+
+      const hostList: any[] = Array.isArray(raw.hosts)
+        ? raw.hosts
+        : Array.isArray((raw.body as Record<string, unknown>)?.hosts)
+          ? ((raw.body as Record<string, unknown>).hosts as any[])
+          : [];
+
+      for (const h of hostList) {
+        const rawMac = (h.mac || h.mac_address || h["mac-address"] || "")
+          .toString()
+          .trim()
+          .toLowerCase();
+        const rawIp = (h.ip || h.address || "").toString();
+        const rawUser = (h.user || h.username || "").toString().trim();
+        const telemetry = {
+          ip: rawIp || undefined,
+          mac: rawMac || undefined,
+          uptime: h.uptime ? String(h.uptime) : undefined,
+          bytes_in: Number(h.bytes_in || h["bytes-in"]) || undefined,
+          bytes_out: Number(h.bytes_out || h["bytes-out"]) || undefined,
+          hostname: h.hostname || h["host-name"] || undefined,
+          last_seen: hb.created_at,
+          router_name: rName,
+        };
+
+        if (rawMac) activeHostMap.set(`mac:${rawMac.replace(/[:-]/g, "")}`, telemetry);
+        if (rawUser) activeHostMap.set(`user:${rawUser.toLowerCase()}`, telemetry);
+        if (rawIp) activeHostMap.set(`ip:${rawIp}`, telemetry);
+      }
+    }
+
+    let onlineCustomersCount = 0;
+    let activePlansCount = 0;
+    let expiredCount = 0;
+    let disabledCount = 0;
+    let expiringSoonCount = 0;
+
+    const customers = (rawCustomers ?? []).map((c: any) => {
+      const timeInfo = formatRemainingTime(c.expires_at);
+      const isStatusActive = c.status === "active";
+      const isOnline = isStatusActive && timeInfo.isOnline;
+
+      if (isOnline) onlineCustomersCount++;
+      if (isStatusActive) activePlansCount++;
+      if (c.status === "expired" || (!timeInfo.isOnline && isStatusActive)) expiredCount++;
+      if (c.status === "disabled") disabledCount++;
+      if (isOnline && timeInfo.isExpiringSoon) expiringSoonCount++;
+
+      // Try matching live telemetry
+      const cleanMac = (c.mac_address || "").replace(/[:-]/g, "").toLowerCase();
+      const cleanPhone = (c.phone || "").replace(/\D/g, "");
+      const cleanUser = (c.username || "").toLowerCase();
+
+      const live =
+        (cleanMac ? activeHostMap.get(`mac:${cleanMac}`) : null) ||
+        (cleanUser ? activeHostMap.get(`user:${cleanUser}`) : null) ||
+        (cleanPhone ? activeHostMap.get(`user:${cleanPhone}`) : null) ||
+        null;
+
+      return {
+        ...c,
+        is_online: isOnline,
+        time_left_seconds: timeInfo.seconds,
+        time_left_formatted: timeInfo.formatted,
+        is_expiring_soon: timeInfo.isExpiringSoon,
+        live_telemetry: live,
+      };
+    });
+
+    // Process online voucher sessions
+    const now = Date.now();
+    const onlineVouchers = (rawVouchers ?? [])
+      .filter((v: any) => {
+        if (!v.expires_at) return v.status === "active";
+        return new Date(v.expires_at).getTime() > now;
+      })
+      .map((v: any) => {
+        const timeInfo = formatRemainingTime(v.expires_at);
+        const cleanPhone = (v.phone || "").replace(/\D/g, "");
+        const cleanCode = (v.code || "").toLowerCase();
+
+        const live =
+          (cleanCode ? activeHostMap.get(`user:${cleanCode}`) : null) ||
+          (cleanPhone ? activeHostMap.get(`user:${cleanPhone}`) : null) ||
+          null;
+
+        return {
+          ...v,
+          is_online: true,
+          time_left_seconds: timeInfo.seconds,
+          time_left_formatted: timeInfo.formatted,
+          is_expiring_soon: timeInfo.isExpiringSoon,
+          live_telemetry: live,
+        };
+      });
+
+    const onlineVouchersCount = onlineVouchers.length;
+    const totalOnlineNow = onlineCustomersCount + onlineVouchersCount;
+
     return {
       tenantId,
-      customers: customers ?? [],
+      customers,
       packages: packages ?? [],
       routers: routers ?? [],
+      onlineVouchers,
+      stats: {
+        totalCustomers: customers.length,
+        onlineCustomersCount,
+        onlineVouchersCount,
+        totalOnlineNow,
+        activePlansCount,
+        expiredCount,
+        disabledCount,
+        expiringSoonCount,
+      },
     };
   });
 
@@ -146,6 +365,116 @@ export const setCustomerStatus = createServerFn({ method: "POST" })
             },
       ]);
     }
+    return { ok: true };
+  });
+
+export const renewCustomer = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z
+      .object({
+        id: z.string().uuid(),
+        packageId: z.string().uuid().optional().nullable(),
+        durationHours: z.number().positive().optional().nullable(),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const tenantId = await requireTenant(supabase, userId);
+
+    let hours = data.durationHours || 24;
+    let pkgId = data.packageId;
+
+    if (pkgId) {
+      const { data: pkg } = await supabase
+        .from("packages")
+        .select("duration_hours")
+        .eq("id", pkgId)
+        .eq("tenant_id", tenantId)
+        .maybeSingle();
+      if (pkg?.duration_hours) {
+        hours = pkg.duration_hours;
+      }
+    }
+
+    const newExpiresAt = new Date(Date.now() + hours * 3_600_000).toISOString();
+
+    const { data: updated, error } = await supabase
+      .from("customers")
+      .update({
+        status: "active",
+        expires_at: newExpiresAt,
+        package_id: pkgId ?? undefined,
+      })
+      .eq("id", data.id)
+      .eq("tenant_id", tenantId)
+      .select("id, tenant_id, router_id, username, phone, kind")
+      .maybeSingle();
+
+    if (error) throw new Error(error.message);
+
+    if (updated?.router_id && (updated.username || updated.phone)) {
+      const { enqueueRouterCommands } = await import("@/lib/agent-commands.server");
+      const userIdentifier = updated.username || updated.phone;
+      await enqueueRouterCommands([
+        {
+          tenantId,
+          routerId: updated.router_id,
+          action: updated.kind === "pppoe" ? "pppoe.create_user" : "hotspot.create_user",
+          payload: {
+            username: userIdentifier,
+            password: updated.phone,
+            comment: `emmatech:${updated.id}`,
+          },
+        },
+      ]);
+    }
+
+    return { ok: true, expiresAt: newExpiresAt };
+  });
+
+export const disconnectCustomer = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z.object({ id: z.string().uuid(), markExpired: z.boolean().optional() }).parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const tenantId = await requireTenant(supabase, userId);
+
+    const { data: customer, error } = await supabase
+      .from("customers")
+      .select("id, tenant_id, router_id, username, phone, mac_address, kind")
+      .eq("id", data.id)
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
+
+    if (error || !customer) throw new Error(error?.message || "Customer not found");
+
+    if (data.markExpired) {
+      await supabase
+        .from("customers")
+        .update({ status: "expired" })
+        .eq("id", data.id)
+        .eq("tenant_id", tenantId);
+    }
+
+    if (customer.router_id) {
+      const { enqueueRouterCommands } = await import("@/lib/agent-commands.server");
+      await enqueueRouterCommands([
+        {
+          tenantId,
+          routerId: customer.router_id,
+          action: "hotspot.disconnect",
+          payload: {
+            username: customer.username || customer.phone,
+            mac: customer.mac_address || undefined,
+          },
+        },
+      ]);
+    }
+
     return { ok: true };
   });
 

@@ -660,3 +660,62 @@ export const redeemPortalVoucher = createServerFn({ method: "POST" })
       durationHours,
     };
   });
+
+export const checkRouterActivation = createServerFn({ method: "POST" })
+  .inputValidator((input: unknown) =>
+    z
+      .object({
+        slug: z.string().min(1).max(80),
+        code: z.string().min(3).max(30),
+        mac: z.string().optional().nullable(),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const cleanCode = data.code.trim().toUpperCase();
+
+    const { data: tenant } = await supabaseAdmin
+      .from("tenants")
+      .select("id")
+      .eq("slug", data.slug)
+      .maybeSingle();
+
+    if (!tenant) return { active: false, synced: false, message: "Tenant not found" };
+
+    const { data: voucher } = await supabaseAdmin
+      .from("vouchers")
+      .select("id, code, status, activated_at, expires_at, router_id, packages(name)")
+      .eq("tenant_id", tenant.id)
+      .ilike("code", cleanCode)
+      .maybeSingle();
+
+    if (!voucher) {
+      return { active: false, synced: false, message: "Voucher not found" };
+    }
+
+    const { data: commands } = await supabaseAdmin
+      .from("router_commands")
+      .select("id, status, action")
+      .eq("tenant_id", tenant.id)
+      .order("created_at", { ascending: false })
+      .limit(3);
+
+    const isCommandExecuted =
+      commands && commands.length > 0
+        ? commands.some((c) => c.status === "executed" || c.status === "completed")
+        : true;
+
+    const pkgName = Array.isArray(voucher.packages)
+      ? voucher.packages[0]?.name
+      : voucher.packages?.name;
+
+    return {
+      active: voucher.status === "active" || voucher.status === "unused",
+      synced: isCommandExecuted,
+      code: voucher.code,
+      expiresAt: voucher.expires_at,
+      packageName: pkgName ?? "Active Plan",
+      status: voucher.status,
+    };
+  });

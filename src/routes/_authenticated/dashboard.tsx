@@ -814,11 +814,15 @@ function Dashboard() {
         </Panel>
 
         <Panel
-          title="Recent Active Sessions"
+          title="Recent Active Sessions (Currently Online)"
           icon={Users}
           right={
-            <Link to="/customers" className="text-xs text-tile-foreground hover:underline">
-              View All Customers
+            <Link
+              to="/customers"
+              className="text-xs text-primary font-semibold hover:underline flex items-center gap-1"
+            >
+              <span className="size-2 rounded-full bg-emerald-500 animate-pulse inline-block" />
+              View All Online Customers ({activeSessions.length})
             </Link>
           }
         >
@@ -829,31 +833,52 @@ function Dashboard() {
             </div>
           ) : activeSessions.length === 0 ? (
             <p className="py-6 text-center text-sm text-muted-foreground">
-              No active sessions found.
+              No active online sessions found.
             </p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b text-left text-muted-foreground">
-                    <th className="pb-2 font-medium">Customer</th>
+                  <tr className="border-b text-left text-muted-foreground text-xs">
+                    <th className="pb-2 font-medium">Customer / User</th>
+                    <th className="pb-2 font-medium">Router</th>
                     <th className="pb-2 font-medium">Package</th>
-                    <th className="pb-2 text-right font-medium">Time Left</th>
+                    <th className="pb-2 text-right font-medium">Status & Time Left</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {activeSessions.map((session, idx) => (
+                  {activeSessions.map((session: any, idx: number) => (
                     <tr key={session.id || `session-${idx}`} className="hover:bg-muted/30">
-                      <td className="py-2.5 font-medium">{session.phone}</td>
-                      <td className="py-2.5 text-muted-foreground">
-                        {session.packages?.name || "Standard"}
+                      <td className="py-2.5">
+                        <div className="flex items-center gap-2">
+                          <span className="relative flex h-2 w-2">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                          </span>
+                          <div>
+                            <p className="font-medium text-foreground text-xs">
+                              {session.full_name || session.username || "Hotspot Guest"}
+                            </p>
+                            <p className="text-[11px] text-muted-foreground font-mono">
+                              {session.phone}
+                            </p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-2.5">
+                        <Badge variant="outline" className="text-[10px] font-medium py-0 h-5">
+                          {session.routers?.name || "All Routers"}
+                        </Badge>
+                      </td>
+                      <td className="py-2.5 text-xs text-muted-foreground">
+                        {session.packages?.name || "Standard Hotspot"}
                       </td>
                       <td className="py-2.5 text-right">
                         <Badge
                           variant="secondary"
-                          className="font-mono text-[10px] bg-success/10 text-success border-none"
+                          className="font-mono text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
                         >
-                          {formatTimeLeft(session.expires_at)}
+                          🟢 Online · {formatTimeLeft(session.expires_at)}
                         </Badge>
                       </td>
                     </tr>

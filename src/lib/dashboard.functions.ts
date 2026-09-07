@@ -141,11 +141,13 @@ export const getDashboard = createServerFn({ method: "GET" })
         .eq("status", "active"),
       supabase
         .from("customers")
-        .select("id, phone, expires_at, status, packages(name)")
+        .select(
+          "id, full_name, phone, username, mac_address, router_id, expires_at, status, packages(name, price_kes, duration_hours), routers(name, status)",
+        )
         .eq("tenant_id", tenantId)
         .eq("status", "active")
         .order("expires_at", { ascending: true })
-        .limit(10),
+        .limit(15),
     ]);
 
     const sumTxns = (rows: { amount_kes: number }[] | null) =>

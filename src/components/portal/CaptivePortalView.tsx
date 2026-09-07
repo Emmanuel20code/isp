@@ -1,5 +1,10 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { PortalPackage, PortalTenantSettings, lookupPPPoECustomer } from "@/lib/portal.functions";
+import {
+  PortalPackage,
+  PortalTenantSettings,
+  lookupPPPoECustomer,
+  checkRouterActivation,
+} from "@/lib/portal.functions";
 import { useServerFn } from "@tanstack/react-start";
 import { formatPackageDuration } from "@/lib/billing-helpers";
 import { getCurrencyByCountry } from "@/lib/payment-providers";
@@ -86,6 +91,7 @@ export function CaptivePortalView({
   previewMode = false,
 }: CaptivePortalViewProps) {
   const fetchPPPoECustomer = useServerFn(lookupPPPoECustomer);
+  const fetchRouterActivation = useServerFn(checkRouterActivation);
 
   const [activeTab, setActiveTab] = useState<"hotspot" | "pppoe">(() => {
     if (typeof window !== "undefined") {
@@ -121,6 +127,11 @@ export function CaptivePortalView({
   const [voucherModalOpen, setVoucherModalOpen] = useState(false);
   const [checkoutModalOpen, setCheckoutModalOpen] = useState(false);
   const [voucherInput, setVoucherInput] = useState("");
+
+  // Secondary Polling (Router Activation & Auto-Connect Heartbeat)
+  const [routerPollingElapsed, setRouterPollingElapsed] = useState(0);
+  const [isRouterSynced, setIsRouterSynced] = useState(false);
+  const [isInternetVerified, setIsInternetVerified] = useState(false);
 
   const mounted = useRef(true);
   useEffect(() => {
@@ -242,13 +253,6 @@ export function CaptivePortalView({
     }
   }, [isWaitingForPin, isPolling]);
 
-  // Automatically dismiss checkout modal once the payment succeeds and code is assigned
-  useEffect(() => {
-    if (activeCode || redeemedData) {
-      setCheckoutModalOpen(false);
-    }
-  }, [activeCode, redeemedData]);
-
   const activeVoucherCode = activeCode || redeemedData?.code;
 
   const handleAutoConnect = useCallback(() => {
@@ -275,7 +279,7 @@ export function CaptivePortalView({
     );
 
     setAutoConnectAttempted(true);
-    setAutoConnectStatus("Establishing Internet Access...");
+    setAutoConnectStatus("Submitting credentials to router...");
 
     // Submit to ALL candidates (hidden forms)
     finalizedCandidates.forEach((url, index) => {
@@ -311,69 +315,101 @@ export function CaptivePortalView({
         } catch (e) {
           // Ignore failures for specific candidates
         }
-      }, index * 200);
+      }, index * 150);
     });
 
-    // After a short delay, show a redirecting status
+    // Verify after short delay
     setTimeout(() => {
       if (mounted.current) {
         setAutoConnectStatus("Connected! Redirecting...");
-        // If we have an original destination, try to go there after 3 seconds as a fallback
         if (redirectParams.linkOrig) {
           setTimeout(() => {
             if (mounted.current) {
               window.location.href = redirectParams.linkOrig!;
             }
-          }, 3000);
+          }, 2000);
         }
       }
-    }, 2000);
+    }, 1500);
   }, [activeVoucherCode, redirectParams]);
 
+  // Stage 2 Polling: Immediately triggered after payment confirmation to poll router authorization & connect
   useEffect(() => {
-    if (activeVoucherCode && !autoConnectAttempted) {
-      // Fast automatic reconnection upon payment confirmation
+    if (!activeVoucherCode) return;
+
+    if (!autoConnectAttempted) {
       setAutoConnectSeconds(3);
-      setAutoConnectStatus("Payment confirmed! Reconnecting to internet...");
+      setAutoConnectStatus("Payment confirmed! Polling router activation...");
     }
-  }, [activeVoucherCode, autoConnectAttempted]);
 
-  useEffect(() => {
-    if (autoConnectSeconds === null) return;
+    const tenantSlug =
+      slug ||
+      (typeof window !== "undefined" ? window.location.pathname.split("/").pop() : "preview") ||
+      "preview";
 
-    // Active internet polling check
-    const checkInternet = () => {
+    // Interval to poll router activation status and test internet connectivity every 1s
+    const pollInterval = setInterval(async () => {
+      if (!mounted.current) return;
+      setRouterPollingElapsed((prev) => prev + 1);
+
+      // 1. Check internet connectivity via background image ping
       const img = new Image();
       img.onload = () => {
-        setAutoConnectStatus("Internet connected! Redirecting...");
-        setTimeout(() => {
-          window.location.href = redirectParams.linkOrig || "https://google.com";
-        }, 500);
+        if (mounted.current) {
+          setIsInternetVerified(true);
+          setAutoConnectStatus("Internet connected! Redirecting...");
+          setTimeout(() => {
+            if (mounted.current) {
+              window.location.href = redirectParams.linkOrig || "https://google.com";
+            }
+          }, 1000);
+        }
       };
-      // Cache-busting URL to check internet access
       img.src = `https://www.google.com/favicon.ico?_t=${Date.now()}`;
-    };
+
+      // 2. Poll server router activation
+      try {
+        const res = await fetchRouterActivation({
+          data: {
+            slug: tenantSlug,
+            code: activeVoucherCode,
+            mac: redirectParams.mac,
+          },
+        });
+        if (res?.synced && mounted.current) {
+          setIsRouterSynced(true);
+        }
+      } catch (e) {
+        // Continue polling silently
+      }
+    }, 1000);
+
+    return () => clearInterval(pollInterval);
+  }, [activeVoucherCode, autoConnectAttempted, fetchRouterActivation, redirectParams, slug]);
+
+  // Countdown timer for automatic reconnection dispatch
+  useEffect(() => {
+    if (autoConnectSeconds === null) return;
 
     if (autoConnectSeconds > 0) {
       const timer = setTimeout(() => {
         const next = autoConnectSeconds - 1;
         setAutoConnectSeconds(next);
         if (next === 2) {
-          setAutoConnectStatus("Submitting credentials to router...");
+          setAutoConnectStatus("Authenticating hotspot router gateway...");
           handleAutoConnect();
         } else if (next === 1) {
-          setAutoConnectStatus("Authenticating hotspot connection...");
+          setAutoConnectStatus("Verifying internet route...");
         } else if (next === 0) {
-          setAutoConnectStatus("Finalizing connection...");
+          setAutoConnectStatus("Internet access authorized! Finalizing...");
+          handleAutoConnect();
         }
-
-        checkInternet();
       }, 1000);
       return () => clearTimeout(timer);
     } else {
       handleAutoConnect();
     }
-  }, [autoConnectSeconds, handleAutoConnect, redirectParams.linkOrig]);
+  }, [autoConnectSeconds, handleAutoConnect]);
 
   const handlePackageClick = (pkg: PortalPackage) => {
     setSelectedPkg(pkg);
@@ -672,9 +708,9 @@ export function CaptivePortalView({
                 >
                   <div className="flex items-center justify-between text-[11px] font-black uppercase tracking-wider">
                     <span className="text-slate-400">Connection Engine</span>
-                    <span className="text-emerald-400 flex items-center gap-2">
-                      <Zap className="size-3 fill-emerald-400" />
-                      Auto-Connecting
+                    <span className="text-emerald-400 flex items-center gap-1.5 font-mono text-[10px] bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
+                      <span className="size-1.5 rounded-full bg-emerald-400 animate-ping" />
+                      Polling router every 1s
                     </span>
                   </div>
 
@@ -692,6 +728,22 @@ export function CaptivePortalView({
                           style={{ width: `${(autoConnectSeconds / 3) * 100}%` }}
                         />
                       </div>
+                      <div className="grid grid-cols-2 gap-2 text-[10px] text-slate-400 pt-1">
+                        <div className="flex items-center gap-1.5">
+                          <CheckCircle2 className="size-3 text-emerald-400 shrink-0" />
+                          <span>Credentials Ready</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          {isInternetVerified ? (
+                            <CheckCircle2 className="size-3 text-emerald-400 shrink-0" />
+                          ) : (
+                            <Loader2 className="size-3 text-emerald-400 animate-spin shrink-0" />
+                          )}
+                          <span>
+                            {isInternetVerified ? "Internet Verified" : "Testing Route"}
+                          </span>
+                        </div>
+                      </div>
                       {!redirectParams.linkLogin && !redirectParams.ip && (
                         <p className="text-[9px] text-amber-400 font-medium leading-tight">
                           Note: Automatic connection works best when connected directly to the
@@ -700,9 +752,18 @@ export function CaptivePortalView({
                       )}
                     </div>
                   ) : (
-                    <div className="flex items-center justify-center gap-3 py-2 text-sm font-black text-white">
-                      <Loader2 className="size-5 animate-spin text-emerald-400" />
-                      <span className="tracking-tight">{autoConnectStatus || "Finalizing..."}</span>
+                    <div className="flex flex-col items-center justify-center gap-2 py-2 text-sm font-black text-white">
+                      <div className="flex items-center gap-2 text-emerald-400">
+                        {isInternetVerified ? (
+                          <CheckCircle2 className="size-5 text-emerald-400" />
+                        ) : (
+                          <Loader2 className="size-5 animate-spin text-emerald-400" />
+                        )}
+                        <span className="tracking-tight">{autoConnectStatus || "Finalizing..."}</span>
+                      </div>
+                      <span className="text-[10px] font-mono text-slate-400">
+                        Live polling active ({routerPollingElapsed}s)
+                      </span>
                     </div>
                   )}
                 </div>
@@ -1226,7 +1287,122 @@ export function CaptivePortalView({
               </div>
 
               {/* Status or Input controls */}
-              {!isWaitingForPin && !isPaymentPending ? (
+              {activeVoucherCode ? (
+                <div className="text-center py-3 space-y-4">
+                  <div className="flex justify-center">
+                    <div className="relative">
+                      <div className="absolute inset-0 bg-emerald-500/20 blur-xl rounded-full animate-pulse" />
+                      <div className="relative bg-emerald-500 rounded-2xl p-3 shadow-lg shadow-emerald-500/30">
+                        <CheckCircle2 className="size-8 text-white" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <h3 className="text-base font-black text-white tracking-tight">
+                      Payment Confirmed!
+                    </h3>
+                    <p className={`text-xs ${theme.textSecondary} leading-relaxed px-2`}>
+                      {autoConnectStatus || "Activating router access..."}
+                    </p>
+                  </div>
+
+                  {/* Stage 2 Live Polling Indicator */}
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[11px] font-mono text-emerald-400">
+                    <span className="size-2 rounded-full bg-emerald-400 animate-ping" />
+                    <span>Polling router authorization every 1s</span>
+                    <span className="text-slate-400 border-l border-white/10 pl-2">
+                      {autoConnectSeconds !== null && autoConnectSeconds > 0
+                        ? `${autoConnectSeconds}s`
+                        : `${routerPollingElapsed}s`}
+                    </span>
+                  </div>
+
+                  {/* Access Code Box */}
+                  <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 space-y-2">
+                    <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-emerald-400/90">
+                      <span>Hotspot Access Code</span>
+                      <span className="text-slate-400">
+                        {selectedPkg.name || redeemedData?.packageName || "Active Plan"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-center gap-2">
+                      <span className="text-2xl font-mono font-black text-white tracking-widest tabular-nums">
+                        {activeVoucherCode}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="size-8 bg-white/5 hover:bg-white/10 text-emerald-400 rounded-lg"
+                        onClick={() => {
+                          navigator.clipboard.writeText(activeVoucherCode);
+                          toast.success("Access code copied!");
+                        }}
+                      >
+                        <Copy className="size-4" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Live Steps Checklist */}
+                  <div className="text-left bg-white/5 border border-white/5 rounded-xl p-3 space-y-2 text-xs">
+                    <div className="flex items-center gap-2 text-emerald-400">
+                      <CheckCircle2 className="size-3.5 shrink-0" />
+                      <span className="font-medium">
+                        M-Pesa payment received ({currency} {selectedPkg.price_kes})
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 text-emerald-400">
+                      <CheckCircle2 className="size-3.5 shrink-0" />
+                      <span className="font-medium">Hotspot credentials provisioned</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-slate-300">
+                      {isInternetVerified ? (
+                        <CheckCircle2 className="size-3.5 text-emerald-400 shrink-0" />
+                      ) : (
+                        <Loader2 className="size-3.5 text-emerald-400 animate-spin shrink-0" />
+                      )}
+                      <span className="font-medium">
+                        {isInternetVerified
+                          ? "Internet connectivity verified"
+                          : `Authorizing router gateway (${redirectParams.ip ? redirectParams.ip : "10.10.0.1"})...`}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="space-y-2 pt-1">
+                    <Button
+                      type="button"
+                      className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-black h-11 rounded-xl text-sm shadow-lg shadow-emerald-600/30 transition active:scale-[0.98]"
+                      onClick={handleAutoConnect}
+                    >
+                      <Globe className="mr-2 size-4" />
+                      Connect Now
+                    </Button>
+                    {redirectParams.linkOrig && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full bg-white/5 border-white/10 hover:bg-white/10 text-white font-bold h-10 rounded-xl text-xs"
+                        onClick={() => (window.location.href = redirectParams.linkOrig!)}
+                      >
+                        <ArrowRight className="mr-2 size-4" />
+                        Continue to Website
+                      </Button>
+                    )}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className={`w-full text-xs ${theme.textMuted} hover:text-white h-8`}
+                      onClick={() => setCheckoutModalOpen(false)}
+                    >
+                      View Session Details
+                    </Button>
+                  </div>
+                </div>
+              ) : !isWaitingForPin && !isPaymentPending ? (
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
