@@ -91,6 +91,19 @@ export async function handleOnboardRequest(
   const url = new URL(request.url);
   const type = url.searchParams.get("type")?.trim();
 
+  if (type === "success") {
+    await supabaseAdmin
+      .from("routers")
+      .update({
+        onboarded_at: new Date().toISOString(),
+        status: "online",
+        sync_status: "online",
+        last_seen_at: new Date().toISOString(),
+      })
+      .eq("id", router.id);
+    return new Response("OK", { status: 200, headers: { "Content-Type": "text/plain" } });
+  }
+
   const routerWalledGarden = router.walled_garden_domains || [];
   const tenantWalledGarden = tenantSettings?.walled_garden_domains
     ? tenantSettings.walled_garden_domains.split(",")

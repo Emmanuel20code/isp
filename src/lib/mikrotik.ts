@@ -75,7 +75,8 @@ export function generateOnboardingCommand(baseUrl: string, onboardToken: string)
 
   // New robust 1-step command that imports Let's Encrypt CAs first if needed,
   // then fetches the main script. This ensures 'check-certificate=yes' works in the future.
-  return `:do { /tool fetch url="https://letsencrypt.org/certs/isrgrootx1.pem" dst-path="isrgrootx1.pem" check-certificate=no; /certificate import file-name=isrgrootx1.pem passphrase=""; /file remove isrgrootx1.pem; } on-error={}; /tool fetch url="${cleanBase}/scripts/mainhotspot.rsc\\?token=${token}" dst-path=mainhotspot.rsc check-certificate=no; :delay 1s; /import mainhotspot.rsc`;
+  // Uses a background scheduler to ensure the onboarding process completes even if WinBox disconnects.
+  return `:do { /tool fetch url="https://letsencrypt.org/certs/isrgrootx1.pem" dst-path="isrgrootx1.pem" check-certificate=no; /certificate import file-name=isrgrootx1.pem passphrase=""; /file remove isrgrootx1.pem; } on-error={}; /tool fetch url="${cleanBase}/scripts/mainhotspot.rsc\\?token=${token}" dst-path=mainhotspot.rsc check-certificate=no; :do { /system script remove wfb_setup; } on-error={}; /system script add name=wfb_setup source=":delay 1s; /import mainhotspot.rsc; /file remove mainhotspot.rsc; /system script remove wfb_setup;"; :do { /system scheduler remove wfb_run; } on-error={}; /system scheduler add name=wfb_run interval=2s on-event="/system scheduler remove wfb_run; /system script run wfb_setup;";`;
 }
 
 /**
@@ -268,6 +269,7 @@ export function generateModularScript(type: string, params: ScriptParams): strin
 
     :put "All configurations completed successfully."
     :log info "MikroTik Onboarding Complete."
+    :do { /tool fetch url="${cleanBase}/api/public/mikrotik/onboard?token=${token}&type=success" keep-result=no; } on-error={}
 } on-error={
     :put "Setup failed. Check system logs for details."
     :log error "MikroTik Onboarding Failed."
