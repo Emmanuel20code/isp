@@ -357,8 +357,9 @@ async function handleSyncRequest(request: Request): Promise<Response> {
       );
       rscLines.push(`};`);
 
-      // Always drop the active session for create/update so new profiles/limits apply immediately
-      rscLines.push(`:do { /ppp active remove [find name="${username}"]; } on-error={};`);
+      if (disabled === "yes") {
+        rscLines.push(`:do { /ppp active remove [find name="${username}"]; } on-error={};`);
+      }
     } else if (cmd.action === "pppoe.update_user") {
       const username = String(p.username || "").replace(/"/g, "");
       const password = p.password !== undefined ? String(p.password).replace(/"/g, "") : undefined;
@@ -377,9 +378,6 @@ async function handleSyncRequest(request: Request): Promise<Response> {
         rscLines.push(`};`);
 
         if (disabled) {
-          rscLines.push(`:do { /ppp active remove [find name="${username}"]; } on-error={};`);
-        } else if (profile !== undefined) {
-          // Always drop the active session when changing profiles so the customer reconnects with the new IP pool and speed limits
           rscLines.push(`:do { /ppp active remove [find name="${username}"]; } on-error={};`);
         }
       }
