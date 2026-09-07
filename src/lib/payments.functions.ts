@@ -953,27 +953,58 @@ export async function activateCustomerPackage(
     customerId = newCustomer?.id ?? null;
   }
 
-  // 3. Issue Voucher (Access Code / Voucher code used purely for transaction tracking for PPPoE)
+  // 3. Issue or Update Voucher
   const voucherTrackingCode = pkg.kind === "pppoe" ? `VCH-${generateVoucherCode(6)}` : code;
 
-  const { data: voucher, error: voucherErr } = await db
+  // Check if voucher already exists for this tenant and code
+  let voucher: { id: string; code: string } | null = null;
+  const { data: existingVoucher } = await db
     .from("vouchers")
-    .insert({
-      tenant_id: txn.tenant_id,
-      package_id: txn.package_id,
-      router_id: routerId,
-      code: voucherTrackingCode,
-      status: "active",
-      phone: txn.phone,
-      activated_at: new Date().toISOString(),
-      expires_at: calculatedExpiry,
-    })
     .select("id, code")
+    .eq("tenant_id", txn.tenant_id)
+    .eq("code", voucherTrackingCode)
     .maybeSingle();
 
-  if (voucherErr || !voucher) {
-    console.error("[Activation] Failed to insert voucher:", voucherErr);
-    throw new Error(`Failed to generate voucher: ${voucherErr?.message || "Unknown error"}`);
+  if (existingVoucher) {
+    const { data: updatedVoucher, error: updateErr } = await db
+      .from("vouchers")
+      .update({
+        package_id: txn.package_id,
+        router_id: routerId,
+        status: "active",
+        phone: txn.phone,
+        expires_at: calculatedExpiry,
+      })
+      .eq("id", existingVoucher.id)
+      .select("id, code")
+      .single();
+
+    if (updateErr) {
+      console.error("[Activation] Failed to update existing voucher:", updateErr);
+      throw new Error(`Failed to update voucher: ${updateErr.message}`);
+    }
+    voucher = updatedVoucher;
+  } else {
+    const { data: newVoucher, error: voucherErr } = await db
+      .from("vouchers")
+      .insert({
+        tenant_id: txn.tenant_id,
+        package_id: txn.package_id,
+        router_id: routerId,
+        code: voucherTrackingCode,
+        status: "active",
+        phone: txn.phone,
+        activated_at: new Date().toISOString(),
+        expires_at: calculatedExpiry,
+      })
+      .select("id, code")
+      .single();
+
+    if (voucherErr || !newVoucher) {
+      console.error("[Activation] Failed to insert voucher:", voucherErr);
+      throw new Error(`Failed to generate voucher: ${voucherErr?.message || "Unknown error"}`);
+    }
+    voucher = newVoucher;
   }
 
   // Link voucher, customer and router to transaction
