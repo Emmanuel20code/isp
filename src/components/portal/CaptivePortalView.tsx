@@ -332,8 +332,9 @@ export function CaptivePortalView({
 
   useEffect(() => {
     if (activeVoucherCode && !autoConnectAttempted) {
-      // Trigger client-side form POST instantly upon payment success
-      setAutoConnectSeconds(0);
+      // Allow the router's 10s-15s scheduler time to pull the provisioning sync command
+      // and perform a background `/ip hotspot active login` before we attempt fallback HTML POST
+      setAutoConnectSeconds(15);
       setAutoConnectStatus("Payment confirmed! Connecting to internet...");
     }
   }, [activeVoucherCode, autoConnectAttempted]);

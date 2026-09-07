@@ -196,18 +196,31 @@ async function handleSyncRequest(request: Request): Promise<Response> {
       rscLines.push(`};`);
 
       if (mac) {
-        // Automatically add/update IP binding for immediate internet access without captive portal friction
-        rscLines.push(`:if ([:len [/ip hotspot ip-binding find mac-address="${mac}"]] = 0) do={`);
+        // Automatically authorize the user by active login so they appear in 'active' sessions
+        // and respect limit-uptime, instead of bypassing them.
+        rscLines.push(`:local hip "";`);
         rscLines.push(
-          `  /ip hotspot ip-binding add mac-address="${mac}" type=bypassed comment="${comment}";`,
+          `:do { :set hip [/ip hotspot host get [find mac-address="${mac}"] address]; } on-error={};`,
+        );
+        if (ip) {
+          rscLines.push(`:if ([:len $hip] = 0) do={ :set hip "${ip}"; };`);
+        }
+        rscLines.push(`:if ([:len $hip] > 0) do={`);
+        rscLines.push(
+          `  :do { /ip hotspot active login user="${username}" password="${password}" mac-address="${mac}" ip=$hip; } on-error={};`,
+        );
+        rscLines.push(
+          `  :log info "WiFiBilling: Active login executed for MAC ${mac} (user ${username})";`,
         );
         rscLines.push(`} else={`);
         rscLines.push(
-          `  /ip hotspot ip-binding set [find mac-address="${mac}"] type=bypassed comment="${comment}";`,
+          `  :log warning "WiFiBilling: Could not find IP for MAC ${mac} to execute active login";`,
         );
         rscLines.push(`};`);
+        
+        // Also remove any existing bypassed binding to ensure they are strictly rate-limited
         rscLines.push(
-          `:log info "WiFiBilling: Instant internet access granted for MAC ${mac} (user ${username})";`,
+          `:do { /ip hotspot ip-binding remove [find mac-address="${mac}"]; } on-error={};`,
         );
       }
     } else if (cmd.action === "hotspot.delete_user") {

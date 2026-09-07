@@ -1000,7 +1000,7 @@ export async function activateCustomerPackage(
           });
         }
         console.log(
-          `[Activation] Successfully enqueued router provisioning command for router ${rId}`,
+          `[Activation] Successfully enqueued router provisioning command for router ${rId}. The router will pull this via sync within 10-15s and execute an active hotspot login for seamless internet access.`,
         );
       } catch (cmdErr) {
         console.error(
