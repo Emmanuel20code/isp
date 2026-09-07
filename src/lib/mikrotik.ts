@@ -835,6 +835,21 @@ export function generateNetworkConfigurationScript(params: ScriptParams): string
   :if ([:len [/interface pppoe-server server find service-name="wfb-pppoe"]] = 0) do={
     /interface pppoe-server server add service-name="wfb-pppoe" interface="br-hotspot" authentication=pap,chap,mschap1,mschap2 default-profile="wfb-ppp-prof" disabled=no;
   };
+
+  # PPPoE Expired Profile (Throttled + Auto Redirect)
+  :if ([:len [/ip pool find name="wfb-ppp-expired-pool"]] = 0) do={
+    /ip pool add name="wfb-ppp-expired-pool" ranges=10.10.20.10-10.10.20.254;
+  };
+  :if ([:len [/ppp profile find name="wfb-ppp-expired"]] = 0) do={
+    /ppp profile add name="wfb-ppp-expired" local-address=10.10.20.1 remote-address=wfb-ppp-expired-pool dns-server=8.8.8.8,1.1.1.1 rate-limit="256k/256k" comment="WiFiBilling PPPoE Expired Profile";
+  };
+} on-error={};
+
+# 5.1. Web Proxy for PPPoE Expired Redirection
+:do {
+  /ip proxy set enabled=yes port=8080;
+  :do { /ip proxy access remove [find comment="WiFiBilling PPPoE Expired Redirect"] } on-error={};
+  /ip proxy access add action=deny redirect-to="${cleanBase}/portal/${tenantSlug}?tab=pppoe" comment="WiFiBilling PPPoE Expired Redirect";
 } on-error={};
 
 # 6. DNS Setup & Local Portal Domain Routing
@@ -978,6 +993,12 @@ export function generateNetworkConfigurationScript(params: ScriptParams): string
   };
   :if ([:len [/ip firewall nat find where comment="WiFiBilling PPPoE NAT"]] = 0) do={
     /ip firewall nat add chain=srcnat action=masquerade src-address=10.10.10.0/24 comment="WiFiBilling PPPoE NAT";
+  };
+  :if ([:len [/ip firewall nat find where comment="WiFiBilling PPPoE Expired NAT"]] = 0) do={
+    /ip firewall nat add chain=srcnat action=masquerade src-address=10.10.20.0/24 comment="WiFiBilling PPPoE Expired NAT";
+  };
+  :if ([:len [/ip firewall nat find where comment="WiFiBilling PPPoE Expired Redirect"]] = 0) do={
+    /ip firewall nat add chain=dstnat protocol=tcp dst-port=80 src-address=10.10.20.0/24 action=redirect to-ports=8080 comment="WiFiBilling PPPoE Expired Redirect";
   };
   :if ([:len [/ip firewall nat find where comment="WiFiBilling WAN Masquerade"]] = 0) do={
     /ip firewall nat add chain=srcnat action=masquerade out-interface="ether1" comment="WiFiBilling WAN Masquerade";

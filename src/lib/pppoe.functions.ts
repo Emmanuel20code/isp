@@ -213,6 +213,7 @@ export const savePPPoECustomer = createServerFn({ method: "POST" })
 
     // Sync with router
     if (data.router_id) {
+      const isSuspended = (data.status || "active") !== "active";
       await enqueueRouterCommands([
         {
           tenantId,
@@ -221,11 +222,11 @@ export const savePPPoECustomer = createServerFn({ method: "POST" })
           payload: {
             username: data.username,
             password: data.password || data.username,
-            profile: pkg?.name || "default",
+            profile: isSuspended ? "wfb-ppp-expired" : (pkg?.name || "default"),
             rate_limit: pkg
               ? `${pkg.speed_up_mbps || 10}M/${pkg.speed_down_mbps || 10}M`
               : undefined,
-            disabled: (data.status || "active") !== "active",
+            disabled: false,
             comment: `PPPoE: ${data.full_name} (${data.phone})`,
           },
         },
@@ -252,7 +253,7 @@ export const suspendPPPoECustomer = createServerFn({ method: "POST" })
     await supabase.from("customers").update({ status: data.status }).eq("id", data.id);
 
     if (customer.router_id) {
-      // On MikroTik, we either disable the user or change profile to 'expired'
+      // On MikroTik, we assign the expired profile instead of disabling so they can be redirected
       await enqueueRouterCommands([
         {
           tenantId,
@@ -260,8 +261,8 @@ export const suspendPPPoECustomer = createServerFn({ method: "POST" })
           action: "pppoe.update_user",
           payload: {
             username: customer.username,
-            disabled: data.status !== "active",
-            profile: data.status === "active" ? undefined : "expired-limited",
+            disabled: false,
+            profile: data.status === "active" ? (customer.package_id || "default") : "wfb-ppp-expired",
           },
         },
       ]);

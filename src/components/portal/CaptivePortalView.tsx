@@ -817,40 +817,42 @@ export function CaptivePortalView({
         </header>
 
         {/* Service Type Switcher Tabs */}
-        <div className="flex rounded-xl bg-black/20 p-1 border border-white/5">
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab("hotspot");
-              const firstHotspot = packages.find((p) => p.kind !== "pppoe") || packages[0] || null;
-              setSelectedPkg(firstHotspot);
-            }}
-            className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-              activeTab === "hotspot"
-                ? "bg-white text-slate-900 shadow-md"
-                : `${theme.textSecondary} hover:text-white`
-            }`}
-          >
-            <Wifi className="size-3.5" />
-            <span>Hotspot Wi-Fi</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab("pppoe");
-              const firstPPPoE = packages.find((p) => p.kind === "pppoe") || packages[0] || null;
-              setSelectedPkg(firstPPPoE);
-            }}
-            className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-              activeTab === "pppoe"
-                ? "bg-white text-slate-900 shadow-md"
-                : `${theme.textSecondary} hover:text-white`
-            }`}
-          >
-            <Network className="size-3.5" />
-            <span>PPPoE Home Fiber</span>
-          </button>
-        </div>
+        {packages.some((p) => p.kind !== "pppoe") && packages.some((p) => p.kind === "pppoe") && (
+          <div className="flex rounded-xl bg-black/20 p-1 border border-white/5">
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("hotspot");
+                const firstHotspot = packages.find((p) => p.kind !== "pppoe") || packages[0] || null;
+                setSelectedPkg(firstHotspot);
+              }}
+              className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                activeTab === "hotspot"
+                  ? "bg-white text-slate-900 shadow-md"
+                  : `${theme.textSecondary} hover:text-white`
+              }`}
+            >
+              <Wifi className="size-3.5" />
+              <span>Hotspot Wi-Fi</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("pppoe");
+                const firstPPPoE = packages.find((p) => p.kind === "pppoe") || packages[0] || null;
+                setSelectedPkg(firstPPPoE);
+              }}
+              className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                activeTab === "pppoe"
+                  ? "bg-white text-slate-900 shadow-md"
+                  : `${theme.textSecondary} hover:text-white`
+              }`}
+            >
+              <Network className="size-3.5" />
+              <span>PPPoE Home Fiber</span>
+            </button>
+          </div>
+        )}
 
         {activeTab === "hotspot" ? (
           <>
