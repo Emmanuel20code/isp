@@ -641,7 +641,7 @@ function PPPoEManager() {
                                   <DropdownMenuItem
                                     onClick={() => {
                                       setEditingCustomer(c);
-                                      setGeneratedPassword(c.password || "");
+                                      setGeneratedPassword("");
                                       setIsModalOpen(true);
                                     }}
                                   >
@@ -890,10 +890,7 @@ function PPPoEManager() {
         {/* Modal: Add or Edit PPPoE Customer */}
         <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
           <DialogContent className="max-w-md">
-            <form
-              onSubmit={handleSave}
-              key={editingCustomer ? editingCustomer.id : "new-pppoe-customer"}
-            >
+            <form onSubmit={handleSave}>
               <DialogHeader>
                 <DialogTitle>
                   {editingCustomer ? "Edit PPPoE Customer" : "Add New PPPoE Customer"}
@@ -909,7 +906,7 @@ function PPPoEManager() {
                   <Input
                     id="full_name"
                     name="full_name"
-                    defaultValue={editingCustomer?.full_name || ""}
+                    defaultValue={editingCustomer?.full_name}
                     required
                     placeholder="e.g. John Doe"
                   />
@@ -919,7 +916,7 @@ function PPPoEManager() {
                   <Input
                     id="phone"
                     name="phone"
-                    defaultValue={editingCustomer?.phone || ""}
+                    defaultValue={editingCustomer?.phone}
                     required
                     placeholder="0712345678"
                   />
@@ -930,7 +927,7 @@ function PPPoEManager() {
                     <Input
                       id="username"
                       name="username"
-                      defaultValue={editingCustomer?.username || ""}
+                      defaultValue={editingCustomer?.username}
                       required
                       placeholder="john.doe"
                     />
@@ -949,7 +946,10 @@ function PPPoEManager() {
                     <Input
                       id="password"
                       name="password"
-                      value={generatedPassword}
+                      value={generatedPassword || undefined}
+                      defaultValue={
+                        generatedPassword ? undefined : editingCustomer?.password || undefined
+                      }
                       onChange={(e) => setGeneratedPassword(e.target.value)}
                       placeholder={editingCustomer ? "Leave blank to keep" : "••••••••"}
                       required={!editingCustomer && !generatedPassword}
@@ -960,7 +960,7 @@ function PPPoEManager() {
                   <Label htmlFor="package_id">Assigned PPPoE Package</Label>
                   <Select
                     name="package_id"
-                    defaultValue={editingCustomer?.package_id || pppPackages[0]?.id || ""}
+                    defaultValue={editingCustomer?.package_id || pppPackages[0]?.id || undefined}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select a PPPoE package" />
@@ -986,7 +986,7 @@ function PPPoEManager() {
                     name="router_id"
                     defaultValue={
                       editingCustomer?.router_id ||
-                      (routerList.length === 1 ? routerList[0].id : "")
+                      (routerList.length === 1 ? routerList[0].id : undefined)
                     }
                   >
                     <SelectTrigger>
