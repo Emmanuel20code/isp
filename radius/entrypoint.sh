@@ -53,6 +53,101 @@ until nc -z -w 2 "$PGHOST" "$PGPORT" 2>/dev/null || [ "$RETRY_COUNT" -ge "$MAX_R
     sleep 2
 done
 
+echo "[Entrypoint] Ensuring FreeRADIUS database schema in PostgreSQL..."
+PGPASSWORD="$PGPASSWORD" psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" << "EOSQL" || echo "[Entrypoint] Schema check/init finished"
+CREATE TABLE IF NOT EXISTS radcheck (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(64) NOT NULL DEFAULT '',
+    attribute VARCHAR(64) NOT NULL DEFAULT '',
+    op VARCHAR(2) NOT NULL DEFAULT '==',
+    value VARCHAR(253) NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS radcheck_username_idx ON radcheck(username);
+
+CREATE TABLE IF NOT EXISTS radreply (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(64) NOT NULL DEFAULT '',
+    attribute VARCHAR(64) NOT NULL DEFAULT '',
+    op VARCHAR(2) NOT NULL DEFAULT '=',
+    value VARCHAR(253) NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS radreply_username_idx ON radreply(username);
+
+CREATE TABLE IF NOT EXISTS radgroupcheck (
+    id SERIAL PRIMARY KEY,
+    groupname VARCHAR(64) NOT NULL DEFAULT '',
+    attribute VARCHAR(64) NOT NULL DEFAULT '',
+    op VARCHAR(2) NOT NULL DEFAULT '==',
+    value VARCHAR(253) NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS radgroupreply (
+    id SERIAL PRIMARY KEY,
+    groupname VARCHAR(64) NOT NULL DEFAULT '',
+    attribute VARCHAR(64) NOT NULL DEFAULT '',
+    op VARCHAR(2) NOT NULL DEFAULT '=',
+    value VARCHAR(253) NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS radusergroup (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(64) NOT NULL DEFAULT '',
+    groupname VARCHAR(64) NOT NULL DEFAULT '',
+    priority INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS radpostauth (
+    id BIGSERIAL PRIMARY KEY,
+    username VARCHAR(64) NOT NULL DEFAULT '',
+    pass VARCHAR(64) NOT NULL DEFAULT '',
+    reply VARCHAR(32) NOT NULL DEFAULT '',
+    authdate TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+    nasipaddress VARCHAR(45) NOT NULL DEFAULT '',
+    callingstationid VARCHAR(50) NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS radacct (
+    radacctid BIGSERIAL PRIMARY KEY,
+    acctsessionid VARCHAR(64) NOT NULL DEFAULT '',
+    acctuniqueid VARCHAR(32) NOT NULL DEFAULT '',
+    username VARCHAR(64) NOT NULL DEFAULT '',
+    realm VARCHAR(64) DEFAULT '',
+    nasipaddress INET NOT NULL DEFAULT '127.0.0.1'::inet,
+    nasportid VARCHAR(32) DEFAULT NULL,
+    nasporttype VARCHAR(32) DEFAULT NULL,
+    acctstarttime TIMESTAMP WITH TIME ZONE DEFAULT NULL,
+    acctupdatetime TIMESTAMP WITH TIME ZONE DEFAULT NULL,
+    acctstoptime TIMESTAMP WITH TIME ZONE DEFAULT NULL,
+    acctinterval INTEGER DEFAULT NULL,
+    acctsessiontime INTEGER DEFAULT NULL,
+    acctauthentic VARCHAR(32) DEFAULT NULL,
+    connectinfo_start VARCHAR(50) DEFAULT NULL,
+    connectinfo_stop VARCHAR(50) DEFAULT NULL,
+    acctinputoctets BIGINT DEFAULT 0,
+    acctoutputoctets BIGINT DEFAULT 0,
+    calledstationid VARCHAR(50) NOT NULL DEFAULT '',
+    callingstationid VARCHAR(50) NOT NULL DEFAULT '',
+    acctterminatecause VARCHAR(32) NOT NULL DEFAULT '',
+    servicetype VARCHAR(32) DEFAULT NULL,
+    framedprotocol VARCHAR(32) DEFAULT NULL,
+    framedipaddress INET DEFAULT NULL
+);
+CREATE INDEX IF NOT EXISTS radacct_username_idx ON radacct(username);
+CREATE INDEX IF NOT EXISTS radacct_session_idx ON radacct(acctsessionid);
+
+CREATE TABLE IF NOT EXISTS nas (
+    id SERIAL PRIMARY KEY,
+    nasname VARCHAR(128) NOT NULL,
+    shortname VARCHAR(32),
+    type VARCHAR(30) DEFAULT 'other',
+    ports INTEGER,
+    secret VARCHAR(60) NOT NULL,
+    server VARCHAR(64),
+    community VARCHAR(50),
+    description VARCHAR(200) DEFAULT 'RADIUS Client'
+);
+EOSQL
+
 # 2. Substitute credentials into sql module config
 if [ -f "$RADDB/mods-available/sql" ]; then
     sed -i "s|@@PGHOST@@|$PGHOST|g" "$RADDB/mods-available/sql"
@@ -67,9 +162,14 @@ if [ -f "$RADDB/clients.conf" ]; then
     sed -i "s|@@RADIUS_SECRET@@|$RADIUS_SECRET|g" "$RADDB/clients.conf"
 fi
 
-# 4. Enable SQL module and sites
+# 4. Enable SQL module and standard modules
 mkdir -p "$RADDB/mods-enabled" "$RADDB/sites-enabled"
-ln -sf "$RADDB/mods-available/sql" "$RADDB/mods-enabled/sql"
+for mod in sql pap chap mschap preprocess acct_unique detail digest expiration logintime always; do
+    if [ -f "$RADDB/mods-available/$mod" ]; then
+        ln -sf "$RADDB/mods-available/$mod" "$RADDB/mods-enabled/$mod"
+    fi
+done
+
 ln -sf "$RADDB/sites-available/default" "$RADDB/sites-enabled/default"
 
 # Remove conflicting default modules if present
