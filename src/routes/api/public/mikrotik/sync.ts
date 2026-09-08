@@ -416,22 +416,30 @@ async function handleSyncRequest(request: Request): Promise<Response> {
       }
     } else if (
       cmd.action === "hotspot.harden_security" ||
-      cmd.action === "hotspot.fix_unauthorized"
+      cmd.action === "hotspot.fix_unauthorized" ||
+      cmd.action === "hotspot.fix_repeater"
     ) {
       rscLines.push(
-        `:log warning "WiFiBilling: Executing Hotspot Security Hardening & Anti-Tunneling Fix...";`,
+        `:log warning "WiFiBilling: Executing Hotspot Security Hardening & Repeater Bypass Fix...";`,
       );
-      // 1. Enforce strict login-by on all hotspot profiles and disable trial uptime
+      // 1. Enforce strict login-by on all hotspot profiles: REMOVE MAC-COOKIE!
+      // When mac-cookie is enabled, if 1 device logs in through a repeater, the repeater's
+      // MAC gets a cookie. Any other device connecting through that repeater will be automatically
+      // authenticated by MikroTik without seeing the captive portal! Removing mac-cookie stops this completely.
       rscLines.push(
-        `:do { /ip hotspot profile set [find] login-by=mac-cookie,cookie,http-chap,http-pap trial-uptime-limit=0s split-user-domain=no http-cookie-lifetime=365d use-radius=no ssl-certificate=none; } on-error={};`,
+        `:do { /ip hotspot profile set [find] login-by=http-chap,http-pap trial-uptime-limit=0s split-user-domain=no use-radius=no ssl-certificate=none; } on-error={};`,
       );
       // 2. Enforce 1 device per MAC address on all hotspot servers
       rscLines.push(`:do { /ip hotspot set [find] addresses-per-mac=1 disabled=no; } on-error={};`);
-      // 3. Wipe all stored MAC cookies (kills unauthorized cookie logins)
+      // 3. Enforce 1 shared user on all hotspot user profiles
+      rscLines.push(
+        `:do { /ip hotspot user profile set [find] shared-users=1 status-autorefresh=1m keepalive-timeout=2m; } on-error={};`,
+      );
+      // 4. Wipe all stored MAC cookies (kills unauthorized cookie logins on repeaters)
       rscLines.push(`:do { /ip hotspot cookie remove [find]; } on-error={};`);
-      // 4. Remove default unpassworded 'admin' hotspot user if present
+      // 5. Remove default unpassworded 'admin' hotspot user if present
       rscLines.push(`:do { /ip hotspot user remove [find name="admin"]; } on-error={};`);
-      // 5. Clean up any rogue bypass bindings that do not belong to valid devices
+      // 6. Clean up any rogue bypass bindings that do not belong to valid devices
       rscLines.push(`:do {`);
       rscLines.push(`  :foreach b in=[/ip hotspot ip-binding find type=bypassed] do={`);
       rscLines.push(`    :local c [/ip hotspot ip-binding get $b comment];`);
@@ -443,7 +451,20 @@ async function handleSyncRequest(request: Request): Promise<Response> {
       rscLines.push(`    };`);
       rscLines.push(`  };`);
       rscLines.push(`} on-error={};`);
-      // 6. Fix Captive Portal Detection: Remove any previously added manual DNS redirects
+      // 7. Anti-Repeater NAT Sharing: Add Mangle rule to set TTL=1
+      // If an extender operates in NAT mode, it decrements TTL. Setting outgoing TTL=1
+      // ensures any secondary NAT repeater cannot forward packets to devices behind it,
+      // forcing the repeater to be configured as a transparent L2 Bridge / AP!
+      rscLines.push(`:do {`);
+      rscLines.push(
+        `  :if ([:len [/ip firewall mangle find comment="WiFiBilling: Anti-Repeater-NAT"]] = 0) do={`,
+      );
+      rscLines.push(
+        `    /ip firewall mangle add chain=postrouting action=change-ttl new-ttl=set:1 passthrough=yes comment="WiFiBilling: Anti-Repeater-NAT" place-before=0;`,
+      );
+      rscLines.push(`  };`);
+      rscLines.push(`} on-error={};`);
+      // 8. Fix Captive Portal Detection: Remove any previously added manual DNS redirects
       // Manual dstnat rules placed before the hotspot chain break MikroTik's native DNS interception
       // which is required for captive portal detection to work properly on Android and iOS.
       rscLines.push(`:do {`);

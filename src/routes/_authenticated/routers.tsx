@@ -13,6 +13,8 @@ import {
   getRouterScript,
   fixRouterSsl,
   hardenRouterHotspot,
+  fixRouterRepeaterBypass,
+  fixAllRoutersRepeaterBypass,
 } from "@/lib/network.functions";
 import { getMyContext } from "@/lib/tenancy.functions";
 import { AppShell } from "@/components/AppShell";
@@ -76,6 +78,7 @@ import { generateOnboardingCommand } from "@/lib/mikrotik";
 import { MacScannerModal } from "@/components/MacScannerModal";
 import { RouterRevenueModal } from "@/components/RouterRevenueModal";
 import { RouterIncomeLeaderboard } from "@/components/RouterIncomeLeaderboard";
+import { RepeaterFixModal } from "@/components/RepeaterFixModal";
 import type { RouterRevenueData } from "@/lib/network.functions";
 
 export const Route = createFileRoute("/_authenticated/routers")({
@@ -132,6 +135,7 @@ interface RouterCardProps {
   onToggleDisable: (id: string, isDisabled: boolean) => void;
   onFixSsl: (id: string) => void;
   onHardenHotspot: (id: string) => void;
+  onFixRepeater: (id: string) => void;
   onScanMacs: (id: string) => void;
   onViewRevenue: (router: any) => void;
   isDeleting: boolean;
@@ -139,6 +143,7 @@ interface RouterCardProps {
   isSyncing: boolean;
   isFixingSsl: boolean;
   isHardening: boolean;
+  isFixingRepeater: boolean;
 }
 
 function RouterCard({
@@ -151,6 +156,7 @@ function RouterCard({
   onForceSync,
   onFixSsl,
   onHardenHotspot,
+  onFixRepeater,
   onScanMacs,
   onViewRevenue,
   onToggleDisable,
@@ -159,6 +165,7 @@ function RouterCard({
   isSyncing,
   isFixingSsl,
   isHardening,
+  isFixingRepeater,
 }: RouterCardProps) {
   const [copied, setCopied] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
@@ -473,6 +480,20 @@ function RouterCard({
                       )}
                       Fix Free Internet / Harden
                     </button>
+                    <button
+                      type="button"
+                      disabled={isFixingRepeater}
+                      onClick={() => onFixRepeater(r.id)}
+                      className="text-[11px] text-amber-400 hover:text-amber-300 underline font-medium cursor-pointer disabled:opacity-50 flex items-center gap-1 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20"
+                      title="Rectifies Tenda / extender bypass: wipes MAC cookies, sets 1 device per MAC, applies TTL=1 Anti-NAT rule, and forces captive portal"
+                    >
+                      {isFixingRepeater ? (
+                        <Loader2 className="size-3 animate-spin" />
+                      ) : (
+                        <Radio className="size-3 text-amber-400" />
+                      )}
+                      Fix Repeater Bypass
+                    </button>
                     <Button
                       size="sm"
                       variant="secondary"
@@ -714,6 +735,30 @@ function RouterCard({
                         <ShieldCheck className="size-3.5" />
                       )}
                       Remote Harden Hotspot
+                    </Button>
+                  </div>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2.5 border-t bg-amber-500/[0.04] -mx-3 -mb-3 p-3 rounded-b-lg border-amber-500/20">
+                    <div className="space-y-0.5">
+                      <span className="font-semibold text-amber-600 dark:text-amber-400 flex items-center gap-1.5 text-xs">
+                        <Radio className="size-3.5" /> Repeater & Range Extender Protection
+                      </span>
+                      <p className="text-[11px] text-muted-foreground">
+                        Rectifies Tenda / extender bypass: disables MAC cookies, sets 1 device per MAC, applies TTL=1 Anti-NAT rule, and forces captive portal redirection.
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={isFixingRepeater}
+                      className="h-7 text-xs gap-1.5 bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 shrink-0"
+                      onClick={() => onFixRepeater(r.id)}
+                    >
+                      {isFixingRepeater ? (
+                        <Loader2 className="size-3 animate-spin" />
+                      ) : (
+                        <Radio className="size-3.5" />
+                      )}
+                      Fix Repeater Bypass
                     </Button>
                   </div>
                 </div>
@@ -1224,7 +1269,42 @@ function RoutersPage() {
     },
   });
 
+  const fixRepeaterFn = useServerFn(fixRouterRepeaterBypass);
+  const fixAllRepeatersFn = useServerFn(fixAllRoutersRepeaterBypass);
+
+  const fixRepeaterMutation = useMutation({
+    mutationFn: (id: string) => fixRepeaterFn({ data: { id } }),
+    onSuccess: async () => {
+      toast.success(
+        "Repeater protection queued! MAC cookies disabled, 1-device policy enforced, and Anti-NAT rule activated.",
+      );
+      await qc.invalidateQueries({ queryKey: ["network"] });
+    },
+    onError: (err) => {
+      toast.error(
+        `Failed to queue repeater protection: ${err instanceof Error ? err.message : "Unknown error"}`,
+      );
+    },
+  });
+
+  const fixAllRepeatersMutation = useMutation({
+    mutationFn: () => fixAllRepeatersFn(),
+    onSuccess: async (res) => {
+      toast.success(
+        `Repeater protection queued for ${res.count} router(s)! MAC cookies disabled and Anti-NAT rules pushed.`,
+      );
+      await qc.invalidateQueries({ queryKey: ["network"] });
+    },
+    onError: (err) => {
+      toast.error(
+        `Failed to queue repeater protection: ${err instanceof Error ? err.message : "Unknown error"}`,
+      );
+    },
+  });
+
   const [apGuideOpen, setApGuideOpen] = useState(false);
+  const [repeaterModalOpen, setRepeaterModalOpen] = useState(false);
+  const [selectedRouterForRepeater, setSelectedRouterForRepeater] = useState<string | null>(null);
   const [macScannerOpen, setMacScannerOpen] = useState(false);
   const [selectedRouterForScan, setSelectedRouterForScan] = useState<string | null>(null);
   const [selectedRouterForRevenue, setSelectedRouterForRevenue] = useState<any | null>(null);
@@ -1271,6 +1351,17 @@ function RoutersPage() {
             className="gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10"
           >
             <ShieldCheck className="size-3.5" /> Anti-Leak Guide
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setSelectedRouterForRepeater(null);
+              setRepeaterModalOpen(true);
+            }}
+            className="gap-1.5 text-xs font-semibold text-amber-600 dark:text-amber-400 border-amber-500/30 hover:bg-amber-500/10 bg-amber-500/5"
+          >
+            <Radio className="size-3.5 text-amber-500" /> Tenda / Repeater Fix
           </Button>
           <Link to="/datagrid">
             <Button variant="outline" size="sm" className="gap-1.5 text-xs font-semibold">
@@ -1441,6 +1532,11 @@ function RoutersPage() {
               onForceSync={(id) => forceSyncMutation.mutate(id)}
               onFixSsl={(id) => fixSslMutation.mutate(id)}
               onHardenHotspot={(id) => hardenHotspotMutation.mutate(id)}
+              onFixRepeater={(id) => {
+                setSelectedRouterForRepeater(id);
+                fixRepeaterMutation.mutate(id);
+                setRepeaterModalOpen(true);
+              }}
               onScanMacs={(id) => {
                 setSelectedRouterForScan(id);
                 setMacScannerOpen(true);
@@ -1455,6 +1551,9 @@ function RoutersPage() {
               isFixingSsl={fixSslMutation.isPending && fixSslMutation.variables === r.id}
               isHardening={
                 hardenHotspotMutation.isPending && hardenHotspotMutation.variables === r.id
+              }
+              isFixingRepeater={
+                fixRepeaterMutation.isPending && fixRepeaterMutation.variables === r.id
               }
             />
           ))}
@@ -1717,6 +1816,21 @@ function RoutersPage() {
           const found = data?.routers.find((r) => r.id === id);
           if (found) setSelectedRouterForRevenue(found);
         }}
+      />
+
+      {/* Tenda Repeater & Range Extender Protection Modal */}
+      <RepeaterFixModal
+        open={repeaterModalOpen}
+        onOpenChange={setRepeaterModalOpen}
+        routers={data?.routers?.map((r) => ({ id: r.id, name: r.name })) || []}
+        selectedRouterId={selectedRouterForRepeater}
+        onFixRouter={async (id) => {
+          await fixRepeaterMutation.mutateAsync(id);
+        }}
+        onFixAllRouters={async () => {
+          await fixAllRepeatersMutation.mutateAsync();
+        }}
+        isFixing={fixRepeaterMutation.isPending || fixAllRepeatersMutation.isPending}
       />
 
       <ChatWidget />

@@ -315,7 +315,7 @@ add address=10.10.0.1/24 interface=hotspot-bridge
 :if ([:len [/file find name="flash"]] > 0) do={ :set hsDir "flash/hotspot" }
 :foreach i in=[/ip hotspot profile find where name!="default"] do={ /ip hotspot profile remove $i }
 :foreach i in=[/ip hotspot profile find where name=hsprof1] do={ /ip hotspot profile remove $i }
-/ip hotspot profile add name="hsprof1" hotspot-address=10.10.0.1 dns-name="hotspot.lan" html-directory=$hsDir login-by=mac-cookie,cookie,http-chap,http-pap ssl-certificate=none
+/ip hotspot profile add name="hsprof1" hotspot-address=10.10.0.1 dns-name="hotspot.lan" html-directory=$hsDir login-by=http-chap,http-pap ssl-certificate=none
 # Disable hotspot popups for unauthorized users to let them browse the portal smoothly
 /ip hotspot profile set [find name=hsprof1] use-radius=no
 
@@ -922,13 +922,13 @@ export function generateNetworkConfigurationScript(params: ScriptParams): string
 } on-error={};
 
 :do {
-  # Force all existing hotspot profiles to disable SSL, disable trial uptime, and use a local domain name
-  /ip hotspot profile set [find] hotspot-address=10.10.0.1 dns-name="hotspot.lan" html-directory="hotspot" login-by=mac-cookie,cookie,http-chap,http-pap trial-uptime-limit=0s split-user-domain=no http-cookie-lifetime=365d use-radius=no ssl-certificate=none;
+  # Force all existing hotspot profiles to disable SSL, disable trial uptime, and enforce http-chap,http-pap without mac-cookie to prevent repeater bypass
+  /ip hotspot profile set [find] hotspot-address=10.10.0.1 dns-name="hotspot.lan" html-directory="hotspot" login-by=http-chap,http-pap trial-uptime-limit=0s split-user-domain=no use-radius=no ssl-certificate=none;
   
   :if ([:len [/ip hotspot profile find name="billing_hsprof"]] = 0) do={
-    /ip hotspot profile add name="billing_hsprof" hotspot-address=10.10.0.1 dns-name="hotspot.lan" html-directory="hotspot" login-by=mac-cookie,cookie,http-chap,http-pap trial-uptime-limit=0s split-user-domain=no http-cookie-lifetime=365d use-radius=no ssl-certificate=none;
+    /ip hotspot profile add name="billing_hsprof" hotspot-address=10.10.0.1 dns-name="hotspot.lan" html-directory="hotspot" login-by=http-chap,http-pap trial-uptime-limit=0s split-user-domain=no use-radius=no ssl-certificate=none;
   } else={
-    /ip hotspot profile set [find name="billing_hsprof"] hotspot-address=10.10.0.1 dns-name="hotspot.lan" html-directory="hotspot" login-by=mac-cookie,cookie,http-chap,http-pap trial-uptime-limit=0s split-user-domain=no http-cookie-lifetime=365d use-radius=no ssl-certificate=none;
+    /ip hotspot profile set [find name="billing_hsprof"] hotspot-address=10.10.0.1 dns-name="hotspot.lan" html-directory="hotspot" login-by=http-chap,http-pap trial-uptime-limit=0s split-user-domain=no use-radius=no ssl-certificate=none;
   };
 } on-error={};
 
@@ -1011,7 +1011,74 @@ ${uniqueWg
   /tool netwatch add host="8.8.8.8" interval=10s timeout=2s up-script=":log info \\"=== HEARTBEAT OK: Internet is Online ===\\"; /ip hotspot enable [find]" down-script=":log error \\"!!! HEARTBEAT FAIL: Internet Unreachable !!!\\"; /ip dhcp-client release [find interface=ether1]; :delay 2s; /ip dhcp-client renew [find interface=ether1]" comment="Real-Time Billing Heartbeat";
 } on-error={};
 
+# 14. Anti-Repeater NAT Tethering Protection (Prevents repeaters from sharing 1 ticket via NAT)
+:do {
+  :if ([:len [/ip firewall mangle find comment="WiFiBilling: Anti-Repeater-NAT"]] = 0) do={
+    /ip firewall mangle add chain=postrouting action=change-ttl new-ttl=set:1 passthrough=yes comment="WiFiBilling: Anti-Repeater-NAT" place-before=0;
+  };
+} on-error={};
+
 :log info "WiFiBilling: Universal Hotspot, PPPoE & Captive Portal Configured Successfully.";
+`;
+}
+
+/**
+ * Generates a standalone copy-pasteable script for Winbox Terminal to rectify repeater / range extender bypass.
+ */
+export function generateRepeaterProtectionScript(): string {
+  return `# ====================================================================
+# WiFiBilling - MikroTik Hotspot Anti-Repeater / Extender Protection
+# Run this in Winbox Terminal to force all repeater users to the portal.
+# ====================================================================
+:log warning "WiFiBilling: Applying Hotspot Repeater & Extender Protection...";
+
+# 1. Disable MAC Cookie & Cookie Auto-Login
+# Prevents a repeater's MAC from auto-authorizing all subsequent devices
+:do {
+  /ip hotspot profile set [find] login-by=http-chap,http-pap trial-uptime-limit=0s split-user-domain=no use-radius=no ssl-certificate=none;
+} on-error={};
+
+# 2. Enforce 1 Device Per MAC on Hotspot
+:do {
+  /ip hotspot set [find] addresses-per-mac=1 disabled=no;
+} on-error={};
+
+# 3. Enforce 1 Shared User on all Hotspot User Profiles
+:do {
+  /ip hotspot user profile set [find] shared-users=1 status-autorefresh=1m keepalive-timeout=2m;
+} on-error={};
+
+# 4. Wipe all active cookies so repeaters cannot reuse stored sessions
+:do {
+  /ip hotspot cookie remove [find];
+} on-error={};
+
+# 5. Clean up any rogue bypassed IP bindings
+:do {
+  :foreach b in=[/ip hotspot ip-binding find type=bypassed] do={
+    :local c [/ip hotspot ip-binding get $b comment];
+    :local a [/ip hotspot ip-binding get $b address];
+    :if ($a != "10.10.0.1" && $a != "192.168.88.1" && !($c ~ "WiFiBilling: Device") && !($c ~ "WiFiBilling: Router") && !($c ~ "WiFiBilling: Default")) do={
+      :do { /ip hotspot ip-binding remove $b; } on-error={};
+    };
+  };
+} on-error={};
+
+# 6. Block NAT Sharing from Repeaters (Anti-Tether TTL Mangle rule)
+:do {
+  :if ([:len [/ip firewall mangle find comment="WiFiBilling: Anti-Repeater-NAT"]] = 0) do={
+    /ip firewall mangle add chain=postrouting action=change-ttl new-ttl=set:1 passthrough=yes comment="WiFiBilling: Anti-Repeater-NAT" place-before=0;
+  };
+} on-error={};
+
+# 7. Disconnect active sessions to force all repeater devices to captive portal now
+:do {
+  /ip hotspot active remove [find];
+  /ip hotspot host remove [find];
+} on-error={};
+
+:log info "WiFiBilling: Repeater Protection Applied! All repeater devices must now authenticate.";
+:put "SUCCESS: Repeater bypass rectified! Captive portal redirection active for all devices.";
 `;
 }
 

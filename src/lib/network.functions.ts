@@ -663,6 +663,67 @@ export const hardenRouterHotspot = createServerFn({ method: "POST" })
     return { ok: true, message: "Hotspot hardening command queued for router." };
   });
 
+export const fixRouterRepeaterBypass = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) => z.object({ id: z.string().uuid() }).parse(input))
+  .handler(async ({ data, context }) => {
+    const { supabase, userId } = context;
+    const tenantId = await currentTenantId(supabase, userId);
+
+    const { data: router } = await supabase
+      .from("routers")
+      .select("id, name, onboard_token")
+      .eq("id", data.id)
+      .eq("tenant_id", tenantId)
+      .single();
+
+    if (!router) throw new Error("Router not found");
+
+    // Enqueue repeater bypass fix command to eliminate free internet sharing via extenders/repeaters
+    const { error } = await supabase.from("router_commands").insert({
+      tenant_id: tenantId,
+      router_id: data.id,
+      action: "hotspot.fix_repeater",
+      payload: {
+        reason: "dashboard_manual_repeater_fix",
+        timestamp: new Date().toISOString(),
+      },
+      status: "queued",
+    });
+
+    if (error) throw new Error(error.message);
+    return { ok: true, message: "Repeater protection command queued for router." };
+  });
+
+export const fixAllRoutersRepeaterBypass = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabase, userId } = context;
+    const tenantId = await currentTenantId(supabase, userId);
+
+    const { data: routers } = await supabase
+      .from("routers")
+      .select("id, name")
+      .eq("tenant_id", tenantId);
+
+    if (!routers || routers.length === 0) throw new Error("No routers found");
+
+    const commands = routers.map((r) => ({
+      tenant_id: tenantId,
+      router_id: r.id,
+      action: "hotspot.fix_repeater",
+      payload: {
+        reason: "dashboard_all_routers_repeater_fix",
+        timestamp: new Date().toISOString(),
+      },
+      status: "queued",
+    }));
+
+    const { error } = await supabase.from("router_commands").insert(commands);
+    if (error) throw new Error(error.message);
+    return { ok: true, count: routers.length };
+  });
+
 export const deleteRouter = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => z.object({ id: z.string().uuid() }).parse(input))
