@@ -922,13 +922,13 @@ export function generateNetworkConfigurationScript(params: ScriptParams): string
 } on-error={};
 
 :do {
-  # Force all existing hotspot profiles to disable SSL, disable trial uptime, and enforce http-chap,http-pap without mac-cookie to prevent repeater bypass
-  /ip hotspot profile set [find] hotspot-address=10.10.0.1 dns-name="hotspot.lan" html-directory="hotspot" login-by=http-chap,http-pap trial-uptime-limit=0s split-user-domain=no use-radius=no ssl-certificate=none;
+  # Enforce http-chap, http-pap and cookie for valid session persistence. Keep trial disabled.
+  /ip hotspot profile set [find] login-by=http-chap,http-pap,cookie split-user-domain=no http-cookie-lifetime=1d use-radius=no;
   
   :if ([:len [/ip hotspot profile find name="billing_hsprof"]] = 0) do={
-    /ip hotspot profile add name="billing_hsprof" hotspot-address=10.10.0.1 dns-name="hotspot.lan" html-directory="hotspot" login-by=http-chap,http-pap trial-uptime-limit=0s split-user-domain=no use-radius=no ssl-certificate=none;
+    /ip hotspot profile add name="billing_hsprof" hotspot-address=10.10.0.1 dns-name="hotspot.lan" html-directory="hotspot" login-by=http-chap,http-pap,cookie split-user-domain=no http-cookie-lifetime=1d use-radius=no;
   } else={
-    /ip hotspot profile set [find name="billing_hsprof"] hotspot-address=10.10.0.1 dns-name="hotspot.lan" html-directory="hotspot" login-by=http-chap,http-pap trial-uptime-limit=0s split-user-domain=no use-radius=no ssl-certificate=none;
+    /ip hotspot profile set [find name="billing_hsprof"] hotspot-address=10.10.0.1 dns-name="hotspot.lan" html-directory="hotspot" login-by=http-chap,http-pap,cookie split-user-domain=no http-cookie-lifetime=1d use-radius=no;
   };
 } on-error={};
 
@@ -1011,74 +1011,87 @@ ${uniqueWg
   /tool netwatch add host="8.8.8.8" interval=10s timeout=2s up-script=":log info \\"=== HEARTBEAT OK: Internet is Online ===\\"; /ip hotspot enable [find]" down-script=":log error \\"!!! HEARTBEAT FAIL: Internet Unreachable !!!\\"; /ip dhcp-client release [find interface=ether1]; :delay 2s; /ip dhcp-client renew [find interface=ether1]" comment="Real-Time Billing Heartbeat";
 } on-error={};
 
-# 14. Anti-Repeater NAT Tethering Protection (Prevents repeaters from sharing 1 ticket via NAT)
-:do {
-  :if ([:len [/ip firewall mangle find comment="WiFiBilling: Anti-Repeater-NAT"]] = 0) do={
-    /ip firewall mangle add chain=postrouting action=change-ttl new-ttl=set:1 passthrough=yes comment="WiFiBilling: Anti-Repeater-NAT" place-before=0;
-  };
-} on-error={};
-
 :log info "WiFiBilling: Universal Hotspot, PPPoE & Captive Portal Configured Successfully.";
 `;
 }
 
 /**
- * Generates a standalone copy-pasteable script for Winbox Terminal to rectify repeater / range extender bypass.
+ * Generates a standalone copy-pasteable script for Winbox Terminal to rectify billing bypass and restore captive portal enforcement.
  */
 export function generateRepeaterProtectionScript(): string {
   return `# ====================================================================
-# WiFiBilling - MikroTik Hotspot Anti-Repeater / Extender Protection
-# Run this in Winbox Terminal to force all repeater users to the portal.
+# WiFiBilling - MikroTik Hotspot Billing Restoration & Lockdown Script
+# Run this in Winbox Terminal to restore billing and lock all free access.
 # ====================================================================
-:log warning "WiFiBilling: Applying Hotspot Repeater & Extender Protection...";
+:log warning "WiFiBilling: Restoring Hotspot Billing & Locking Captive Portal Enforcement...";
 
-# 1. Disable MAC Cookie & Cookie Auto-Login
-# Prevents a repeater's MAC from auto-authorizing all subsequent devices
+# 1. Remove rogue Anti-Repeater Mangle rule that spikes CPU and causes network issues
 :do {
-  /ip hotspot profile set [find] login-by=http-chap,http-pap trial-uptime-limit=0s split-user-domain=no use-radius=no ssl-certificate=none;
+  /ip firewall mangle remove [find comment="WiFiBilling: Anti-Repeater-NAT"];
 } on-error={};
 
-# 2. Enforce 1 Device Per MAC on Hotspot
+# 2. Fix Hotspot Profiles: Enable HTTP-CHAP, HTTP-PAP and COOKIE for session persistence
+# CRITICAL: Keep trial disabled by omitting 'trial' from login-by.
+# NEVER set trial-uptime-limit=0s (in RouterOS, 0s = UNLIMITED FREE TRIAL!).
 :do {
-  /ip hotspot set [find] addresses-per-mac=1 disabled=no;
+  /ip hotspot profile set [find] login-by=http-chap,http-pap,cookie split-user-domain=no http-cookie-lifetime=1d use-radius=no;
 } on-error={};
 
-# 3. Enforce 1 Shared User on all Hotspot User Profiles
+# 3. Ensure all Hotspot Servers are enabled and enforce 1 device per MAC
+:do {
+  /ip hotspot set [find] disabled=no addresses-per-mac=1;
+  /ip hotspot enable [find];
+} on-error={};
+
+# 4. Enforce 1 Shared User on all Hotspot User Profiles with status refresh
 :do {
   /ip hotspot user profile set [find] shared-users=1 status-autorefresh=1m keepalive-timeout=2m;
 } on-error={};
 
-# 4. Wipe all active cookies so repeaters cannot reuse stored sessions
+# 5. Anti-DNS-Tunneling: Redirect UDP & TCP port 53 to local DNS resolver
+# This blocks Ha Tunnel Plus, HTTP Custom, NapsternetV, SlowDNS, and TLS Tunnel from free data!
+:do {
+  /ip hotspot walled-garden ip remove [find comment~"Allow DNS Queries"];
+  :if ([:len [/ip firewall nat find comment="WiFiBilling: Anti-DNS-Tunnel-UDP"]] = 0) do={
+    /ip firewall nat add chain=dstnat protocol=udp dst-port=53 action=redirect to-ports=53 comment="WiFiBilling: Anti-DNS-Tunnel-UDP" place-before=0;
+  };
+  :if ([:len [/ip firewall nat find comment="WiFiBilling: Anti-DNS-Tunnel-TCP"]] = 0) do={
+    /ip firewall nat add chain=dstnat protocol=tcp dst-port=53 action=redirect to-ports=53 comment="WiFiBilling: Anti-DNS-Tunnel-TCP" place-before=0;
+  };
+} on-error={};
+
+# 6. Block QUIC (UDP 443) and rogue bypass ports
+:do {
+  :if ([:len [/ip firewall filter find comment="block-quic-youtube-bypass"]] = 0) do={
+    /ip firewall filter add chain=forward action=drop protocol=udp dst-port=443 comment="block-quic-youtube-bypass" place-before=0;
+  };
+  :if ([:len [/ip firewall raw find comment="block-quic-youtube-bypass"]] = 0) do={
+    /ip firewall raw add chain=prerouting action=drop protocol=udp dst-port=443 comment="block-quic-youtube-bypass";
+  };
+} on-error={};
+
+# 7. Remove OS probe domains from walled garden so devices detect the portal
+:do {
+  /ip hotspot walled-garden remove [find dst-host="captive.apple.com"];
+  /ip hotspot walled-garden remove [find dst-host="connectivitycheck.gstatic.com"];
+  /ip hotspot walled-garden remove [find dst-host="connectivitycheck.android.com"];
+  /ip hotspot walled-garden remove [find dst-host="clients3.google.com"];
+  /ip hotspot walled-garden remove [find dst-host="msftconnecttest.com"];
+  /ip hotspot walled-garden remove [find dst-host="detectportal.firefox.com"];
+} on-error={};
+
+# 8. Remove default unpassworded 'admin' hotspot user if present
+:do { /ip hotspot user remove [find name="admin"]; } on-error={};
+
+# 9. Disconnect active sessions and purge stale cookies so ALL devices are forced to captive portal
 :do {
   /ip hotspot cookie remove [find];
-} on-error={};
-
-# 5. Clean up any rogue bypassed IP bindings
-:do {
-  :foreach b in=[/ip hotspot ip-binding find type=bypassed] do={
-    :local c [/ip hotspot ip-binding get $b comment];
-    :local a [/ip hotspot ip-binding get $b address];
-    :if ($a != "10.10.0.1" && $a != "192.168.88.1" && !($c ~ "WiFiBilling: Device") && !($c ~ "WiFiBilling: Router") && !($c ~ "WiFiBilling: Default")) do={
-      :do { /ip hotspot ip-binding remove $b; } on-error={};
-    };
-  };
-} on-error={};
-
-# 6. Block NAT Sharing from Repeaters (Anti-Tether TTL Mangle rule)
-:do {
-  :if ([:len [/ip firewall mangle find comment="WiFiBilling: Anti-Repeater-NAT"]] = 0) do={
-    /ip firewall mangle add chain=postrouting action=change-ttl new-ttl=set:1 passthrough=yes comment="WiFiBilling: Anti-Repeater-NAT" place-before=0;
-  };
-} on-error={};
-
-# 7. Disconnect active sessions to force all repeater devices to captive portal now
-:do {
   /ip hotspot active remove [find];
   /ip hotspot host remove [find];
 } on-error={};
 
-:log info "WiFiBilling: Repeater Protection Applied! All repeater devices must now authenticate.";
-:put "SUCCESS: Repeater bypass rectified! Captive portal redirection active for all devices.";
+:log info "WiFiBilling: Hotspot Billing Restored! Captive portal active for all devices.";
+:put "SUCCESS: Billing system restored! Captive portal is now strictly enforced on all devices.";
 `;
 }
 

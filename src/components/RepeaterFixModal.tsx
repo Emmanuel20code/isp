@@ -46,9 +46,11 @@ export function RepeaterFixModal({
   isFixing = false,
 }: RepeaterFixModalProps) {
   const [copied, setCopied] = useState(false);
-  const [activeTab, setActiveTab] = useState<"quick-fix" | "tenda-setup" | "how-it-works">("quick-fix");
+  const [activeTab, setActiveTab] = useState<"quick-fix" | "tenda-setup" | "how-it-works">(
+    "quick-fix",
+  );
   const [chosenRouterId, setChosenRouterId] = useState<string>(
-    selectedRouterId || (routers[0]?.id ?? "")
+    selectedRouterId || (routers[0]?.id ?? ""),
   );
 
   const script = generateRepeaterProtectionScript();
@@ -88,13 +90,17 @@ export function RepeaterFixModal({
               </div>
               <div>
                 <DialogTitle className="text-base font-bold text-foreground flex items-center gap-2">
-                  Tenda Repeater / Extender Bypass Fix
-                  <Badge variant="outline" className="text-[10px] text-amber-500 border-amber-500/30">
-                    Hotspot Security
+                  Hotspot Billing Restoration & Anti-Bypass
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] text-emerald-500 border-emerald-500/30"
+                  >
+                    Enforce Captive Portal
                   </Badge>
                 </DialogTitle>
                 <DialogDescription className="text-xs text-muted-foreground mt-0.5">
-                  Force all clients behind repeaters & range extenders to hit the captive portal.
+                  Restores billing rules, terminates free access, and forces every connected device
+                  to the captive portal.
                 </DialogDescription>
               </div>
             </div>
@@ -107,13 +113,13 @@ export function RepeaterFixModal({
           >
             <TabsList className="grid grid-cols-3 h-8 text-xs">
               <TabsTrigger value="quick-fix" className="text-xs gap-1.5">
-                <Zap className="size-3.5 text-amber-500" /> Remote Fix & Script
+                <Zap className="size-3.5 text-amber-500" /> Restore Billing & Script
               </TabsTrigger>
               <TabsTrigger value="tenda-setup" className="text-xs gap-1.5">
-                <Radio className="size-3.5 text-primary" /> Tenda Settings (2 min)
+                <Radio className="size-3.5 text-primary" /> Tenda Repeater Mode (AP)
               </TabsTrigger>
               <TabsTrigger value="how-it-works" className="text-xs gap-1.5">
-                <HelpCircle className="size-3.5 text-muted-foreground" /> Why it Happens
+                <HelpCircle className="size-3.5 text-muted-foreground" /> Why Free Access Occurs
               </TabsTrigger>
             </TabsList>
           </Tabs>
@@ -123,23 +129,34 @@ export function RepeaterFixModal({
           {activeTab === "quick-fix" && (
             <div className="space-y-4">
               {/* Alert box */}
-              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3.5 text-xs text-foreground space-y-1.5">
-                <div className="flex items-center gap-2 font-semibold text-amber-600 dark:text-amber-400">
-                  <ShieldAlert className="size-4" />
-                  What this automated fix does on MikroTik:
+              <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3.5 text-xs text-foreground space-y-1.5">
+                <div className="flex items-center gap-2 font-semibold text-emerald-600 dark:text-emerald-400">
+                  <ShieldCheck className="size-4" />
+                  What this automated restoration does on MikroTik:
                 </div>
                 <ul className="list-disc list-inside space-y-1 text-muted-foreground text-[11px] ml-1">
                   <li>
-                    <strong className="text-foreground">Removes MAC-Cookie login:</strong> When 1 person paid, the repeater's MAC was cached, letting everyone else through for free. Removing this forces individual vouchers.
+                    <strong className="text-foreground">
+                      Restores valid billing authentication:
+                    </strong>{" "}
+                    Re-enables HTTP-CHAP, HTTP-PAP & Cookie login while keeping free trial
+                    completely disabled.
                   </li>
                   <li>
-                    <strong className="text-foreground">Enforces 1 device per MAC:</strong> Prevents multiple IP leases sharing the repeater MAC address.
+                    <strong className="text-foreground">Blocks DNS Tunneling apps:</strong>{" "}
+                    Redirects UDP & TCP port 53 to prevent Ha Tunnel Plus, HTTP Custom, NapsternetV,
+                    and SlowDNS bypasses.
                   </li>
                   <li>
-                    <strong className="text-foreground">Adds Anti-NAT TTL=1 Mangle Rule:</strong> Drops tethered NAT traffic from unauthorized secondary routers/extenders.
+                    <strong className="text-foreground">Removes rogue Mangle rules:</strong> Cleans
+                    up high-CPU TTL mangle rules to ensure normal routing and 0 packet loss.
                   </li>
                   <li>
-                    <strong className="text-foreground">Flushes active sessions:</strong> Disconnects current free rides immediately so they see the captive portal.
+                    <strong className="text-foreground">
+                      Terminates free unauthenticated sessions:
+                    </strong>{" "}
+                    Immediately purges active sessions and stale cookies, forcing all users to pay
+                    at the portal.
                   </li>
                 </ul>
               </div>
@@ -148,12 +165,17 @@ export function RepeaterFixModal({
               <div className="rounded-lg border bg-card p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h4 className="text-xs font-bold text-foreground">1-Click Remote MikroTik Deployment</h4>
+                    <h4 className="text-xs font-bold text-foreground">
+                      1-Click Remote MikroTik Deployment
+                    </h4>
                     <p className="text-[11px] text-muted-foreground">
                       Pushes the protection rules directly to your MikroTik router over the cloud.
                     </p>
                   </div>
-                  <Badge variant="outline" className="text-[10px] text-emerald-500 border-emerald-500/30">
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] text-emerald-500 border-emerald-500/30"
+                  >
                     Instant Cloud Sync
                   </Badge>
                 </div>
@@ -183,7 +205,9 @@ export function RepeaterFixModal({
                     ) : (
                       <Zap className="size-3.5" />
                     )}
-                    Push Fix to {routers.find((r) => r.id === (chosenRouterId || selectedRouterId))?.name || "Router"}
+                    Push Restoration to{" "}
+                    {routers.find((r) => r.id === (chosenRouterId || selectedRouterId))?.name ||
+                      "Router"}
                   </Button>
 
                   {routers.length > 1 && onFixAllRouters && (
@@ -193,7 +217,7 @@ export function RepeaterFixModal({
                       disabled={isFixing}
                       className="h-9 text-xs gap-1.5 text-muted-foreground hover:text-foreground shrink-0"
                     >
-                      Apply to All Routers ({routers.length})
+                      Restore on All Routers ({routers.length})
                     </Button>
                   )}
                 </div>
@@ -238,10 +262,11 @@ export function RepeaterFixModal({
                   Crucial: Configure Tenda in Access Point (Bridge) Mode
                 </div>
                 <p className="text-[11px]">
-                  By default, Tenda repeaters run in <strong>Router/Universal Repeater (NAT)</strong> mode.
-                  In NAT mode, the Tenda hides all connected phones behind its own single MAC address.
-                  Changing it to <strong>Access Point / Bridge mode</strong> forces each phone's real MAC
-                  to be passed to MikroTik so they each see the captive portal.
+                  By default, Tenda repeaters run in{" "}
+                  <strong>Router/Universal Repeater (NAT)</strong> mode. In NAT mode, the Tenda
+                  hides all connected phones behind its own single MAC address. Changing it to{" "}
+                  <strong>Access Point / Bridge mode</strong> forces each phone's real MAC to be
+                  passed to MikroTik so they each see the captive portal.
                 </p>
               </div>
 
@@ -252,12 +277,11 @@ export function RepeaterFixModal({
                     <span className="flex items-center justify-center size-5 rounded-full bg-primary/10 text-primary font-bold text-[11px]">
                       1
                     </span>
-                    <h5 className="text-xs font-bold text-foreground">
-                      Open Tenda Admin Page
-                    </h5>
+                    <h5 className="text-xs font-bold text-foreground">Open Tenda Admin Page</h5>
                   </div>
                   <p className="text-[11px] text-muted-foreground pl-7">
-                    Connect your phone or laptop directly to the Tenda Wi-Fi network and open browser to:
+                    Connect your phone or laptop directly to the Tenda Wi-Fi network and open
+                    browser to:
                   </p>
                   <div className="pl-7 flex items-center gap-2">
                     <code className="text-[11px] px-2 py-0.5 rounded bg-muted font-mono font-bold text-foreground">
@@ -285,10 +309,15 @@ export function RepeaterFixModal({
                   </p>
                   <ul className="list-disc list-inside text-[11px] text-muted-foreground pl-7 space-y-1">
                     <li>
-                      Select <strong className="text-foreground">Access Point (AP) Mode</strong> (if connecting via LAN cable from MikroTik).
+                      Select <strong className="text-foreground">Access Point (AP) Mode</strong> (if
+                      connecting via LAN cable from MikroTik).
                     </li>
                     <li>
-                      If repeating wirelessly without cable, select <strong className="text-foreground">Universal Repeater with Transparent Bridging / WDS</strong> so client MAC addresses are preserved.
+                      If repeating wirelessly without cable, select{" "}
+                      <strong className="text-foreground">
+                        Universal Repeater with Transparent Bridging / WDS
+                      </strong>{" "}
+                      so client MAC addresses are preserved.
                     </li>
                   </ul>
                 </div>
@@ -304,8 +333,9 @@ export function RepeaterFixModal({
                     </h5>
                   </div>
                   <p className="text-[11px] text-muted-foreground pl-7">
-                    Go to <strong>LAN Settings</strong> and toggle <strong>DHCP Server: OFF / Disabled</strong>.
-                    This guarantees that MikroTik is the ONLY device issuing IP addresses (10.10.0.X) and redirecting traffic.
+                    Go to <strong>LAN Settings</strong> and toggle{" "}
+                    <strong>DHCP Server: OFF / Disabled</strong>. This guarantees that MikroTik is
+                    the ONLY device issuing IP addresses (10.10.0.X) and redirecting traffic.
                   </p>
                 </div>
 
@@ -315,12 +345,12 @@ export function RepeaterFixModal({
                     <span className="flex items-center justify-center size-5 rounded-full bg-emerald-500/10 text-emerald-500 font-bold text-[11px]">
                       4
                     </span>
-                    <h5 className="text-xs font-bold text-foreground">
-                      Use LAN Port (Not WAN)
-                    </h5>
+                    <h5 className="text-xs font-bold text-foreground">Use LAN Port (Not WAN)</h5>
                   </div>
                   <p className="text-[11px] text-muted-foreground pl-7">
-                    If connected with an Ethernet cable from MikroTik, plug the cable into the <strong>LAN port</strong> (or single Ethernet port in AP mode), never into a WAN port.
+                    If connected with an Ethernet cable from MikroTik, plug the cable into the{" "}
+                    <strong>LAN port</strong> (or single Ethernet port in AP mode), never into a WAN
+                    port.
                   </p>
                 </div>
               </div>
@@ -335,17 +365,28 @@ export function RepeaterFixModal({
                   Why was the Tenda repeater giving free internet?
                 </h5>
                 <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  When a commercial range extender or repeater connects to your MikroTik Wi-Fi in default "Repeater Mode", it performs <strong>MAC Address Masquerading (NAT)</strong>.
+                  When a commercial range extender or repeater connects to your MikroTik Wi-Fi in
+                  default "Repeater Mode", it performs{" "}
+                  <strong>MAC Address Masquerading (NAT)</strong>.
                 </p>
                 <div className="space-y-1.5 text-[11px] text-muted-foreground">
                   <div className="p-2 rounded bg-muted/50 border">
-                    <strong className="text-foreground">1. MAC Cookie Trap:</strong> If person A connects through the repeater and buys a voucher, MikroTik associates the repeater's MAC address with an authenticated session.
+                    <strong className="text-foreground">1. MAC Cookie Trap:</strong> If person A
+                    connects through the repeater and buys a voucher, MikroTik associates the
+                    repeater's MAC address with an authenticated session.
                   </div>
                   <div className="p-2 rounded bg-muted/50 border">
-                    <strong className="text-foreground">2. Free Internet for Person B, C, D:</strong> When anyone else connects through the repeater, MikroTik sees the repeater's already-authorized MAC and lets them through without showing the captive portal!
+                    <strong className="text-foreground">
+                      2. Free Internet for Person B, C, D:
+                    </strong>{" "}
+                    When anyone else connects through the repeater, MikroTik sees the repeater's
+                    already-authorized MAC and lets them through without showing the captive portal!
                   </div>
                   <div className="p-2 rounded bg-muted/50 border">
-                    <strong className="text-foreground">3. The Solution:</strong> Removing <code className="text-primary font-mono font-bold">mac-cookie</code> from MikroTik Hotspot profiles and putting the Tenda in <strong>Bridge / AP mode</strong> permanently prevents this leak.
+                    <strong className="text-foreground">3. The Solution:</strong> Removing{" "}
+                    <code className="text-primary font-mono font-bold">mac-cookie</code> from
+                    MikroTik Hotspot profiles and putting the Tenda in{" "}
+                    <strong>Bridge / AP mode</strong> permanently prevents this leak.
                   </div>
                 </div>
               </div>

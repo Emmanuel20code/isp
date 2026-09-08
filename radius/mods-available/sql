@@ -1,0 +1,45 @@
+# -*- text -*-
+##
+## sql module configuration for PostgreSQL
+##
+
+sql {
+	driver = "rlm_sql_postgresql"
+	dialect = "postgresql"
+
+	# Connection parameters (populated by entrypoint.sh)
+	server = "@@PGHOST@@"
+	port = "@@PGPORT@@"
+	login = "@@PGUSER@@"
+	password = "@@PGPASSWORD@@"
+	radius_db = "@@PGDATABASE@@"
+
+	# Connection pool settings
+	pool {
+		start = 5
+		min = 3
+		max = 20
+		spare = 3
+		uses = 0
+		retry_delay = 5
+		lifetime = 3600
+		idle_timeout = 60
+	}
+
+	# Table names
+	authcheck_table = "radcheck"
+	authreply_table = "radreply"
+	groupcheck_table = "radgroupcheck"
+	groupreply_table = "radgroupreply"
+	usergroup_table = "radusergroup"
+	acct_table1 = "radacct"
+	postauth_table = "radpostauth"
+	client_table = "nas"
+
+	# Dynamic clients from database
+	read_clients = yes
+	client_query = "SELECT id, nasname, shortname, type, secret, server FROM nas"
+
+	# Include PostgreSQL queries
+	$INCLUDE queries.conf
+}

@@ -217,7 +217,7 @@ async function handleSyncRequest(request: Request): Promise<Response> {
           `  :log warning "WiFiBilling: Could not find IP for MAC ${mac} to execute active login";`,
         );
         rscLines.push(`};`);
-        
+
         // Also remove any existing bypassed binding to ensure they are strictly rate-limited
         rscLines.push(
           `:do { /ip hotspot ip-binding remove [find mac-address="${mac}"]; } on-error={};`,
@@ -417,73 +417,55 @@ async function handleSyncRequest(request: Request): Promise<Response> {
     } else if (
       cmd.action === "hotspot.harden_security" ||
       cmd.action === "hotspot.fix_unauthorized" ||
-      cmd.action === "hotspot.fix_repeater"
+      cmd.action === "hotspot.fix_repeater" ||
+      cmd.action === "hotspot.restore_billing"
     ) {
       rscLines.push(
-        `:log warning "WiFiBilling: Executing Hotspot Security Hardening & Repeater Bypass Fix...";`,
+        `:log warning "WiFiBilling: Restoring Hotspot Billing & Locking Captive Portal Enforcement...";`,
       );
-      // 1. Enforce strict login-by on all hotspot profiles: REMOVE MAC-COOKIE!
-      // When mac-cookie is enabled, if 1 device logs in through a repeater, the repeater's
-      // MAC gets a cookie. Any other device connecting through that repeater will be automatically
-      // authenticated by MikroTik without seeing the captive portal! Removing mac-cookie stops this completely.
+      // 1. Remove rogue Anti-Repeater Mangle rule that spikes CPU to 100% and breaks routing
       rscLines.push(
-        `:do { /ip hotspot profile set [find] login-by=http-chap,http-pap trial-uptime-limit=0s split-user-domain=no use-radius=no ssl-certificate=none; } on-error={};`,
+        `:do { /ip firewall mangle remove [find comment="WiFiBilling: Anti-Repeater-NAT"]; } on-error={};`,
       );
-      // 2. Enforce 1 device per MAC address on all hotspot servers
-      rscLines.push(`:do { /ip hotspot set [find] addresses-per-mac=1 disabled=no; } on-error={};`);
-      // 3. Enforce 1 shared user on all hotspot user profiles
+
+      // 2. Fix Hotspot Profiles: Enforce HTTP-CHAP, HTTP-PAP and COOKIE for session persistence.
+      // CRITICAL: Omit 'trial' from login-by to ensure free trial is disabled.
+      // NEVER set trial-uptime-limit=0s (in RouterOS, 0s = UNLIMITED FREE TRIAL!).
+      rscLines.push(
+        `:do { /ip hotspot profile set [find] login-by=http-chap,http-pap,cookie split-user-domain=no http-cookie-lifetime=1d use-radius=no; } on-error={};`,
+      );
+
+      // 3. Ensure all Hotspot Servers are enabled and enforce 1 device per MAC
+      rscLines.push(`:do { /ip hotspot set [find] disabled=no addresses-per-mac=1; } on-error={};`);
+      rscLines.push(`:do { /ip hotspot enable [find]; } on-error={};`);
+
+      // 4. Set 1 shared user on all hotspot user profiles with short keepalive
       rscLines.push(
         `:do { /ip hotspot user profile set [find] shared-users=1 status-autorefresh=1m keepalive-timeout=2m; } on-error={};`,
       );
-      // 4. Wipe all stored MAC cookies (kills unauthorized cookie logins on repeaters)
-      rscLines.push(`:do { /ip hotspot cookie remove [find]; } on-error={};`);
-      // 5. Remove default unpassworded 'admin' hotspot user if present
-      rscLines.push(`:do { /ip hotspot user remove [find name="admin"]; } on-error={};`);
-      // 6. Clean up any rogue bypass bindings that do not belong to valid devices
+
+      // 5. Re-enable Anti-DNS-Tunneling Protection: Force all client DNS requests (UDP/TCP 53)
+      // to the router resolver. This completely stops users from getting free internet via
+      // Ha Tunnel Plus, HTTP Custom, NapsternetV, SlowDNS, or TLS Tunnel!
       rscLines.push(`:do {`);
-      rscLines.push(`  :foreach b in=[/ip hotspot ip-binding find type=bypassed] do={`);
-      rscLines.push(`    :local c [/ip hotspot ip-binding get $b comment];`);
-      rscLines.push(`    :local a [/ip hotspot ip-binding get $b address];`);
+      rscLines.push(`  /ip hotspot walled-garden ip remove [find comment~"Allow DNS Queries"];`);
       rscLines.push(
-        `    :if ($a != "10.10.0.1" && $a != "192.168.88.1" && !($c ~ "WiFiBilling: Device") && !($c ~ "WiFiBilling: Router") && !($c ~ "WiFiBilling: Default")) do={`,
-      );
-      rscLines.push(`      :do { /ip hotspot ip-binding remove $b; } on-error={};`);
-      rscLines.push(`    };`);
-      rscLines.push(`  };`);
-      rscLines.push(`} on-error={};`);
-      // 7. Anti-Repeater NAT Sharing: Add Mangle rule to set TTL=1
-      // If an extender operates in NAT mode, it decrements TTL. Setting outgoing TTL=1
-      // ensures any secondary NAT repeater cannot forward packets to devices behind it,
-      // forcing the repeater to be configured as a transparent L2 Bridge / AP!
-      rscLines.push(`:do {`);
-      rscLines.push(
-        `  :if ([:len [/ip firewall mangle find comment="WiFiBilling: Anti-Repeater-NAT"]] = 0) do={`,
+        `  :if ([:len [/ip firewall nat find comment="WiFiBilling: Anti-DNS-Tunnel-UDP"]] = 0) do={`,
       );
       rscLines.push(
-        `    /ip firewall mangle add chain=postrouting action=change-ttl new-ttl=set:1 passthrough=yes comment="WiFiBilling: Anti-Repeater-NAT" place-before=0;`,
+        `    /ip firewall nat add chain=dstnat protocol=udp dst-port=53 action=redirect to-ports=53 comment="WiFiBilling: Anti-DNS-Tunnel-UDP" place-before=0;`,
       );
       rscLines.push(`  };`);
-      rscLines.push(`} on-error={};`);
-      // 8. Fix Captive Portal Detection: Remove any previously added manual DNS redirects
-      // Manual dstnat rules placed before the hotspot chain break MikroTik's native DNS interception
-      // which is required for captive portal detection to work properly on Android and iOS.
-      rscLines.push(`:do {`);
-      rscLines.push(`  /ip firewall nat remove [find comment="WiFiBilling: Anti-DNS-Tunnel-UDP"];`);
-      rscLines.push(`  /ip firewall nat remove [find comment="WiFiBilling: Anti-DNS-Tunnel-TCP"];`);
-      rscLines.push(`} on-error={};`);
-      
-      // 7. Fix Captive Portal Detection: Remove OS probe domains from walled garden
-      // If probe domains are in walled garden, phones silently think they have internet and bypass the portal
-      rscLines.push(`:do {`);
-      rscLines.push(`  /ip hotspot walled-garden remove [find dst-host="captive.apple.com"];`);
-      rscLines.push(`  /ip hotspot walled-garden remove [find dst-host="connectivitycheck.gstatic.com"];`);
-      rscLines.push(`  /ip hotspot walled-garden remove [find dst-host="connectivitycheck.android.com"];`);
-      rscLines.push(`  /ip hotspot walled-garden remove [find dst-host="clients3.google.com"];`);
-      rscLines.push(`  /ip hotspot walled-garden remove [find dst-host="msftconnecttest.com"];`);
-      rscLines.push(`  /ip hotspot walled-garden remove [find dst-host="detectportal.firefox.com"];`);
+      rscLines.push(
+        `  :if ([:len [/ip firewall nat find comment="WiFiBilling: Anti-DNS-Tunnel-TCP"]] = 0) do={`,
+      );
+      rscLines.push(
+        `    /ip firewall nat add chain=dstnat protocol=tcp dst-port=53 action=redirect to-ports=53 comment="WiFiBilling: Anti-DNS-Tunnel-TCP" place-before=0;`,
+      );
+      rscLines.push(`  };`);
       rscLines.push(`} on-error={};`);
 
-      // 8. Anti-Tunneling: Block QUIC (UDP 443) and rogue tunnel proxy ports
+      // 6. Block QUIC (UDP 443) and rogue tunnel proxy ports
       rscLines.push(`:do {`);
       rscLines.push(
         `  :if ([:len [/ip firewall filter find comment="block-quic-youtube-bypass"]] = 0) do={`,
@@ -500,10 +482,33 @@ async function handleSyncRequest(request: Request): Promise<Response> {
       );
       rscLines.push(`  };`);
       rscLines.push(`} on-error={};`);
-      // 8. Flush active sessions and host table so unauthenticated devices immediately hit the captive portal
+
+      // 7. Fix Captive Portal Detection: Remove OS probe domains from walled garden so phones detect portal
+      rscLines.push(`:do {`);
+      rscLines.push(`  /ip hotspot walled-garden remove [find dst-host="captive.apple.com"];`);
+      rscLines.push(
+        `  /ip hotspot walled-garden remove [find dst-host="connectivitycheck.gstatic.com"];`,
+      );
+      rscLines.push(
+        `  /ip hotspot walled-garden remove [find dst-host="connectivitycheck.android.com"];`,
+      );
+      rscLines.push(`  /ip hotspot walled-garden remove [find dst-host="clients3.google.com"];`);
+      rscLines.push(`  /ip hotspot walled-garden remove [find dst-host="msftconnecttest.com"];`);
+      rscLines.push(
+        `  /ip hotspot walled-garden remove [find dst-host="detectportal.firefox.com"];`,
+      );
+      rscLines.push(`} on-error={};`);
+
+      // 8. Remove default unpassworded 'admin' hotspot user if present
+      rscLines.push(`:do { /ip hotspot user remove [find name="admin"]; } on-error={};`);
+
+      // 9. Flush active unauthenticated sessions and cookies so all users are immediately forced to captive portal
+      rscLines.push(`:do { /ip hotspot cookie remove [find]; } on-error={};`);
       rscLines.push(`:do { /ip hotspot active remove [find]; } on-error={};`);
       rscLines.push(`:do { /ip hotspot host remove [find]; } on-error={};`);
-      rscLines.push(`:log info "WiFiBilling: Hotspot Security Hardening completed successfully.";`);
+      rscLines.push(
+        `:log info "WiFiBilling: Hotspot Billing Restored and Captive Portal Enforced.";`,
+      );
     } else if (cmd.action === "hotspot.kick_mac") {
       const macToKick = p.mac ? String(p.mac).toUpperCase() : "";
       if (macToKick) {

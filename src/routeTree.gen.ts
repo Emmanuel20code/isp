@@ -26,9 +26,11 @@ import { Route as AuthenticatedSubscriptionRouteImport } from './routes/_authent
 import { Route as AuthenticatedSuperadminRouteImport } from './routes/_authenticated/superadmin'
 import { Route as AuthenticatedTransactionsRouteImport } from './routes/_authenticated/transactions'
 import { Route as AuthenticatedVouchersRouteImport } from './routes/_authenticated/vouchers'
+import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as PortalSlugRouteImport } from './routes/portal.$slug'
 import { Route as AuthenticatedPppoeIndexRouteImport } from './routes/_authenticated/pppoe/index'
 import { Route as ApiMikrotikActionRouteImport } from './routes/api/mikrotik/action'
+import { Route as ApiPublicConfigRouteImport } from './routes/api/public/config'
 import { Route as ApiPublicCronRouteImport } from './routes/api/public/cron'
 import { Route as ApiPublicPortalValidateRouteImport } from './routes/api/public/portal-validate'
 import { Route as ApiPublicAgentInstallRouteImport } from './routes/api/public/agent/install'
@@ -136,6 +138,11 @@ const AuthenticatedVouchersRoute = AuthenticatedVouchersRouteImport.update({
   path: '/vouchers',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const ApiHealthRoute = ApiHealthRouteImport.update({
+  id: '/api/health',
+  path: '/api/health',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PortalSlugRoute = PortalSlugRouteImport.update({
   id: '/portal/$slug',
   path: '/portal/$slug',
@@ -149,6 +156,11 @@ const AuthenticatedPppoeIndexRoute = AuthenticatedPppoeIndexRouteImport.update({
 const ApiMikrotikActionRoute = ApiMikrotikActionRouteImport.update({
   id: '/api/mikrotik/action',
   path: '/api/mikrotik/action',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicConfigRoute = ApiPublicConfigRouteImport.update({
+  id: '/api/public/config',
+  path: '/api/public/config',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPublicCronRoute = ApiPublicCronRouteImport.update({
@@ -275,8 +287,10 @@ export interface FileRoutesByFullPath {
   '/superadmin': typeof AuthenticatedSuperadminRoute
   '/transactions': typeof AuthenticatedTransactionsRoute
   '/vouchers': typeof AuthenticatedVouchersRoute
+  '/api/health': typeof ApiHealthRoute
   '/portal/$slug': typeof PortalSlugRoute
   '/api/mikrotik/action': typeof ApiMikrotikActionRoute
+  '/api/public/config': typeof ApiPublicConfigRoute
   '/api/public/cron': typeof ApiPublicCronRoute
   '/api/public/portal-validate': typeof ApiPublicPortalValidateRoute
   '/pppoe/': typeof AuthenticatedPppoeIndexRoute
@@ -315,8 +329,10 @@ export interface FileRoutesByTo {
   '/superadmin': typeof AuthenticatedSuperadminRoute
   '/transactions': typeof AuthenticatedTransactionsRoute
   '/vouchers': typeof AuthenticatedVouchersRoute
+  '/api/health': typeof ApiHealthRoute
   '/portal/$slug': typeof PortalSlugRoute
   '/api/mikrotik/action': typeof ApiMikrotikActionRoute
+  '/api/public/config': typeof ApiPublicConfigRoute
   '/api/public/cron': typeof ApiPublicCronRoute
   '/api/public/portal-validate': typeof ApiPublicPortalValidateRoute
   '/pppoe': typeof AuthenticatedPppoeIndexRoute
@@ -357,8 +373,10 @@ export interface FileRoutesById {
   '/_authenticated/superadmin': typeof AuthenticatedSuperadminRoute
   '/_authenticated/transactions': typeof AuthenticatedTransactionsRoute
   '/_authenticated/vouchers': typeof AuthenticatedVouchersRoute
+  '/api/health': typeof ApiHealthRoute
   '/portal/$slug': typeof PortalSlugRoute
   '/api/mikrotik/action': typeof ApiMikrotikActionRoute
+  '/api/public/config': typeof ApiPublicConfigRoute
   '/api/public/cron': typeof ApiPublicCronRoute
   '/api/public/portal-validate': typeof ApiPublicPortalValidateRoute
   '/_authenticated/pppoe/': typeof AuthenticatedPppoeIndexRoute
@@ -399,8 +417,10 @@ export interface FileRouteTypes {
     | '/superadmin'
     | '/transactions'
     | '/vouchers'
+    | '/api/health'
     | '/portal/$slug'
     | '/api/mikrotik/action'
+    | '/api/public/config'
     | '/api/public/cron'
     | '/api/public/portal-validate'
     | '/pppoe/'
@@ -439,8 +459,10 @@ export interface FileRouteTypes {
     | '/superadmin'
     | '/transactions'
     | '/vouchers'
+    | '/api/health'
     | '/portal/$slug'
     | '/api/mikrotik/action'
+    | '/api/public/config'
     | '/api/public/cron'
     | '/api/public/portal-validate'
     | '/pppoe'
@@ -480,8 +502,10 @@ export interface FileRouteTypes {
     | '/_authenticated/superadmin'
     | '/_authenticated/transactions'
     | '/_authenticated/vouchers'
+    | '/api/health'
     | '/portal/$slug'
     | '/api/mikrotik/action'
+    | '/api/public/config'
     | '/api/public/cron'
     | '/api/public/portal-validate'
     | '/_authenticated/pppoe/'
@@ -508,8 +532,10 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  ApiHealthRoute: typeof ApiHealthRoute
   PortalSlugRoute: typeof PortalSlugRoute
   ApiMikrotikActionRoute: typeof ApiMikrotikActionRoute
+  ApiPublicConfigRoute: typeof ApiPublicConfigRoute
   ApiPublicCronRoute: typeof ApiPublicCronRoute
   ApiPublicPortalValidateRoute: typeof ApiPublicPortalValidateRoute
   ApiPublicAgentInstallRoute: typeof ApiPublicAgentInstallRoute
@@ -650,6 +676,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedVouchersRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/api/health': {
+      id: '/api/health'
+      path: '/api/health'
+      fullPath: '/api/health'
+      preLoaderRoute: typeof ApiHealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/portal/$slug': {
       id: '/portal/$slug'
       path: '/portal/$slug'
@@ -669,6 +702,13 @@ declare module '@tanstack/react-router' {
       path: '/api/mikrotik/action'
       fullPath: '/api/mikrotik/action'
       preLoaderRoute: typeof ApiMikrotikActionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/config': {
+      id: '/api/public/config'
+      path: '/api/public/config'
+      fullPath: '/api/public/config'
+      preLoaderRoute: typeof ApiPublicConfigRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/cron': {
@@ -879,8 +919,10 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  ApiHealthRoute: ApiHealthRoute,
   PortalSlugRoute: PortalSlugRoute,
   ApiMikrotikActionRoute: ApiMikrotikActionRoute,
+  ApiPublicConfigRoute: ApiPublicConfigRoute,
   ApiPublicCronRoute: ApiPublicCronRoute,
   ApiPublicPortalValidateRoute: ApiPublicPortalValidateRoute,
   ApiPublicAgentInstallRoute: ApiPublicAgentInstallRoute,

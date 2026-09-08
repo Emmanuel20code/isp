@@ -116,13 +116,26 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 });
 
 function RootShell({ children }: { children: ReactNode }) {
+  const publicConfig = {
+    supabaseUrl:
+      (typeof process !== "undefined" &&
+        (process.env?.SUPABASE_URL || process.env?.VITE_SUPABASE_URL)) ||
+      "",
+    supabasePublishableKey:
+      (typeof process !== "undefined" &&
+        (process.env?.SUPABASE_PUBLISHABLE_KEY || process.env?.VITE_SUPABASE_PUBLISHABLE_KEY)) ||
+      "",
+  };
+
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
         <HeadContent />
         <script
+          suppressHydrationWarning
           dangerouslySetInnerHTML={{
             __html: `
+              window.__PUBLIC_CONFIG__ = window.__PUBLIC_CONFIG__ || ${JSON.stringify(publicConfig)};
               (function() {
                 try {
                   var t = localStorage.getItem('wifi_billing_theme');

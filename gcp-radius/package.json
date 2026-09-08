@@ -1,0 +1,15 @@
+{
+  "name": "gcp-radius-server",
+  "version": "1.0.0",
+  "description": "Standalone Node.js FreeRADIUS Server for Google Cloud Compute Engine",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "pg": "^8.11.3",
+    "radius": "^0.1.7"
+  }
+}

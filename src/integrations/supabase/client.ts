@@ -30,34 +30,80 @@ function createSupabaseFetch(supabaseKey: string): typeof fetch {
   };
 }
 
-function createSupabaseClient() {
-  // Use import.meta.env for client-side (Vite build-time replacement)
-  // Fall back to process.env for SSR (server-side rendering)
-  const urlCandidate = import.meta.env["VITE_SUPABASE_URL"] || process.env["SUPABASE_URL"] || "";
-  const keyCandidate =
-    import.meta.env["VITE_SUPABASE_PUBLISHABLE_KEY"] ||
-    process.env["SUPABASE_PUBLISHABLE_KEY"] ||
+function normalizeSupabaseUrl(url: string): string {
+  let trimmed = url.trim();
+  if (!trimmed) return "";
+  if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
+    trimmed = `https://${trimmed}`;
+  }
+  return trimmed.replace(/\/+$/, "");
+}
+
+let _supabase: ReturnType<typeof createClient<Database>> | undefined;
+let _lastConfigKey = "";
+
+function getSupabaseClient() {
+  const winConfig =
+    typeof window !== "undefined"
+      ? (
+          window as unknown as {
+            __PUBLIC_CONFIG__?: { supabaseUrl?: string; supabasePublishableKey?: string };
+          }
+        ).__PUBLIC_CONFIG__
+      : undefined;
+
+  const urlCandidate =
+    winConfig?.supabaseUrl ||
+    (typeof import.meta !== "undefined" && import.meta.env?.["VITE_SUPABASE_URL"]) ||
+    (typeof process !== "undefined" &&
+      (process.env?.["SUPABASE_URL"] || process.env?.["VITE_SUPABASE_URL"])) ||
     "";
 
-  const SUPABASE_URL = urlCandidate.trim();
-  const SUPABASE_PUBLISHABLE_KEY = keyCandidate.trim();
+  const keyCandidate =
+    winConfig?.supabasePublishableKey ||
+    (typeof import.meta !== "undefined" && import.meta.env?.["VITE_SUPABASE_PUBLISHABLE_KEY"]) ||
+    (typeof process !== "undefined" &&
+      (process.env?.["SUPABASE_PUBLISHABLE_KEY"] ||
+        process.env?.["VITE_SUPABASE_PUBLISHABLE_KEY"])) ||
+    "";
 
-  if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
-    const missing = [
-      ...(!SUPABASE_URL ? ["SUPABASE_URL / VITE_SUPABASE_URL"] : []),
-      ...(!SUPABASE_PUBLISHABLE_KEY
-        ? ["SUPABASE_PUBLISHABLE_KEY / VITE_SUPABASE_PUBLISHABLE_KEY"]
-        : []),
-    ];
-    console.warn(
-      `[Supabase] Missing environment variable(s): ${missing.join(", ")}. Configure credentials to enable database connectivity.`,
-    );
+  const rawUrl = normalizeSupabaseUrl(urlCandidate);
+  const activeKey = keyCandidate.trim() || "placeholder-key";
+  const activeUrl = rawUrl || "https://placeholder.supabase.co";
+
+  const currentConfigKey = `${activeUrl}::${activeKey}`;
+
+  // If in browser and config is still placeholder, auto-fetch from /api/public/config
+  if (typeof window !== "undefined" && (!rawUrl || rawUrl === "https://placeholder.supabase.co")) {
+    const win = window as unknown as {
+      __fetchingSupabaseConfig?: boolean;
+      __PUBLIC_CONFIG__?: { supabaseUrl?: string; supabasePublishableKey?: string };
+    };
+    if (!win.__fetchingSupabaseConfig) {
+      win.__fetchingSupabaseConfig = true;
+      fetch("/api/public/config")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data?.supabaseUrl && data?.supabasePublishableKey) {
+            win.__PUBLIC_CONFIG__ = {
+              supabaseUrl: data.supabaseUrl,
+              supabasePublishableKey: data.supabasePublishableKey,
+            };
+            _lastConfigKey = "";
+            getSupabaseClient();
+          }
+        })
+        .catch(() => {});
+    }
   }
 
-  const activeUrl = SUPABASE_URL || "https://placeholder.supabase.co";
-  const activeKey = SUPABASE_PUBLISHABLE_KEY || "placeholder-key";
+  if (_supabase && _lastConfigKey === currentConfigKey) {
+    return _supabase;
+  }
 
-  return createClient<Database>(activeUrl, activeKey, {
+  // If previous client was placeholder and we now have real credentials, reinitialize
+  _lastConfigKey = currentConfigKey;
+  _supabase = createClient<Database>(activeUrl, activeKey, {
     global: {
       fetch: createSupabaseFetch(activeKey),
     },
@@ -67,15 +113,15 @@ function createSupabaseClient() {
       autoRefreshToken: true,
     },
   });
-}
 
-let _supabase: ReturnType<typeof createSupabaseClient> | undefined;
+  return _supabase;
+}
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
-export const supabase = new Proxy({} as ReturnType<typeof createSupabaseClient>, {
+export const supabase = new Proxy({} as ReturnType<typeof createClient<Database>>, {
   get(_, prop, receiver) {
-    if (!_supabase) _supabase = createSupabaseClient();
-    return Reflect.get(_supabase, prop, receiver);
+    const client = getSupabaseClient();
+    return Reflect.get(client, prop, receiver);
   },
 });

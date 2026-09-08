@@ -1,0 +1,77 @@
+services:
+  # =================================================================
+  # EMMATECH Billing Application (Web, APIs, M-Pesa, Portal)
+  # =================================================================
+  billing-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: emmatech-billing-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - HOST=0.0.0.0
+      - DATABASE_URL=${DATABASE_URL}
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - SUPABASE_PUBLISHABLE_KEY=${SUPABASE_PUBLISHABLE_KEY}
+      - VITE_SUPABASE_URL=${VITE_SUPABASE_URL:-$SUPABASE_URL}
+      - VITE_SUPABASE_PUBLISHABLE_KEY=${VITE_SUPABASE_PUBLISHABLE_KEY:-$SUPABASE_PUBLISHABLE_KEY}
+      - APP_URL=${APP_URL:-http://localhost:3000}
+      - RADIUS_SERVER_HOST=${RADIUS_SERVER_HOST:-radius}
+      - RADIUS_SECRET=${RADIUS_SECRET:-emmatech_radius_secret_2026}
+      - MPESA_CONSUMER_KEY=${MPESA_CONSUMER_KEY}
+      - MPESA_CONSUMER_SECRET=${MPESA_CONSUMER_SECRET}
+      - MPESA_PASSKEY=${MPESA_PASSKEY}
+      - MPESA_SHORTCODE=${MPESA_SHORTCODE}
+    depends_on:
+      - radius
+
+  # =================================================================
+  # FreeRADIUS Multi-Tenant PPPoE & Hotspot Server
+  # =================================================================
+  radius:
+    build:
+      context: ./radius
+      dockerfile: Dockerfile
+    container_name: emmatech-freeradius
+    restart: always
+    ports:
+      - "1812:1812/udp" # RADIUS Authentication
+      - "1813:1813/udp" # RADIUS Accounting
+      - "3799:3799/udp" # RADIUS CoA / Packet of Disconnect (PoD)
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - RADIUS_SECRET=${RADIUS_SECRET:-emmatech_radius_secret_2026}
+      - DEBUG=${DEBUG:-0}
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z -u 127.0.0.1 1812 || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # =================================================================
+  # Optional Standalone PostgreSQL Database (for offline/local dev)
+  # Run with: docker-compose --profile local-db up
+  # =================================================================
+  postgres:
+    image: postgres:17-alpine
+    container_name: emmatech-postgres
+    profiles: ["local-db"]
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=postgres
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./supabase/migrations:/docker-entrypoint-initdb.d:ro
+
+volumes:
+  pgdata:

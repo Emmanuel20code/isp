@@ -13,6 +13,10 @@ import {
   suspendPPPoECustomer,
   resetPPPoEPassword,
   syncPPPoERouter,
+  getRadiusConfigAndLogs,
+  testRadiusLiveAuth,
+  disconnectPPPoECustomer,
+  renewPPPoECustomer,
 } from "@/lib/pppoe.functions";
 import { getPackages } from "@/lib/network.functions";
 import {
@@ -37,6 +41,15 @@ import {
   Check,
   Globe,
   Dices,
+  Radio,
+  Terminal,
+  Server,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  PowerOff,
+  Play,
+  Send,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -91,6 +104,8 @@ type SessionItem = {
   id: string;
   username: string;
   ip_address: string;
+  mac_address?: string | null;
+  nas_ip?: string | null;
   connected_at?: string | null;
   uptime?: string | null;
   bytes_in_formatted?: string | null;
@@ -113,6 +128,7 @@ type PackageItem = {
   name: string;
   price_kes: number;
   kind?: string | null;
+  duration_hours?: number;
 };
 
 function PPPoEManager() {
@@ -128,6 +144,10 @@ function PPPoEManager() {
   const suspendCustomer = useServerFn(suspendPPPoECustomer);
   const resetPassword = useServerFn(resetPPPoEPassword);
   const syncRouter = useServerFn(syncPPPoERouter);
+  const fetchRadiusData = useServerFn(getRadiusConfigAndLogs);
+  const testRadiusAuth = useServerFn(testRadiusLiveAuth);
+  const disconnectSession = useServerFn(disconnectPPPoECustomer);
+  const renewSubscription = useServerFn(renewPPPoECustomer);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<CustomerItem | null>(null);
@@ -136,6 +156,21 @@ function PPPoEManager() {
   const [isSyncing, setIsSyncing] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedScript, setCopiedScript] = useState(false);
+  const [copiedParam, setCopiedParam] = useState<string | null>(null);
+
+  // Renewal modal state
+  const [isRenewModalOpen, setIsRenewModalOpen] = useState(false);
+  const [renewCustomerData, setRenewCustomerData] = useState<CustomerItem | null>(null);
+  const [renewDays, setRenewDays] = useState("30");
+  const [renewPkgId, setRenewPkgId] = useState<string>("");
+  const [isRenewing, setIsRenewing] = useState(false);
+
+  // Live RADIUS test state
+  const [testUser, setTestUser] = useState("");
+  const [testPass, setTestPass] = useState("");
+  const [isTestingRadius, setIsTestingRadius] = useState(false);
+  const [testResult, setTestResult] = useState<any>(null);
 
   const context = useQuery({ queryKey: ["my-context"], queryFn: () => fetchContext() });
   const stats = useQuery({ queryKey: ["pppoe-stats"], queryFn: () => fetchStats() });
@@ -143,6 +178,11 @@ function PPPoEManager() {
   const customers = useQuery({ queryKey: ["pppoe-customers"], queryFn: () => fetchCustomers() });
   const sessions = useQuery({ queryKey: ["pppoe-sessions"], queryFn: () => fetchSessions() });
   const packages = useQuery({ queryKey: ["packages"], queryFn: () => fetchPackages() });
+  const radiusInfo = useQuery({
+    queryKey: ["radius-data"],
+    queryFn: () => fetchRadiusData(),
+    refetchInterval: 12000,
+  });
 
   const routerList = useMemo(() => {
     if (routers.data && routers.data.length > 0) return routers.data as RouterItem[];
@@ -241,6 +281,87 @@ function PPPoEManager() {
       toast.error(err instanceof Error ? err.message : "Sync failed");
     } finally {
       setIsSyncing(null);
+    }
+  };
+
+  const handleDisconnectSession = async (username: string) => {
+    try {
+      await disconnectSession({ username });
+      toast.success(`Session for ${username} disconnected`);
+      queryClient.invalidateQueries({ queryKey: ["pppoe-sessions"] });
+      queryClient.invalidateQueries({ queryKey: ["radius-data"] });
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to disconnect session");
+    }
+  };
+
+  const handleOpenRenew = (cust: CustomerItem) => {
+    setRenewCustomerData(cust);
+    setRenewPkgId(cust.package_id || pppPackages[0]?.id || "");
+    setRenewDays("30");
+    setIsRenewModalOpen(true);
+  };
+
+  const handleConfirmRenew = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!renewCustomerData) return;
+    setIsRenewing(true);
+    try {
+      await renewSubscription({
+        customerId: renewCustomerData.id,
+        packageId: renewPkgId || undefined,
+        additionalDays: Number(renewDays) || 30,
+      });
+      toast.success(`Subscription renewed for ${renewCustomerData.full_name}! FreeRADIUS synced.`);
+      queryClient.invalidateQueries({ queryKey: ["pppoe-customers"] });
+      queryClient.invalidateQueries({ queryKey: ["pppoe-stats"] });
+      queryClient.invalidateQueries({ queryKey: ["radius-data"] });
+      setIsRenewModalOpen(false);
+      setRenewCustomerData(null);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to renew subscription");
+    } finally {
+      setIsRenewing(false);
+    }
+  };
+
+  const handleSimulateRadiusAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!testUser) {
+      toast.error("Please enter a username to test");
+      return;
+    }
+    setIsTestingRadius(true);
+    setTestResult(null);
+    try {
+      const res = await testRadiusAuth({ username: testUser.trim(), password: testPass });
+      setTestResult(res);
+      if (res.success) {
+        toast.success(`Access-Accept received in ${res.latencyMs}ms!`);
+      } else {
+        toast.error(`Access-Reject: ${res.error || res.code}`);
+      }
+      queryClient.invalidateQueries({ queryKey: ["radius-data"] });
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "RADIUS test failed");
+    } finally {
+      setIsTestingRadius(false);
+    }
+  };
+
+  const handleCopyParam = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedParam(label);
+    toast.success(`${label} copied to clipboard!`);
+    setTimeout(() => setCopiedParam(null), 2000);
+  };
+
+  const handleCopyCliScript = () => {
+    if (radiusInfo.data?.mikrotikCliScript) {
+      navigator.clipboard.writeText(radiusInfo.data.mikrotikCliScript);
+      setCopiedScript(true);
+      toast.success("RouterOS configuration script copied!");
+      setTimeout(() => setCopiedScript(false), 2500);
     }
   };
 
@@ -352,6 +473,9 @@ function PPPoEManager() {
             </TabsTrigger>
             <TabsTrigger value="routers" className="gap-2">
               <Router className="size-3.5" /> Routers ({routerList.length})
+            </TabsTrigger>
+            <TabsTrigger value="radius" className="gap-2">
+              <Radio className="size-3.5 text-primary" /> FreeRADIUS & Onboarding
             </TabsTrigger>
           </TabsList>
 
@@ -633,7 +757,16 @@ function PPPoEManager() {
                                     <MoreVertical className="size-4" />
                                   </Button>
                                 </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-44">
+                                <DropdownMenuContent align="end" className="w-52">
+                                  <DropdownMenuItem onClick={() => handleOpenRenew(c)}>
+                                    <Clock className="mr-2 size-3.5 text-primary" /> Renew Subscription
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => handleDisconnectSession(c.username)}
+                                    className="text-amber-600 focus:text-amber-600"
+                                  >
+                                    <PowerOff className="mr-2 size-3.5" /> Disconnect Session
+                                  </DropdownMenuItem>
                                   <DropdownMenuItem
                                     onClick={() => {
                                       setEditingCustomer(c);
@@ -710,25 +843,26 @@ function PPPoEManager() {
                       <tr className="border-b bg-muted/40 text-left font-medium text-muted-foreground">
                         <th className="p-3">Customer</th>
                         <th className="p-3">Username</th>
-                        <th className="p-3">IP Address</th>
+                        <th className="p-3">Framed IP</th>
+                        <th className="p-3">MAC / Calling-ID</th>
                         <th className="p-3">Connected At</th>
                         <th className="p-3">Uptime</th>
                         <th className="p-3">Traffic (Up/Down)</th>
-                        <th className="p-3 text-right">Status</th>
+                        <th className="p-3 text-right">Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y">
                       {sessions.isPending ? (
                         [...Array(3)].map((_, i) => (
                           <tr key={i}>
-                            <td colSpan={7} className="p-3">
+                            <td colSpan={8} className="p-3">
                               <Skeleton className="h-6 w-full" />
                             </td>
                           </tr>
                         ))
                       ) : (sessions.data as SessionItem[] | undefined)?.length === 0 ? (
                         <tr>
-                          <td colSpan={7} className="p-12 text-center text-muted-foreground">
+                          <td colSpan={8} className="p-12 text-center text-muted-foreground">
                             <Zap className="size-8 mx-auto mb-2 text-muted-foreground/30" />
                             No active PPPoE sessions online right now.
                           </td>
@@ -746,6 +880,9 @@ function PPPoEManager() {
                             </td>
                             <td className="p-3 font-mono text-xs">{s.username}</td>
                             <td className="p-3 font-mono text-xs text-primary">{s.ip_address}</td>
+                            <td className="p-3 font-mono text-xs text-muted-foreground">
+                              {s.mac_address || "—"}
+                            </td>
                             <td className="p-3 text-xs">
                               {s.connected_at ? new Date(s.connected_at).toLocaleString() : "—"}
                             </td>
@@ -760,9 +897,14 @@ function PPPoEManager() {
                               </span>
                             </td>
                             <td className="p-3 text-right">
-                              <Badge variant="success" className="text-[10px]">
-                                Online
-                              </Badge>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                className="h-7 text-xs gap-1"
+                                onClick={() => handleDisconnectSession(s.username)}
+                              >
+                                <PowerOff className="size-3" /> Disconnect
+                              </Button>
                             </td>
                           </tr>
                         ))
@@ -878,6 +1020,375 @@ function PPPoEManager() {
                     ))}
                   </div>
                 )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Tab: FreeRADIUS Server & MikroTik Onboarding */}
+          <TabsContent value="radius" className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-3">
+              {/* Server Parameters Card */}
+              <Card className="bg-card/50">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                      <Server className="size-4 text-primary" /> RADIUS Server Status
+                    </CardTitle>
+                    <Badge variant="success" className="text-[10px] gap-1">
+                      <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      Active (UDP)
+                    </Badge>
+                  </div>
+                  <CardDescription className="text-xs">
+                    RFC 2865 / 2866 PostgreSQL Authentication Engine
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3 text-xs">
+                  <div className="rounded-md border bg-background/50 p-2.5 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Server Host:</span>
+                      <div className="flex items-center gap-1">
+                        <code className="font-mono text-foreground font-semibold">
+                          {radiusInfo.data?.radiusHost || "radius.emmatech.io"}
+                        </code>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-6"
+                          onClick={() =>
+                            handleCopyParam(
+                              radiusInfo.data?.radiusHost || "radius.emmatech.io",
+                              "Host",
+                            )
+                          }
+                        >
+                          {copiedParam === "Host" ? (
+                            <Check className="size-3 text-emerald-500" />
+                          ) : (
+                            <Copy className="size-3" />
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between border-t pt-1.5">
+                      <span className="text-muted-foreground">Auth Port (UDP):</span>
+                      <code className="font-mono font-bold text-primary">
+                        {radiusInfo.data?.authPort || 1812}
+                      </code>
+                    </div>
+                    <div className="flex items-center justify-between border-t pt-1.5">
+                      <span className="text-muted-foreground">Acct Port (UDP):</span>
+                      <code className="font-mono font-bold text-primary">
+                        {radiusInfo.data?.acctPort || 1813}
+                      </code>
+                    </div>
+                    <div className="flex items-center justify-between border-t pt-1.5">
+                      <span className="text-muted-foreground">Shared Secret:</span>
+                      <div className="flex items-center gap-1">
+                        <code className="font-mono text-[11px] bg-muted px-1.5 py-0.5 rounded">
+                          {radiusInfo.data?.defaultSecret || "emmatech_radius_secret_2026"}
+                        </code>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-6"
+                          onClick={() =>
+                            handleCopyParam(
+                              radiusInfo.data?.defaultSecret || "emmatech_radius_secret_2026",
+                              "Secret",
+                            )
+                          }
+                        >
+                          {copiedParam === "Secret" ? (
+                            <Check className="size-3 text-emerald-500" />
+                          ) : (
+                            <Copy className="size-3" />
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-700 dark:text-emerald-300">
+                    <p className="font-semibold flex items-center gap-1">
+                      <CheckCircle2 className="size-3.5" /> Direct DB Sync Active
+                    </p>
+                    <p className="mt-0.5 opacity-90">
+                      When customers are added or renewed, PostgreSQL triggers update the FreeRADIUS
+                      radcheck and radreply tables automatically.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Live Authentication Tester Card */}
+              <Card className="bg-card/50 md:col-span-2">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                      <Play className="size-4 text-primary" /> Live RADIUS Auth Tester
+                    </CardTitle>
+                    <Badge variant="outline" className="text-[10px]">
+                      Diagnostic Tool
+                    </Badge>
+                  </div>
+                  <CardDescription className="text-xs">
+                    Simulate a real UDP Access-Request from MikroTik against the local RADIUS daemon.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <form onSubmit={handleSimulateRadiusAuth} className="space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <Label className="text-xs">Subscriber Username</Label>
+                        <Input
+                          placeholder="e.g. john.doe"
+                          value={testUser}
+                          onChange={(e) => setTestUser(e.target.value)}
+                          className="h-8 text-xs font-mono"
+                          required
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-xs">Password (optional for quick test)</Label>
+                        <Input
+                          type="password"
+                          placeholder="Enter password"
+                          value={testPass}
+                          onChange={(e) => setTestPass(e.target.value)}
+                          className="h-8 text-xs font-mono"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1">
+                      <div className="flex flex-wrap gap-1.5 items-center">
+                        <span className="text-[11px] text-muted-foreground">Quick test:</span>
+                        {filteredCustomers.slice(0, 3).map((c: CustomerItem) => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            className="text-[11px] font-mono px-2 py-0.5 rounded bg-muted hover:bg-muted/80 text-foreground transition-colors"
+                            onClick={() => {
+                              setTestUser(c.username);
+                              setTestPass(c.password || "");
+                            }}
+                          >
+                            {c.username}
+                          </button>
+                        ))}
+                      </div>
+
+                      <Button
+                        type="submit"
+                        size="sm"
+                        disabled={isTestingRadius || !testUser}
+                        className="h-8 text-xs gap-1.5 shrink-0"
+                      >
+                        {isTestingRadius ? (
+                          <Loader2 className="size-3.5 animate-spin" />
+                        ) : (
+                          <Send className="size-3.5" />
+                        )}
+                        Send Access-Request
+                      </Button>
+                    </div>
+                  </form>
+
+                  {/* Test Result Display */}
+                  {testResult && (
+                    <div
+                      className={cn(
+                        "rounded-lg border p-3 text-xs space-y-2 mt-3",
+                        testResult.success
+                          ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-950 dark:text-emerald-100"
+                          : "bg-rose-500/10 border-rose-500/30 text-rose-950 dark:text-rose-100",
+                      )}
+                    >
+                      <div className="flex items-center justify-between font-semibold">
+                        <div className="flex items-center gap-1.5">
+                          {testResult.success ? (
+                            <CheckCircle2 className="size-4 text-emerald-600" />
+                          ) : (
+                            <XCircle className="size-4 text-rose-600" />
+                          )}
+                          <span>
+                            {testResult.success ? "Access-Accept" : "Access-Reject"} ({testResult.code})
+                          </span>
+                        </div>
+                        <span className="text-[11px] font-mono opacity-80">
+                          {testResult.latencyMs}ms roundtrip
+                        </span>
+                      </div>
+
+                      {testResult.attributes && Object.keys(testResult.attributes).length > 0 && (
+                        <div className="bg-background/80 rounded p-2 text-[11px] font-mono space-y-1 text-foreground border">
+                          <p className="font-bold text-[10px] text-muted-foreground uppercase">
+                            Radius Attributes Returned:
+                          </p>
+                          {Object.entries(testResult.attributes).map(([k, v]) => (
+                            <div key={k} className="flex justify-between">
+                              <span className="text-muted-foreground">{k}:</span>
+                              <span className="font-semibold text-primary">{String(v)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {testResult.error && (
+                        <p className="text-[11px] font-mono text-rose-700 dark:text-rose-300">
+                          Reason: {testResult.error}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* MikroTik One-Click RouterOS CLI Script */}
+            <Card className="bg-card/50">
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                      <Terminal className="size-4 text-primary" /> RouterOS Setup Script (MikroTik CLI)
+                    </CardTitle>
+                    <CardDescription className="text-xs">
+                      Paste this single command block into your MikroTik terminal to point PPPoE to FreeRADIUS.
+                    </CardDescription>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs gap-1.5"
+                    onClick={handleCopyCliScript}
+                  >
+                    {copiedScript ? (
+                      <Check className="size-3.5 text-emerald-500" />
+                    ) : (
+                      <Copy className="size-3.5" />
+                    )}
+                    {copiedScript ? "Copied!" : "Copy RouterOS Script"}
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="relative rounded-lg bg-zinc-950 p-4 font-mono text-xs text-zinc-100 overflow-x-auto border">
+                  <pre className="whitespace-pre">{radiusInfo.data?.mikrotikCliScript}</pre>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs text-muted-foreground pt-1">
+                  <div className="p-2.5 rounded-lg border bg-background/40">
+                    <p className="font-semibold text-foreground">1. AAA Authentication</p>
+                    <p className="text-[11px] mt-0.5">
+                      Directs MikroTik to verify PPPoE credentials via RADIUS instead of static secrets.
+                    </p>
+                  </div>
+                  <div className="p-2.5 rounded-lg border bg-background/40">
+                    <p className="font-semibold text-foreground">2. Dynamic Rate Limiting</p>
+                    <p className="text-[11px] mt-0.5">
+                      FreeRADIUS injects Mikrotik-Rate-Limit on connect, matching subscriber package speed.
+                    </p>
+                  </div>
+                  <div className="p-2.5 rounded-lg border bg-background/40">
+                    <p className="font-semibold text-foreground">3. Live Accounting</p>
+                    <p className="text-[11px] mt-0.5">
+                      Interim 5-minute accounting updates radacct table with byte counts & uptime.
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* RADIUS Authentication Logs Table */}
+            <Card className="bg-card/50">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <div>
+                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                    <Activity className="size-4 text-primary" /> Live RADIUS Authentication Audit Logs
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Recent PPPoE Access-Requests recorded in radpostauth
+                  </CardDescription>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs gap-1.5"
+                  onClick={() => radiusInfo.refetch()}
+                  disabled={radiusInfo.isPending}
+                >
+                  {radiusInfo.isPending ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <RefreshCw className="size-3.5" />
+                  )}
+                  Refresh Logs
+                </Button>
+              </CardHeader>
+              <CardContent>
+                <div className="rounded-md border overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b bg-muted/40 text-left font-medium text-muted-foreground">
+                        <th className="p-2.5">Date & Time</th>
+                        <th className="p-2.5">Subscriber Username</th>
+                        <th className="p-2.5">Verdict</th>
+                        <th className="p-2.5">Reason / Note</th>
+                        <th className="p-2.5">Client MAC</th>
+                        <th className="p-2.5">NAS / Router IP</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y font-mono">
+                      {radiusInfo.isPending ? (
+                        [...Array(4)].map((_, i) => (
+                          <tr key={i}>
+                            <td colSpan={6} className="p-2.5">
+                              <Skeleton className="h-5 w-full" />
+                            </td>
+                          </tr>
+                        ))
+                      ) : !radiusInfo.data?.logs || radiusInfo.data.logs.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="p-8 text-center text-muted-foreground font-sans">
+                            <Radio className="size-8 mx-auto mb-2 opacity-30" />
+                            No RADIUS authentication attempts recorded yet.
+                          </td>
+                        </tr>
+                      ) : (
+                        radiusInfo.data.logs.map((log: any) => (
+                          <tr key={log.id} className="hover:bg-muted/30">
+                            <td className="p-2.5 text-muted-foreground font-sans">
+                              {log.authdate ? new Date(log.authdate).toLocaleString() : "—"}
+                            </td>
+                            <td className="p-2.5 font-bold text-foreground">
+                              {log.username}
+                            </td>
+                            <td className="p-2.5">
+                              <Badge
+                                variant={
+                                  log.reply === "Access-Accept" ? "success" : "destructive"
+                                }
+                                className="text-[10px]"
+                              >
+                                {log.reply}
+                              </Badge>
+                            </td>
+                            <td className="p-2.5 text-muted-foreground">
+                              {log.reason || "Authenticated"}
+                            </td>
+                            <td className="p-2.5 text-muted-foreground">
+                              {log.callingstationid || "—"}
+                            </td>
+                            <td className="p-2.5 text-muted-foreground">
+                              {log.nasipaddress || "127.0.0.1"}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
@@ -1011,6 +1522,119 @@ function PPPoEManager() {
                 <Button type="submit" disabled={isSaving} className="gap-2">
                   {isSaving && <Loader2 className="size-4 animate-spin" />}
                   {editingCustomer ? "Update Customer" : "Create & Push to Router"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal: Renew PPPoE Subscription */}
+        <Dialog open={isRenewModalOpen} onOpenChange={setIsRenewModalOpen}>
+          <DialogContent className="max-w-md">
+            <form onSubmit={handleConfirmRenew}>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Clock className="size-5 text-primary" /> Renew Subscription
+                </DialogTitle>
+                <DialogDescription>
+                  Extend subscription for{" "}
+                  <span className="font-semibold text-foreground">
+                    {renewCustomerData?.full_name}
+                  </span>{" "}
+                  ({renewCustomerData?.username}).
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="grid gap-4 py-4 text-xs">
+                <div className="rounded-lg border bg-muted/40 p-3 space-y-1.5">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Current Status:</span>
+                    <Badge
+                      variant={renewCustomerData?.status === "active" ? "success" : "destructive"}
+                      className="text-[10px] capitalize"
+                    >
+                      {renewCustomerData?.status}
+                    </Badge>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Current Expiration:</span>
+                    <span className="font-medium font-mono text-foreground">
+                      {renewCustomerData?.expires_at
+                        ? new Date(renewCustomerData.expires_at).toLocaleDateString()
+                        : "Expired / None"}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="renew_package_id" className="text-xs">
+                    Subscription Package
+                  </Label>
+                  <Select value={renewPkgId} onValueChange={setRenewPkgId}>
+                    <SelectTrigger className="h-9 text-xs">
+                      <SelectValue placeholder="Select a package" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {pppPackages.map((p) => (
+                        <SelectItem key={p.id} value={p.id} className="text-xs">
+                          {p.name} — KES {p.price_kes}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="renew_days" className="text-xs">
+                    Extend Duration (Days)
+                  </Label>
+                  <Select value={renewDays} onValueChange={setRenewDays}>
+                    <SelectTrigger className="h-9 text-xs">
+                      <SelectValue placeholder="Select days" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="7" className="text-xs">
+                        7 Days (Weekly)
+                      </SelectItem>
+                      <SelectItem value="14" className="text-xs">
+                        14 Days (Bi-weekly)
+                      </SelectItem>
+                      <SelectItem value="30" className="text-xs">
+                        30 Days (1 Month)
+                      </SelectItem>
+                      <SelectItem value="60" className="text-xs">
+                        60 Days (2 Months)
+                      </SelectItem>
+                      <SelectItem value="90" className="text-xs">
+                        90 Days (3 Months)
+                      </SelectItem>
+                      <SelectItem value="365" className="text-xs">
+                        365 Days (1 Year)
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="p-2.5 rounded-md bg-primary/5 border border-primary/20 text-[11px] text-muted-foreground">
+                  <p className="font-medium text-foreground">Immediate Effect:</p>
+                  <p className="mt-0.5">
+                    Account status will be set to active, expiration date will be extended, and
+                    PostgreSQL triggers will automatically push new parameters to FreeRADIUS.
+                  </p>
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setIsRenewModalOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={isRenewing} className="gap-2">
+                  {isRenewing && <Loader2 className="size-4 animate-spin" />}
+                  Confirm Renewal & Reactivate
                 </Button>
               </DialogFooter>
             </form>
