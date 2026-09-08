@@ -20,6 +20,7 @@ import {
   Cpu,
   Globe,
   MessageCircle,
+  Server,
 } from "lucide-react";
 
 export const Route = createFileRoute("/")({
@@ -51,9 +52,9 @@ export const Route = createFileRoute("/")({
 
 const features = [
   {
-    icon: Router,
-    title: "MikroTik on autopilot",
-    body: "An on-site agent talks to your router over a secure outbound link — no port forwarding, no static IP. Users are activated and cut off automatically.",
+    icon: Server,
+    title: "FreeRADIUS & MikroTik AAA",
+    body: "Ultra-low-latency, database-backed FreeRADIUS (AAA) server. Automatically provisions PAP/CHAP/MS-CHAPv2 credentials and synchronizes bandwidth rate-limiting queues for active subscribers.",
   },
   {
     icon: Smartphone,
@@ -319,14 +320,12 @@ function Landing() {
               <h1 className="font-display text-4xl font-extrabold tracking-tight sm:text-6xl lg:text-7xl leading-[1.08]">
                 Next-Gen ISP <br />
                 <span className="bg-gradient-to-r from-primary via-indigo-400 to-cyan-400 bg-clip-text text-transparent">
-                  Billing & Automation
+                  Billing & FreeRADIUS
                 </span>
               </h1>
 
               <p className="mt-6 text-lg text-muted-foreground sm:text-xl max-w-xl leading-relaxed">
-                Connect your MikroTik routers directly to M-Pesa & Mobile Money. Automated
-                provisioning, instant receipt validation, and hard tenant isolation engineered for
-                modern ISPs.
+                Connect your MikroTik routers directly to M-Pesa and FreeRADIUS. Automated PPPoE/Hotspot provisioning, instant AAA credential synchronization, and hard multi-tenant isolation.
               </p>
 
               <div className="mt-8 flex flex-wrap items-center gap-4">
@@ -383,13 +382,13 @@ function Landing() {
                 <div className="flex items-center justify-between border-b border-border/60 pb-4 mb-4">
                   <div className="flex items-center gap-3">
                     <span className="grid size-10 place-items-center rounded-xl bg-primary/20 text-primary">
-                      <Cpu className="size-5" />
+                      <Server className="size-5" />
                     </span>
                     <div>
-                      <div className="font-semibold text-sm">Router Node #MK-01</div>
+                      <div className="font-semibold text-sm">FreeRADIUS AAA Server</div>
                       <div className="text-xs text-emerald-500 flex items-center gap-1">
                         <span className="size-1.5 rounded-full bg-emerald-500 animate-ping" />
-                        Connected & Synchronized
+                        Online (Port 1812/1813)
                       </div>
                     </div>
                   </div>
@@ -399,18 +398,18 @@ function Landing() {
                 <div className="space-y-3">
                   <div className="rounded-2xl bg-background/50 border border-border/60 p-4 space-y-2">
                     <div className="flex justify-between text-xs text-muted-foreground font-medium">
-                      <span>Live Mobile Money Event</span>
-                      <span className="text-emerald-500 font-semibold">Success</span>
+                      <span>Live RADIUS AAA Event</span>
+                      <span className="text-emerald-500 font-semibold">Access-Accept</span>
                     </div>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <Smartphone className="size-4 text-primary" />
-                        <span className="text-sm font-mono">+254 712 *** 890</span>
+                        <span className="text-sm font-mono">+254 712 *** 890 (PPPoE)</span>
                       </div>
-                      <span className="text-sm font-bold font-mono text-primary">KES 1,500</span>
+                      <span className="text-sm font-bold font-mono text-primary">radcheck OK</span>
                     </div>
                     <div className="text-[11px] text-muted-foreground flex items-center justify-between pt-1 border-t border-border/40">
-                      <span>Receipt: QHX9823145</span>
+                      <span>Rate Limit: 10M/10M</span>
                       <span>Just now</span>
                     </div>
                   </div>
@@ -421,9 +420,9 @@ function Landing() {
                       <div className="text-xl font-bold font-display mt-1">428 Users</div>
                     </div>
                     <div className="rounded-2xl bg-background/50 border border-border/60 p-3.5">
-                      <div className="text-xs text-muted-foreground">Bandwidth Load</div>
+                      <div className="text-xs text-muted-foreground">AAA Authentications</div>
                       <div className="text-xl font-bold font-display mt-1 text-indigo-500">
-                        1.2 Gbps
+                        12,490/hr
                       </div>
                     </div>
                   </div>
@@ -432,9 +431,9 @@ function Landing() {
                 <div className="mt-5 pt-4 border-t border-border/60 flex items-center justify-between text-xs text-muted-foreground">
                   <span className="flex items-center gap-1.5">
                     <Activity className="size-3.5 text-primary" />
-                    Automated Router Expiry Guard
+                    CoA/PoD Disconnect Service
                   </span>
-                  <span className="font-semibold text-foreground">Active</span>
+                  <span className="font-semibold text-foreground">Active (Port 3799)</span>
                 </div>
               </div>
             </div>
