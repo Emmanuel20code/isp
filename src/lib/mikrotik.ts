@@ -204,11 +204,19 @@ export function generateModularScript(type: string, params: ScriptParams): strin
 # 2. Fix SSL/TLS Handshake (Import Let's Encrypt Root CA)
 :put "Ensuring SSL/TLS trust chain is trusted..."
 :do {
-    /tool fetch url="https://letsencrypt.org/certs/isrgrootx1.pem" dst-path="isrgrootx1.pem" check-certificate=no
+    /tool fetch url="${cleanBase}/isrgrootx1.pem" dst-path="isrgrootx1.pem" check-certificate=no
     /certificate import file-name=isrgrootx1.pem passphrase=""
     /file remove isrgrootx1.pem
     :log info "ISRG Root X1 CA imported successfully"
-} on-error={ :log warning "Could not import ISRG Root X1 CA. HTTPS might require check-certificate=no" }
+} on-error={
+    :log warning "Could not download local certificate. Trying fallback..."
+    :do {
+        /tool fetch url="https://letsencrypt.org/certs/isrgrootx1.pem" dst-path="isrgrootx1.pem" check-certificate=no
+        /certificate import file-name=isrgrootx1.pem passphrase=""
+        /file remove isrgrootx1.pem
+        :log info "Fallback ISRG Root X1 CA imported successfully"
+    } on-error={ :log warning "Could not import fallback ISRG Root X1 CA. HTTPS might require check-certificate=no" }
+}
 
 # 3. Environment Check
 :global version [/system package update get installed-version]
@@ -458,7 +466,7 @@ add server=hotspot1 dst-host="*.tigo.co.tz" action=allow
   /radius remove [find comment~"FreeRADIUS" or comment~"WiFiBilling" or comment~"EMMATECH"];
   /radius add address=13.140.174.60 secret="emmatech_radius_secret_2026" service=hotspot,ppp authentication-port=1812 accounting-port=1813 timeout=3000ms comment="EMMATECH FreeRADIUS";
   /radius incoming set accept=yes port=3799;
-  /ip hotspot profile set [find name=hsprof1] use-radius=yes radius-accounting=yes radius-interim-update=2m login-by=http-chap,http-pap,pap,chap;
+  /ip hotspot profile set [find name=hsprof1] use-radius=yes radius-accounting=yes radius-interim-update=2m login-by=http-chap,http-pap;
   /ppp aaa set use-radius=yes accounting=yes interim-update=2m;
   
   # Remove legacy schedulers & scripts

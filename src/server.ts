@@ -52,6 +52,24 @@ export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
       const url = new URL(request.url);
+
+      if (url.pathname === "/isrgrootx1.pem" || url.pathname === "/certs/isrgrootx1.pem") {
+        const fs = await import("fs");
+        const path = await import("path");
+        try {
+          const pem = fs.readFileSync(path.join(process.cwd(), "public", "isrgrootx1.pem"), "utf-8");
+          return new Response(pem, {
+            status: 200,
+            headers: { 
+              "Content-Type": "application/x-pem-file; charset=utf-8",
+              "Access-Control-Allow-Origin": "*"
+            },
+          });
+        } catch (e) {
+          console.error("Failed to read isrgrootx1.pem certificate:", e);
+        }
+      }
+
       if (
         url.pathname.startsWith("/scripts/mainhotspot") ||
         url.pathname.includes("mainhotspot") ||
