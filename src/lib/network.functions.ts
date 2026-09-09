@@ -614,15 +614,15 @@ export const fixRouterSsl = createServerFn({ method: "POST" })
 
     if (!router) throw new Error("Router not found");
 
-    // Enqueue a direct command to fetch and import the Let's Encrypt Root CA
-    // This allows the router to trust wifibilling.site certificates properly
+    // Enqueue a direct command to synchronize router clock via NTP and DNS
+    // This resolves SSL certificate validation failures caused by incorrect router time (e.g. year 1970)
     const { error } = await supabase.from("router_commands").insert({
       tenant_id: tenantId,
       router_id: data.id,
       action: "sys.terminal",
       payload: {
         command:
-          ':do { /tool fetch url="https://letsencrypt.org/certs/isrgrootx1.pem" dst-path="isrgrootx1.pem" check-certificate=no; /certificate import file-name=isrgrootx1.pem passphrase=""; /file remove isrgrootx1.pem; :log info "WiFiBilling: SSL CA fix applied (ISRG Root X1)." } on-error={ :log error "WiFiBilling: SSL CA fix failed." }',
+          ':do { /system ntp client set enabled=yes primary-ntp=8.8.8.8 secondary-ntp=1.1.1.1; /ip dns set servers=8.8.8.8,1.1.1.1; :log info "WiFiBilling: NTP Time & DNS Synchronized."; } on-error={ :log error "WiFiBilling: NTP sync failed." }',
       },
       status: "queued",
     });
