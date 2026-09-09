@@ -104,7 +104,7 @@ export async function handleOnboardRequest(
   const tenantSlug = tenant?.slug || tenant?.id || router.tenant_id;
   const tenantName = tenant?.name || "WiFi Hotspot";
 
-  if (type === "success") {
+  if (type === "success" || type === "heartbeat") {
     await supabaseAdmin
       .from("routers")
       .update({
@@ -114,7 +114,9 @@ export async function handleOnboardRequest(
         last_seen_at: new Date().toISOString(),
       })
       .eq("id", router.id);
-    return new Response("OK", { status: 200, headers: { "Content-Type": "text/plain" } });
+    if (type === "success") {
+      return new Response("OK", { status: 200, headers: { "Content-Type": "text/plain" } });
+    }
   }
 
   const routerWalledGarden = router.walled_garden_domains || [];

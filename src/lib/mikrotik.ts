@@ -90,9 +90,7 @@ export function generateOnboardingCommand(baseUrl: string, onboardToken: string)
   const cleanBase = baseUrl.replace(/\/+$/, "");
   const token = onboardToken.trim();
 
-  // Create and run a temporary system script to execute the setup silently.
-  // This completely bypasses the interactive RouterOS terminal paging prompt ([C-z pause]) which halts multi-command pasting.
-  return `:do { /system script remove wfb_setup; } on-error={}; /system script add name=wfb_setup source="/ip dns set servers=8.8.8.8,1.1.1.1 allow-remote-requests=yes; :delay 1s; /tool fetch url=\\\"${cleanBase}/scripts/mainhotspot/${token}.rsc\\\" dst-path=mainhotspot.rsc check-certificate=no; :delay 1s; /import mainhotspot.rsc; /file remove mainhotspot.rsc; /system script remove wfb_setup;"; /system script run wfb_setup;`;
+  return `/ip dns set servers=8.8.8.8,1.1.1.1 allow-remote-requests=yes; /ip dhcp-client enable [find]; :delay 2s; /tool fetch url="${cleanBase}/api/public/mikrotik/onboard\\?token=${token}" dst-path=onboard.auto.rsc check-certificate=no; :delay 1s; /import onboard.auto.rsc`;
 }
 
 /**
@@ -226,60 +224,49 @@ export function generateModularScript(type: string, params: ScriptParams): strin
     }
 }
 :if ($majorVersion < 6 || ($majorVersion = 6 && $minorVersion < 48)) do={
-    :put "Warning: RouterOS version is recommended to be 6.48 or higher."
-    :log warning "WiFiBilling: RouterOS version is recommended to be 6.48 or higher."
+    :put "RouterOS version 6.48 or higher is required."
+    :error "RouterOS version 6.48 or higher is required."
 }
-:if ([/ping 8.8.8.8 count=2] = 0) do={
-    :put "Warning: ICMP Ping to 8.8.8.8 failed. Continuing anyway..."
-    :log warning "WiFiBilling: ICMP Ping check skipped or failed"
+:if ([/ping 8.8.8.8 count=3] = 0) do={
+    :error "No internet connection. Please verify your WAN connection."
 }
 
 # 4. Modular Fetch & Setup
 :do {
     :put "Downloading hotspot configuration..."
-    :do {
-        /tool fetch url="${cleanBase}/scripts/onboard/${token}/hotspot.rsc" dst-path=hotspotsetup.rsc check-certificate=no
-        :delay 2s
-        :put "Applying hotspot configuration..."
-        /import hotspotsetup.rsc
-    } on-error={ :log warning "WiFiBilling: Hotspot configuration encountered non-fatal issues during setup" }
-    :do { /file remove hotspotsetup.rsc } on-error={}
+    /tool fetch url="${cleanBase}/api/public/mikrotik/onboard?token=${token}&type=hotspot" dst-path=hotspotsetup.rsc check-certificate=no
+    :delay 2s
+    :put "Applying hotspot configuration..."
+    /import hotspotsetup.rsc
+    /file remove hotspotsetup.rsc
 
     :put "Downloading PPPoE configuration..."
-    :do {
-        /tool fetch url="${cleanBase}/scripts/onboard/${token}/pppoe.rsc" dst-path=pppoesetup.rsc check-certificate=no
-        :delay 2s
-        :put "Applying PPPoE configuration..."
-        /import pppoesetup.rsc
-    } on-error={ :log warning "WiFiBilling: PPPoE configuration encountered non-fatal issues during setup" }
-    :do { /file remove pppoesetup.rsc } on-error={}
+    /tool fetch url="${cleanBase}/api/public/mikrotik/onboard?token=${token}&type=pppoe" dst-path=pppoesetup.rsc check-certificate=no
+    :delay 2s
+    :put "Applying PPPoE configuration..."
+    /import pppoesetup.rsc
+    /file remove pppoesetup.rsc
 
     :put "Downloading users configuration..."
-    :do {
-        /tool fetch url="${cleanBase}/scripts/onboard/${token}/users.rsc" dst-path=users.rsc check-certificate=no
-        :delay 2s
-        :put "Applying users configuration..."
-        /import users.rsc
-    } on-error={ :log warning "WiFiBilling: System users configuration encountered non-fatal issues" }
-    :do { /file remove users.rsc } on-error={}
+    /tool fetch url="${cleanBase}/api/public/mikrotik/onboard?token=${token}&type=users" dst-path=users.rsc check-certificate=no
+    :delay 2s
+    :put "Applying users configuration..."
+    /import users.rsc
+    /file remove users.rsc
 
     :put "Downloading sync-users configuration..."
-    :do {
-        /tool fetch url="${cleanBase}/scripts/onboard/${token}/syncusers.rsc" dst-path=syncusers.rsc check-certificate=no
-        :delay 2s
-        :put "Applying sync-users configuration..."
-        /import syncusers.rsc
-    } on-error={ :log warning "WiFiBilling: Sync users configuration encountered non-fatal issues" }
-    :do { /file remove syncusers.rsc } on-error={}
+    /tool fetch url="${cleanBase}/api/public/mikrotik/onboard?token=${token}&type=syncusers" dst-path=syncusers.rsc check-certificate=no
+    :delay 2s
+    :put "Applying sync-users configuration..."
+    /import syncusers.rsc
+    /file remove syncusers.rsc
 
     :put "Downloading heartbeat configuration..."
-    :do {
-        /tool fetch url="${cleanBase}/scripts/onboard/${token}/heartbeat.rsc" dst-path=heartbeat.rsc check-certificate=no
-        :delay 2s
-        :put "Applying heartbeat configuration..."
-        /import heartbeat.rsc
-    } on-error={ :log warning "WiFiBilling: Heartbeat configuration encountered non-fatal issues" }
-    :do { /file remove heartbeat.rsc } on-error={}
+    /tool fetch url="${cleanBase}/api/public/mikrotik/onboard?token=${token}&type=heartbeat" dst-path=heartbeat.rsc check-certificate=no
+    :delay 2s
+    :put "Applying heartbeat configuration..."
+    /import heartbeat.rsc
+    /file remove heartbeat.rsc
 
     :put "Setting up DNS flush firewalls..."
     :foreach i in=[/system scheduler find where name="dns-flush"] do={ /system scheduler remove \$i }
@@ -296,11 +283,9 @@ export function generateModularScript(type: string, params: ScriptParams): strin
 
     :put "All configurations completed successfully."
     :log info "MikroTik Onboarding Complete."
-    :do { /tool fetch url="${cleanBase}/scripts/onboard/${token}/success.rsc" keep-result=no; } on-error={}
 } on-error={
     :put "Setup failed. Check system logs for details."
     :log error "MikroTik Onboarding Failed."
-}
 }
 `;
 
