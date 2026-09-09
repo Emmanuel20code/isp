@@ -16,13 +16,13 @@ async function runEndToEndLifecycle() {
 
   const { data: pkg, error: pErr } = await supabaseAdmin
     .from("packages")
-    .select("id, name, duration_hours, price, speed_down_mbps, speed_up_mbps")
+    .select("id, name, duration_hours, price_kes, speed_down_mbps, speed_up_mbps")
     .eq("tenant_id", tenant.id)
     .limit(1)
     .single();
   if (pErr || !pkg) throw new Error("No package found: " + JSON.stringify(pErr));
   console.log(
-    `[2] Selected Package: "${pkg.name}", Duration: ${pkg.duration_hours}h, Price: KES ${pkg.price}`,
+    `[2] Selected Package: "${pkg.name}", Duration: ${pkg.duration_hours}h, Price: KES ${pkg.price_kes}`,
   );
 
   const { data: router } = await supabaseAdmin
@@ -45,14 +45,17 @@ async function runEndToEndLifecycle() {
     .insert({
       tenant_id: tenant.id,
       package_id: pkg.id,
-      router_id: router?.id || null,
-      amount: pkg.price,
+      amount_kes: pkg.price_kes,
       phone: testPhone,
       kind: "customer_payment",
       status: "pending",
       checkout_request_id: "ws_CO_E2E_" + Date.now(),
-      account_reference: "E2E-TEST",
-      notes: JSON.stringify({ mac: testMac, ip: "10.10.0.155" }),
+      raw: {
+        mac: testMac,
+        ip: "10.10.0.155",
+        router_id: router?.id || null,
+        source: "portal",
+      },
     })
     .select()
     .single();

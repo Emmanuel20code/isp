@@ -754,7 +754,7 @@ export async function activateCustomerPackage(
 
   if (!txn || !txn.package_id) {
     console.warn(`[Activation] Transaction ${txnId} not found or missing package_id.`);
-    return;
+    return { success: false, message: "Transaction not found or missing package_id" };
   }
 
   // Idempotency: Prevent duplicate activation if this transaction already generated a voucher
@@ -762,7 +762,18 @@ export async function activateCustomerPackage(
     console.log(
       `[Activation] Transaction ${txnId} already activated with voucher ${txn.voucher_id}. Skipping duplicate activation.`,
     );
-    return;
+    
+    const { data: existingVoucher } = await db
+      .from("vouchers")
+      .select("id, code")
+      .eq("id", txn.voucher_id)
+      .maybeSingle();
+
+    return {
+      success: true,
+      voucher: existingVoucher ? { id: existingVoucher.id, code: existingVoucher.code } : null,
+      message: "Already activated",
+    };
   }
 
   const [{ data: pkg, error: pkgErr }, { data: routers, error: routersErr }] = await Promise.all([
@@ -938,18 +949,23 @@ export async function activateCustomerPackage(
 
   // Link voucher, customer and router to transaction
   const currentRaw = (txn.raw as Record<string, unknown>) || {};
+  const updatePayload: Record<string, any> = {
+    voucher_id: voucher.id,
+    customer_id: customerId,
+    status: "success",
+    raw: {
+      ...currentRaw,
+      router_id: routerId,
+      voucher_code: voucher.code,
+      activated_at: new Date().toISOString(),
+    },
+  };
+  if (receipt) {
+    updatePayload.mpesa_receipt = receipt;
+  }
   await db
     .from("transactions")
-    .update({
-      voucher_id: voucher.id,
-      customer_id: customerId,
-      raw: {
-        ...currentRaw,
-        router_id: routerId,
-        voucher_code: voucher.code,
-        activated_at: new Date().toISOString(),
-      },
-    })
+    .update(updatePayload)
     .eq("id", txn.id);
 
   // 4. Enqueue Router Commands for target router
@@ -1056,4 +1072,13 @@ export async function activateCustomerPackage(
   console.log(
     `[Activation] Successfully completed activation and audit logging for transaction ${txnId}`,
   );
+
+  return {
+    success: true,
+    voucher: {
+      id: voucher.id,
+      code: voucher.code,
+    },
+    customerId,
+  };
 }

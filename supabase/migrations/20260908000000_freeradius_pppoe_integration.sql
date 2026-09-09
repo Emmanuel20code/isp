@@ -159,7 +159,7 @@ DECLARE
   v_is_valid BOOLEAN := false;
   v_speed_up INT;
   v_speed_down INT;
-  v_duration_min INT;
+  v_duration_hour NUMERIC;
 BEGIN
   IF (TG_OP = 'DELETE') THEN
     DELETE FROM radcheck WHERE username = OLD.code;
@@ -174,8 +174,8 @@ BEGIN
 
   -- Fetch package specs
   IF NEW.package_id IS NOT NULL THEN
-    SELECT speed_up_mbps, speed_down_mbps, duration_minutes
-    INTO v_speed_up, v_speed_down, v_duration_min
+    SELECT speed_up_mbps, speed_down_mbps, duration_hours
+    INTO v_speed_up, v_speed_down, v_duration_hour
     FROM packages
     WHERE id = NEW.package_id;
     
@@ -183,8 +183,8 @@ BEGIN
       v_rate_limit := v_speed_up || 'M/' || v_speed_down || 'M';
     END IF;
 
-    IF v_duration_min IS NOT NULL AND v_duration_min > 0 THEN
-      v_session_timeout := v_duration_min * 60;
+    IF v_duration_hour IS NOT NULL AND v_duration_hour > 0 THEN
+      v_session_timeout := (v_duration_hour * 3600)::INT;
     END IF;
   END IF;
 
