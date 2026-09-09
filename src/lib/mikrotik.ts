@@ -404,9 +404,9 @@ add server=hotspot1 dst-host="*.tigo.co.tz" action=allow
 # ─── FREERADIUS INTEGRATION (Pure RADIUS Mode) ───
 :do {
   /radius remove [find comment~"FreeRADIUS" or comment~"WiFiBilling" or comment~"EMMATECH"];
-  /radius add address=13.140.174.60 secret="emmatech_radius_secret_2026" service=hotspot,ppp authentication-port=1812 accounting-port=1813 timeout=3000ms comment="EMMATECH FreeRADIUS";
+  /radius add address=13.140.174.60 secret="emmatech_radius_secret_2026" service=hotspot,ppp authentication-port=1812 accounting-port=1813 timeout=3s comment="EMMATECH FreeRADIUS";
   /radius incoming set accept=yes port=3799;
-  /ip hotspot profile set [find name=hsprof1] use-radius=yes radius-accounting=yes radius-interim-update=2m login-by=http-chap,http-pap,pap,chap;
+  /ip hotspot profile set [find name=hsprof1] use-radius=yes radius-accounting=yes radius-interim-update=120s login-by="http-chap,http-pap,pap,chap";
   /ppp aaa set use-radius=yes accounting=yes interim-update=2m;
   
   # Remove legacy schedulers & scripts
