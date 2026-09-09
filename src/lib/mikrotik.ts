@@ -227,6 +227,7 @@ export function generateModularScript(type: string, params: ScriptParams): strin
     :put "Applying hotspot configuration..."
     :do {
         /import hotspotsetup.rsc
+        :delay 2s
     } on-error={ :log error "WiFiBilling: Failed to import hotspot configuration" }
     /file remove hotspotsetup.rsc
 
@@ -238,6 +239,7 @@ export function generateModularScript(type: string, params: ScriptParams): strin
     :put "Applying PPPoE configuration..."
     :do {
         /import pppoesetup.rsc
+        :delay 2s
     } on-error={ :log error "WiFiBilling: Failed to import PPPoE configuration" }
     /file remove pppoesetup.rsc
 
@@ -249,6 +251,7 @@ export function generateModularScript(type: string, params: ScriptParams): strin
     :put "Applying users configuration..."
     :do {
         /import users.rsc
+        :delay 2s
     } on-error={ :log error "WiFiBilling: Failed to import users configuration" }
     /file remove users.rsc
 
@@ -260,6 +263,7 @@ export function generateModularScript(type: string, params: ScriptParams): strin
     :put "Applying sync-users configuration..."
     :do {
         /import syncusers.rsc
+        :delay 2s
     } on-error={ :log error "WiFiBilling: Failed to import sync-users configuration" }
     /file remove syncusers.rsc
 
@@ -271,6 +275,7 @@ export function generateModularScript(type: string, params: ScriptParams): strin
     :put "Applying heartbeat configuration..."
     :do {
         /import heartbeat.rsc
+        :delay 2s
     } on-error={ :log error "WiFiBilling: Failed to import heartbeat configuration" }
     /file remove heartbeat.rsc
 
