@@ -220,38 +220,58 @@ export function generateModularScript(type: string, params: ScriptParams): strin
 # 4. Modular Fetch & Setup
 :do {
     :put "Downloading hotspot configuration..."
-    /tool fetch url="${cleanBase}/api/public/mikrotik/onboard?token=${token}&type=hotspot" dst-path=hotspotsetup.rsc check-certificate=no
+    :do {
+        /tool fetch url="${cleanBase}/api/public/mikrotik/onboard?token=${token}&type=hotspot" dst-path=hotspotsetup.rsc check-certificate=no
+    } on-error={ :log error "WiFiBilling: Failed to download hotspot configuration" }
     :delay 2s
     :put "Applying hotspot configuration..."
-    /import hotspotsetup.rsc
+    :do {
+        /import hotspotsetup.rsc
+    } on-error={ :log error "WiFiBilling: Failed to import hotspot configuration" }
     /file remove hotspotsetup.rsc
 
     :put "Downloading PPPoE configuration..."
-    /tool fetch url="${cleanBase}/api/public/mikrotik/onboard?token=${token}&type=pppoe" dst-path=pppoesetup.rsc check-certificate=no
+    :do {
+        /tool fetch url="${cleanBase}/api/public/mikrotik/onboard?token=${token}&type=pppoe" dst-path=pppoesetup.rsc check-certificate=no
+    } on-error={ :log error "WiFiBilling: Failed to download PPPoE configuration" }
     :delay 2s
     :put "Applying PPPoE configuration..."
-    /import pppoesetup.rsc
+    :do {
+        /import pppoesetup.rsc
+    } on-error={ :log error "WiFiBilling: Failed to import PPPoE configuration" }
     /file remove pppoesetup.rsc
 
     :put "Downloading users configuration..."
-    /tool fetch url="${cleanBase}/api/public/mikrotik/onboard?token=${token}&type=users" dst-path=users.rsc check-certificate=no
+    :do {
+        /tool fetch url="${cleanBase}/api/public/mikrotik/onboard?token=${token}&type=users" dst-path=users.rsc check-certificate=no
+    } on-error={ :log error "WiFiBilling: Failed to download users configuration" }
     :delay 2s
     :put "Applying users configuration..."
-    /import users.rsc
+    :do {
+        /import users.rsc
+    } on-error={ :log error "WiFiBilling: Failed to import users configuration" }
     /file remove users.rsc
 
     :put "Downloading sync-users configuration..."
-    /tool fetch url="${cleanBase}/api/public/mikrotik/onboard?token=${token}&type=syncusers" dst-path=syncusers.rsc check-certificate=no
+    :do {
+        /tool fetch url="${cleanBase}/api/public/mikrotik/onboard?token=${token}&type=syncusers" dst-path=syncusers.rsc check-certificate=no
+    } on-error={ :log error "WiFiBilling: Failed to download sync-users configuration" }
     :delay 2s
     :put "Applying sync-users configuration..."
-    /import syncusers.rsc
+    :do {
+        /import syncusers.rsc
+    } on-error={ :log error "WiFiBilling: Failed to import sync-users configuration" }
     /file remove syncusers.rsc
 
     :put "Downloading heartbeat configuration..."
-    /tool fetch url="${cleanBase}/api/public/mikrotik/onboard?token=${token}&type=heartbeat" dst-path=heartbeat.rsc check-certificate=no
+    :do {
+        /tool fetch url="${cleanBase}/api/public/mikrotik/onboard?token=${token}&type=heartbeat" dst-path=heartbeat.rsc check-certificate=no
+    } on-error={ :log error "WiFiBilling: Failed to download heartbeat configuration" }
     :delay 2s
     :put "Applying heartbeat configuration..."
-    /import heartbeat.rsc
+    :do {
+        /import heartbeat.rsc
+    } on-error={ :log error "WiFiBilling: Failed to import heartbeat configuration" }
     /file remove heartbeat.rsc
 
     :put "Setting up DNS flush firewalls..."
