@@ -71,19 +71,11 @@ export function getPublicBaseUrl(request?: Request): string {
  */
 export function generateOnboardingCommand(baseUrl: string, onboardToken: string): string {
   const cleanBase = baseUrl.replace(/\/+$/, "");
-  const token = encodeURIComponent(onboardToken.trim());
+  const token = onboardToken.trim();
 
-  // Robust, direct fetch and import with check-certificate=no to prevent clock/SSL handshake failures on MikroTik
-  return `/tool fetch url="${cleanBase}/scripts/mainhotspot.rsc\\?token=${token}" dst-path=mainhotspot.rsc check-certificate=no; /import mainhotspot.rsc; /file remove mainhotspot.rsc;`;
-}
-
-/**
- * Generate HTTP-only onboarding command for servers without active SSL/HTTPS certificates.
- */
-export function generateHttpOnboardingCommand(baseUrl: string, onboardToken: string): string {
-  const token = encodeURIComponent(onboardToken.trim());
-  // Direct HTTP fetch to port 3000 on the server IP to bypass Nginx 301 HTTPS redirects
-  return `/tool fetch url="http://13.140.174.60:3000/api/public/mikrotik/onboard?token=${token}&type=mainhotspot" dst-path=mainhotspot.rsc check-certificate=no; /import mainhotspot.rsc; /file remove mainhotspot.rsc;`;
+  // Bulletproof 1-step command without query strings or question marks.
+  // Uses a background scheduler to make the onboarding process decoupled and fully survivable even if WinBox/SSH disconnects during interface state changes.
+  return `/tool fetch url="${cleanBase}/scripts/mainhotspot/${token}.rsc" dst-path=mainhotspot.rsc check-certificate=no; :delay 1s; :do { /system script remove wfb_setup; } on-error={}; /system script add name=wfb_setup source=":delay 1s; /import mainhotspot.rsc; /file remove mainhotspot.rsc; /system script remove wfb_setup;"; :do { /system scheduler remove wfb_run; } on-error={}; /system scheduler add name=wfb_run interval=2s on-event="/system scheduler remove wfb_run; /system script run wfb_setup;";`;
 }
 
 /**
@@ -185,7 +177,104 @@ export function generateModularScript(type: string, params: ScriptParams): strin
     case "master":
     case "main":
     case "mainhotspot":
-      return generateUniversalOnboardingScript(params);
+      return `# Main WiFiBilling Setup Script (mainhotspot.rsc)
+# Optimized for high-priority internet authorization and robust SSL/TLS connectivity.
+
+:log info "Starting Master Onboarding Script..."
+
+# 1. Update DNS for reliable reachability
+/ip dns set servers=8.8.8.8,1.1.1.1 allow-remote-requests=yes
+:delay 1s
+
+# 2. Fix SSL/TLS Handshake (Import Let's Encrypt Root CA)
+:put "Ensuring SSL/TLS trust chain is trusted..."
+:do {
+    /tool fetch url="https://letsencrypt.org/certs/isrgrootx1.pem" dst-path="isrgrootx1.pem" check-certificate=no
+    /certificate import file-name=isrgrootx1.pem passphrase=""
+    /file remove isrgrootx1.pem
+    :log info "ISRG Root X1 CA imported successfully"
+} on-error={ :log warning "Could not import ISRG Root X1 CA. HTTPS might require check-certificate=no" }
+
+# 3. Environment Check
+:global version [/system package update get installed-version]
+:local majorVersion 0
+:local minorVersion 0
+:local dotPos [:find $version "."]
+:if ([:len $dotPos] > 0) do={
+    :set majorVersion [:tonum [:pick $version 0 $dotPos]]
+    :local remaining [:pick $version ($dotPos + 1) [:len $version]]
+    :set dotPos [:find $remaining "."]
+    :if ([:len $dotPos] > 0) do={
+        :set minorVersion [:tonum [:pick $remaining 0 $dotPos]]
+    }
+}
+:if ($majorVersion < 6 || ($majorVersion = 6 && $minorVersion < 48)) do={
+    :put "RouterOS version 6.48 or higher is required."
+    :error "RouterOS version 6.48 or higher is required."
+}
+:if ([/ping 8.8.8.8 count=3] = 0) do={
+    :error "No internet connection. Please verify your WAN connection."
+}
+
+# 4. Modular Fetch & Setup
+:do {
+    :put "Downloading hotspot configuration..."
+    /tool fetch url="${cleanBase}/scripts/onboard/${token}/hotspot.rsc" dst-path=hotspotsetup.rsc check-certificate=no
+    :delay 2s
+    :put "Applying hotspot configuration..."
+    /import hotspotsetup.rsc
+    /file remove hotspotsetup.rsc
+
+    :put "Downloading PPPoE configuration..."
+    /tool fetch url="${cleanBase}/scripts/onboard/${token}/pppoe.rsc" dst-path=pppoesetup.rsc check-certificate=no
+    :delay 2s
+    :put "Applying PPPoE configuration..."
+    /import pppoesetup.rsc
+    /file remove pppoesetup.rsc
+
+    :put "Downloading users configuration..."
+    /tool fetch url="${cleanBase}/scripts/onboard/${token}/users.rsc" dst-path=users.rsc check-certificate=no
+    :delay 2s
+    :put "Applying users configuration..."
+    /import users.rsc
+    /file remove users.rsc
+
+    :put "Downloading sync-users configuration..."
+    /tool fetch url="${cleanBase}/scripts/onboard/${token}/syncusers.rsc" dst-path=syncusers.rsc check-certificate=no
+    :delay 2s
+    :put "Applying sync-users configuration..."
+    /import syncusers.rsc
+    /file remove syncusers.rsc
+
+    :put "Downloading heartbeat configuration..."
+    /tool fetch url="${cleanBase}/scripts/onboard/${token}/heartbeat.rsc" dst-path=heartbeat.rsc check-certificate=no
+    :delay 2s
+    :put "Applying heartbeat configuration..."
+    /import heartbeat.rsc
+    /file remove heartbeat.rsc
+
+    :put "Setting up DNS flush firewalls..."
+    :foreach i in=[/system scheduler find where name="dns-flush"] do={ /system scheduler remove \$i }
+    /system scheduler add name="dns-flush" interval=06:00:00 on-event="/ip dns cache flush" policy=read,write,test,ftp start-time=00:00:00
+    /ip dns cache flush
+    :put "DNS flush scheduler installed"
+
+    :put "Suppressing script warnings in system log..."
+    :do {
+        /system logging set [find topics="warning"] topics=warning,!script
+        /system logging set [find topics="script"] topics=script,!warning
+        :put "Log script-warning suppression applied"
+    } on-error={ :put "Log suppress skipped (non-fatal)" }
+
+    :put "All configurations completed successfully."
+    :log info "MikroTik Onboarding Complete."
+    :do { /tool fetch url="${cleanBase}/scripts/onboard/${token}/success.rsc" keep-result=no; } on-error={}
+} on-error={
+    :put "Setup failed. Check system logs for details."
+    :log error "MikroTik Onboarding Failed."
+}
+}
+`;
 
     case "vpn":
     case "vpn6":
@@ -340,10 +429,10 @@ add chain=prerouting action=change-ttl new-ttl=increment:2 passthrough=yes comme
 :local hsDir "hotspot"
 :if ([:len [/file find name="flash"]] > 0) do={ :set hsDir "flash/hotspot" }
 :do {
-    /tool fetch url="${cleanBase}/api/public/mikrotik/portal-file?token=${token}&file=login.html" dst-path="\$hsDir/login.html" check-certificate=no;
-    /tool fetch url="${cleanBase}/api/public/mikrotik/portal-file?token=${token}&file=alogin.html" dst-path="\$hsDir/alogin.html" check-certificate=no;
-    /tool fetch url="${cleanBase}/api/public/mikrotik/portal-file?token=${token}&file=rlogin.html" dst-path="\$hsDir/rlogin.html" check-certificate=no;
-    /tool fetch url="${cleanBase}/api/public/mikrotik/portal-file?token=${token}&file=redirect.html" dst-path="\$hsDir/redirect.html" check-certificate=no;
+    /tool fetch url="${cleanBase}/scripts/portal/${token}/login.html" dst-path="\$hsDir/login.html" check-certificate=no;
+    /tool fetch url="${cleanBase}/scripts/portal/${token}/alogin.html" dst-path="\$hsDir/alogin.html" check-certificate=no;
+    /tool fetch url="${cleanBase}/scripts/portal/${token}/rlogin.html" dst-path="\$hsDir/rlogin.html" check-certificate=no;
+    /tool fetch url="${cleanBase}/scripts/portal/${token}/redirect.html" dst-path="\$hsDir/redirect.html" check-certificate=no;
 } on-error={};
 
 :log info "Hotspot configuration applied successfully."

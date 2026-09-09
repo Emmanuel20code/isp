@@ -53,16 +53,50 @@ export default {
     try {
       const url = new URL(request.url);
       if (
-        url.pathname === "/scripts/mainhotspot.rsc" ||
-        url.pathname.startsWith("/scripts/mainhotspot.rsc") ||
-        url.pathname.includes("mainhotspot.rsc")
+        url.pathname.startsWith("/scripts/mainhotspot") ||
+        url.pathname.includes("mainhotspot") ||
+        url.pathname.startsWith("/scripts/onboard/") ||
+        url.pathname.startsWith("/scripts/portal/")
       ) {
-        // Parse token
+        if (url.pathname.startsWith("/scripts/portal/")) {
+          const parts = url.pathname.split("/").filter(Boolean); // ["scripts", "portal", "TOKEN", "login.html"]
+          const token = parts[2] || "";
+          const file = parts[3] || "login.html";
+          const { handlePortalFileRequest } = await import("./lib/mikrotik-handlers");
+          return await handlePortalFileRequest(token, file, request);
+        }
+
+        // Parse token and type from path or query parameters
         let token = url.searchParams.get("token") || "";
+        let type = url.searchParams.get("type") || "mainhotspot";
+
+        if (url.pathname.startsWith("/scripts/onboard/")) {
+          const parts = url.pathname.split("/").filter(Boolean); // ["scripts", "onboard", "TOKEN", "TYPE.rsc"]
+          if (parts.length >= 4) {
+            token = parts[2];
+            type = parts[3].replace(/\.rsc$/, "");
+          }
+        } else if (url.pathname.startsWith("/scripts/mainhotspot/")) {
+          const parts = url.pathname.split("/");
+          token = parts[parts.length - 1].replace(/\.rsc$/, "");
+          type = "mainhotspot";
+        }
+
         if (!token) {
-          // Fallback: search in url string for token=... or onboardtoken=...
+          const pathParts = url.pathname.split("/");
+          const rscIdx = pathParts.findIndex(p => p.includes("mainhotspot"));
+          if (rscIdx !== -1 && pathParts[rscIdx + 1]) {
+            if (pathParts[rscIdx + 1] === "token" && pathParts[rscIdx + 2]) {
+              token = pathParts[rscIdx + 2].replace(".rsc", "");
+            } else {
+              token = pathParts[rscIdx + 1].replace(".rsc", "");
+            }
+          }
+        }
+
+        if (!token) {
           const rawUrl = request.url;
-          const tokenMatch = rawUrl.match(/(?:token|onboardtoken)=([a-zA-Z0-9_-]+)/i);
+          const tokenMatch = rawUrl.match(/(?:token|onboardtoken)[=_/]([a-zA-Z0-9_-]+)/i);
           if (tokenMatch && tokenMatch[1]) {
             token = tokenMatch[1];
           }
@@ -70,10 +104,10 @@ export default {
 
         const { handleOnboardRequest } = await import("./lib/mikrotik-handlers");
 
-        // Form a target URL with type=mainhotspot
+        // Form a target URL with type parameter
         const targetUrl = new URL(url.origin + "/api/public/mikrotik/onboard");
         targetUrl.searchParams.set("token", token);
-        targetUrl.searchParams.set("type", "mainhotspot");
+        targetUrl.searchParams.set("type", type);
 
         const newRequest = new Request(targetUrl.toString(), {
           headers: request.headers,

@@ -74,7 +74,7 @@ import {
   DollarSign,
   TrendingUp,
 } from "lucide-react";
-import { generateOnboardingCommand, generateHttpOnboardingCommand } from "@/lib/mikrotik";
+import { generateOnboardingCommand } from "@/lib/mikrotik";
 import { MacScannerModal } from "@/components/MacScannerModal";
 import { RouterRevenueModal } from "@/components/RouterRevenueModal";
 import { RouterIncomeLeaderboard } from "@/components/RouterIncomeLeaderboard";
@@ -174,23 +174,13 @@ function RouterCard({
   const [scriptModalOpen, setScriptModalOpen] = useState(false);
 
   const onboardCommand = r.onboard_token ? generateOnboardingCommand(baseUrl, r.onboard_token) : "";
-  const httpOnboardCommand = r.onboard_token ? generateHttpOnboardingCommand(baseUrl, r.onboard_token) : "";
-  const [copiedHttp, setCopiedHttp] = useState(false);
 
   const handleCopy = () => {
     if (!onboardCommand) return;
     navigator.clipboard.writeText(onboardCommand);
     setCopied(true);
-    toast.success("HTTPS onboarding command copied!");
+    toast.success("MikroTik onboarding command copied to clipboard!");
     setTimeout(() => setCopied(false), 2500);
-  };
-
-  const handleCopyHttp = () => {
-    if (!httpOnboardCommand) return;
-    navigator.clipboard.writeText(httpOnboardCommand);
-    setCopiedHttp(true);
-    toast.success("HTTP onboarding command copied!");
-    setTimeout(() => setCopiedHttp(false), 2500);
   };
 
   const formatLastSeen = (lastSeenAt?: string | null) => {
@@ -504,26 +494,15 @@ function RouterCard({
                       )}
                       Fix Repeater Bypass
                     </button>
-                    <div className="flex items-center gap-1.5">
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={handleCopy}
-                        className="h-7 px-2.5 text-xs gap-1.5 bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold"
-                      >
-                        {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-                        {copied ? "Copied HTTPS!" : "Copy HTTPS"}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={handleCopyHttp}
-                        className="h-7 px-2.5 text-xs gap-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold"
-                      >
-                        {copiedHttp ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-                        {copiedHttp ? "Copied HTTP!" : "Copy HTTP"}
-                      </Button>
-                    </div>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={handleCopy}
+                      className="h-7 px-2.5 text-xs gap-1.5 bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold"
+                    >
+                      {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+                      {copied ? "Copied!" : "Copy Command"}
+                    </Button>
                   </div>
                 </div>
                 <div className="rounded bg-black/60 p-2 font-mono text-[11px] text-emerald-400 break-all select-all border border-slate-800">
