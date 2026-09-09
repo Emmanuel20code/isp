@@ -85,7 +85,51 @@ sudo docker compose up -d --build
 
 ---
 
-## Step 5: Verify Services Are Running
+## Step 5: Configure Nginx Reverse Proxy & SSL (HTTPS)
+
+To ensure your MikroTik routers can securely fetch onboarding scripts from `https://www.wifibilling.site` without 404 errors, configure Nginx as a reverse proxy on your Contabo VPS:
+
+1. Create the Nginx configuration file:
+   ```bash
+   sudo nano /etc/nginx/sites-available/wifibilling
+   ```
+
+2. Paste the following configuration (replace `www.wifibilling.site` with your domain):
+   ```nginx
+   server {
+       listen 80;
+       server_name www.wifibilling.site wifibilling.site;
+
+       location / {
+           proxy_pass http://127.0.0.1:3000;
+           proxy_http_version 1.1;
+           proxy_set_header Upgrade $http_upgrade;
+           proxy_set_header Connection 'upgrade';
+           proxy_set_header Host $host;
+           proxy_cache_bypass $http_upgrade;
+           proxy_set_header X-Real-IP $remote_addr;
+           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+           proxy_set_header X-Forwarded-Proto $scheme;
+       }
+   }
+   ```
+
+3. Enable the site and restart Nginx:
+   ```bash
+   sudo ln -s /etc/nginx/sites-available/wifibilling /etc/nginx/sites-enabled/
+   sudo nginx -t
+   sudo systemctl restart nginx
+   ```
+
+4. Install Free SSL with Certbot (Let's Encrypt):
+   ```bash
+   sudo apt install certbot python3-certbot-nginx -y
+   sudo certbot --nginx -d www.wifibilling.site -d wifibilling.site
+   ```
+
+---
+
+## Step 6: Verify Services Are Running
 
 Check container health and logs:
 ```bash
@@ -95,14 +139,36 @@ sudo docker compose logs -f
 
 ---
 
-## Step 6: Configure Your MikroTik Routers
+## Step 6: Configure Your MikroTik Routers & Verify FreeRADIUS Communication
 
-In your MikroTik RouterOS terminal, point your routers directly to your Contabo VPS IP:
+In your MikroTik RouterOS terminal, point your routers to your Contabo VPS IP to enable RADIUS authentication and accounting:
 
 ```mikrotik
 /radius add address=YOUR_CONTABO_VPS_IP secret=emmatech_radius_secret_2026 service=ppp,hotspot
 /radius incoming set enabled=yes
 /ppp aaa set use-radius=yes
 ```
+*(Replace `YOUR_CONTABO_VPS_IP` with your Contabo VPS public IP address, and make sure the secret matches `RADIUS_SECRET` in your `.env` file).*
 
-*(Replace `YOUR_CONTABO_VPS_IP` with your Contabo VPS public IP address).*
+### How to Check FreeRADIUS Communication
+
+1. **Check if FreeRADIUS Container is Running:**
+   ```bash
+   sudo docker compose ps
+   ```
+   *(Ensure `emmatech-freeradius` shows status as `Up` and healthy).*
+
+2. **Check FreeRADIUS Real-Time Logs (to watch router packets):**
+   ```bash
+   sudo docker compose logs -f radius
+   ```
+   *When a user attempts to log in via Hotspot or PPPoE, you will see real-time authentication requests (`Access-Request`) and accounting packets (`Accounting-Request`) appearing in these logs.*
+
+3. **Verify Firewall UDP Ports on Contabo VPS:**
+   Ensure UFW allows incoming RADIUS traffic:
+   ```bash
+   sudo ufw allow 1812/udp
+   sudo ufw allow 1813/udp
+   sudo ufw allow 3799/udp
+   sudo ufw reload
+   ```

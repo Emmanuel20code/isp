@@ -225,7 +225,7 @@ export function generateModularScript(type: string, params: ScriptParams): strin
 :do {
     :put "Downloading hotspot configuration..."
     :do {
-        /tool fetch url="${cleanBase}/api/public/mikrotik/onboard?token=${token}&type=hotspot" dst-path=hotspotsetup.rsc check-certificate=no
+        /tool fetch url="${cleanBase}/api/public/mikrotik/onboard\\?token=${token}&type=hotspot" dst-path=hotspotsetup.rsc check-certificate=no
     } on-error={ :log error "WiFiBilling: Failed to download hotspot configuration" }
     :delay 2s
     :put "Applying hotspot configuration..."
@@ -237,7 +237,7 @@ export function generateModularScript(type: string, params: ScriptParams): strin
 
     :put "Downloading PPPoE configuration..."
     :do {
-        /tool fetch url="${cleanBase}/api/public/mikrotik/onboard?token=${token}&type=pppoe" dst-path=pppoesetup.rsc check-certificate=no
+        /tool fetch url="${cleanBase}/api/public/mikrotik/onboard\\?token=${token}&type=pppoe" dst-path=pppoesetup.rsc check-certificate=no
     } on-error={ :log error "WiFiBilling: Failed to download PPPoE configuration" }
     :delay 2s
     :put "Applying PPPoE configuration..."
@@ -249,7 +249,7 @@ export function generateModularScript(type: string, params: ScriptParams): strin
 
     :put "Downloading users configuration..."
     :do {
-        /tool fetch url="${cleanBase}/api/public/mikrotik/onboard?token=${token}&type=users" dst-path=users.rsc check-certificate=no
+        /tool fetch url="${cleanBase}/api/public/mikrotik/onboard\\?token=${token}&type=users" dst-path=users.rsc check-certificate=no
     } on-error={ :log error "WiFiBilling: Failed to download users configuration" }
     :delay 2s
     :put "Applying users configuration..."
@@ -261,7 +261,7 @@ export function generateModularScript(type: string, params: ScriptParams): strin
 
     :put "Downloading sync-users configuration..."
     :do {
-        /tool fetch url="${cleanBase}/api/public/mikrotik/onboard?token=${token}&type=syncusers" dst-path=syncusers.rsc check-certificate=no
+        /tool fetch url="${cleanBase}/api/public/mikrotik/onboard\\?token=${token}&type=syncusers" dst-path=syncusers.rsc check-certificate=no
     } on-error={ :log error "WiFiBilling: Failed to download sync-users configuration" }
     :delay 2s
     :put "Applying sync-users configuration..."
@@ -273,7 +273,7 @@ export function generateModularScript(type: string, params: ScriptParams): strin
 
     :put "Downloading heartbeat configuration..."
     :do {
-        /tool fetch url="${cleanBase}/api/public/mikrotik/onboard?token=${token}&type=heartbeat" dst-path=heartbeat.rsc check-certificate=no
+        /tool fetch url="${cleanBase}/api/public/mikrotik/onboard\\?token=${token}&type=heartbeat" dst-path=heartbeat.rsc check-certificate=no
     } on-error={ :log error "WiFiBilling: Failed to download heartbeat configuration" }
     :delay 2s
     :put "Applying heartbeat configuration..."
@@ -298,7 +298,7 @@ export function generateModularScript(type: string, params: ScriptParams): strin
 
     :put "All configurations completed successfully."
     :log info "MikroTik Onboarding Complete."
-    :do { /tool fetch url="${cleanBase}/api/public/mikrotik/onboard?token=${token}&type=success" keep-result=no; } on-error={}
+    :do { /tool fetch url="${cleanBase}/api/public/mikrotik/onboard\\?token=${token}&type=success" keep-result=no; } on-error={}
 } on-error={
     :put "Setup failed. Check system logs for details."
     :log error "MikroTik Onboarding Failed."
@@ -459,10 +459,10 @@ add chain=prerouting action=change-ttl new-ttl=increment:2 passthrough=yes comme
 :local hsDir "hotspot"
 :if ([:len [/file find name="flash"]] > 0) do={ :set hsDir "flash/hotspot" }
 :do {
-    /tool fetch url="${cleanBase}/api/public/mikrotik/portal-file?token=${token}&file=login.html" dst-path="\$hsDir/login.html" check-certificate=no;
-    /tool fetch url="${cleanBase}/api/public/mikrotik/portal-file?token=${token}&file=alogin.html" dst-path="\$hsDir/alogin.html" check-certificate=no;
-    /tool fetch url="${cleanBase}/api/public/mikrotik/portal-file?token=${token}&file=rlogin.html" dst-path="\$hsDir/rlogin.html" check-certificate=no;
-    /tool fetch url="${cleanBase}/api/public/mikrotik/portal-file?token=${token}&file=redirect.html" dst-path="\$hsDir/redirect.html" check-certificate=no;
+    /tool fetch url="${cleanBase}/api/public/mikrotik/portal-file\\?token=${token}&file=login.html" dst-path="\$hsDir/login.html" check-certificate=no;
+    /tool fetch url="${cleanBase}/api/public/mikrotik/portal-file\\?token=${token}&file=alogin.html" dst-path="\$hsDir/alogin.html" check-certificate=no;
+    /tool fetch url="${cleanBase}/api/public/mikrotik/portal-file\\?token=${token}&file=rlogin.html" dst-path="\$hsDir/rlogin.html" check-certificate=no;
+    /tool fetch url="${cleanBase}/api/public/mikrotik/portal-file\\?token=${token}&file=redirect.html" dst-path="\$hsDir/redirect.html" check-certificate=no;
 } on-error={};
 
 :log info "Hotspot configuration applied successfully."
@@ -534,7 +534,7 @@ add name="expired_pppoe_pool" ranges=10.10.20.10-10.10.20.254
 
     case "syncsource":
       return `:do {
-  :local result [/tool fetch url="${cleanBase}/api/public/mikrotik/syncsource?token=${params.onboardToken}&tenant=${tenantSlug}&router_id=${params.routerId}&type=Hotspot&limit=20" as-value output=user check-certificate=no]
+  :local result [/tool fetch url="${cleanBase}/api/public/mikrotik/syncsource\\?token=${params.onboardToken}&tenant=${tenantSlug}&router_id=${params.routerId}&type=Hotspot&limit=20" as-value output=user check-certificate=no]
   :local content (\$result->"data")
   :if (\$content != "NO_USERS" && [:len \$content] > 0) do={
     :local start 0
@@ -565,7 +565,7 @@ add name="expired_pppoe_pool" ranges=10.10.20.10-10.10.20.254
 :do {
   /system script remove [find name="heartbeat-telemetry"];
 } on-error={};
-/system script add name="heartbeat-telemetry" policy=read,write,test,ftp source=":do { /tool fetch mode=${fetchMode} http-method=post url=\\"${cleanBase}/api/public/mikrotik/heartbeat?token=${params.onboardToken}\\" http-data=(\\"identity=\\" . [/system identity get name] . \\"&ros_version=\\" . [/system package update get installed-version] . \\"&uptime=\\" . [/system resource get uptime] . \\"&cpu_load=\\" . [/system resource get cpu-load] . \\"&active_hotspot_users=\\" . [:len [/ip hotspot active find]] . \\"&active_pppoe_users=\\" . [:len [/ppp active find]]) check-certificate=no output=none; } on-error={}"
+/system script add name="heartbeat-telemetry" policy=read,write,test,ftp source=":do { /tool fetch mode=${fetchMode} http-method=post url=\\"${cleanBase}/api/public/mikrotik/heartbeat\\?token=${params.onboardToken}\\" http-data=(\\"identity=\\" . [/system identity get name] . \\"&ros_version=\\" . [/system package update get installed-version] . \\"&uptime=\\" . [/system resource get uptime] . \\"&cpu_load=\\" . [/system resource get cpu-load] . \\"&active_hotspot_users=\\" . [:len [/ip hotspot active find]] . \\"&active_pppoe_users=\\" . [:len [/ppp active find]]) check-certificate=no output=none; } on-error={}"
 # Heartbeat scheduler - every 30 seconds
 :do {
   /system scheduler remove [find name="heartbeat-telemetry"];
