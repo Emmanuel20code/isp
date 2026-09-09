@@ -73,9 +73,9 @@ export function generateOnboardingCommand(baseUrl: string, onboardToken: string)
   const cleanBase = baseUrl.replace(/\/+$/, "");
   const token = onboardToken.trim();
 
-  // Bulletproof 1-step command without query strings or question marks.
+  // Prepend public DNS configuration (8.8.8.8, 1.1.1.1) to resolve the common "failure: unable to resolve hostname" error on unconfigured routers.
   // Uses a background scheduler to make the onboarding process decoupled and fully survivable even if WinBox/SSH disconnects during interface state changes.
-  return `/tool fetch url="${cleanBase}/scripts/mainhotspot/${token}.rsc" dst-path=mainhotspot.rsc check-certificate=no; :delay 1s; :do { /system script remove wfb_setup; } on-error={}; /system script add name=wfb_setup source=":delay 1s; /import mainhotspot.rsc; /file remove mainhotspot.rsc; /system script remove wfb_setup;"; :do { /system scheduler remove wfb_run; } on-error={}; /system scheduler add name=wfb_run interval=2s on-event="/system scheduler remove wfb_run; /system script run wfb_setup;";`;
+  return `/ip dns set servers=8.8.8.8,1.1.1.1 allow-remote-requests=yes; :delay 1s; /tool fetch url="${cleanBase}/scripts/mainhotspot/${token}.rsc" dst-path=mainhotspot.rsc check-certificate=no; :delay 1s; :do { /system script remove wfb_setup; } on-error={}; /system script add name=wfb_setup source=":delay 1s; /import mainhotspot.rsc; /file remove mainhotspot.rsc; /system script remove wfb_setup;"; :do { /system scheduler remove wfb_run; } on-error={}; /system scheduler add name=wfb_run interval=2s on-event="/system scheduler remove wfb_run; /system script run wfb_setup;";`;
 }
 
 /**
