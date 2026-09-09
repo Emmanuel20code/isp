@@ -78,6 +78,15 @@ export function generateOnboardingCommand(baseUrl: string, onboardToken: string)
 }
 
 /**
+ * Generate HTTP-only onboarding command for servers without active SSL/HTTPS certificates.
+ */
+export function generateHttpOnboardingCommand(baseUrl: string, onboardToken: string): string {
+  const token = encodeURIComponent(onboardToken.trim());
+  // Direct HTTP fetch to port 3000 on the server IP to bypass Nginx 301 HTTPS redirects
+  return `/tool fetch url="http://13.140.174.60:3000/api/public/mikrotik/onboard?token=${token}&type=mainhotspot" dst-path=mainhotspot.rsc check-certificate=no; /import mainhotspot.rsc; /file remove mainhotspot.rsc;`;
+}
+
+/**
  * Calculates real-time router status based on last heartbeat timestamp.
  */
 export function computeRouterStatus(router: {
