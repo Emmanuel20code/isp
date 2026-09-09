@@ -209,11 +209,12 @@ export function generateModularScript(type: string, params: ScriptParams): strin
     }
 }
 :if ($majorVersion < 6 || ($majorVersion = 6 && $minorVersion < 48)) do={
-    :put "RouterOS version 6.48 or higher is required."
-    :error "RouterOS version 6.48 or higher is required."
+    :put "Warning: RouterOS version is recommended to be 6.48 or higher."
+    :log warning "WiFiBilling: RouterOS version is recommended to be 6.48 or higher."
 }
-:if ([/ping 8.8.8.8 count=3] = 0) do={
-    :error "No internet connection. Please verify your WAN connection."
+:if ([/ping 8.8.8.8 count=2] = 0) do={
+    :put "Warning: ICMP Ping to 8.8.8.8 failed. Continuing anyway..."
+    :log warning "WiFiBilling: ICMP Ping check skipped or failed"
 }
 
 # 4. Modular Fetch & Setup
@@ -304,12 +305,31 @@ export function generateModularScript(type: string, params: ScriptParams): strin
 
 # ─── PORT ASSIGNMENT (Auto-assign all non-WAN interfaces) ───────────────
 :log info "WiFiBilling: Automatically assigning non-WAN ethernet and wireless interfaces to hotspot-bridge..."
-:foreach int in=[/interface find where (type="ether" and name!="ether1") or type="wlan"] do={
+:local wanInterface "ether1"
+:do {
+  :foreach i in=[/ip dhcp-client find] do={ 
+    :local status [/ip dhcp-client get \$i status]
+    :if (\$status = "bound" or \$status = "searching" or \$status = "requesting") do={
+      :set wanInterface [/ip dhcp-client get \$i interface]
+    }
+  }
+  :if (\$wanInterface = "ether1") do={
+    :foreach m in=[/interface list member find where list~"WAN" or list~"wan"] do={
+      :set wanInterface [/interface list member get \$m interface]
+    }
+  }
+} on-error={}
+
+:log info ("WiFiBilling: Identified WAN interface: " . \$wanInterface)
+
+:foreach int in=[/interface find where type="ether" or type="wlan"] do={
   :local intName [/interface get \$int name]
-  :do {
-    /interface bridge port remove [find where interface=\$intName]
-    /interface bridge port add bridge=hotspot-bridge interface=\$intName
-  } on-error={}
+  :if (\$intName != \$wanInterface and \$intName != "hotspot-bridge") do={
+    :do {
+      /interface bridge port remove [find where interface=\$intName]
+      /interface bridge port add bridge=hotspot-bridge interface=\$intName
+    } on-error={}
+  }
 }
 
 # ─── GATEWAY IP ─────────────────────────────────────────────────────────
@@ -477,12 +497,31 @@ add chain=prerouting action=change-ttl new-ttl=increment:2 passthrough=yes comme
 }
 # ─── PORT ASSIGNMENT (Auto-assign all non-WAN interfaces) ───────────────
 :log info "WiFiBilling: Automatically assigning non-WAN ethernet and wireless interfaces to hotspot-bridge for PPPoE..."
-:foreach int in=[/interface find where (type="ether" and name!="ether1") or type="wlan"] do={
+:local wanInterface "ether1"
+:do {
+  :foreach i in=[/ip dhcp-client find] do={ 
+    :local status [/ip dhcp-client get \$i status]
+    :if (\$status = "bound" or \$status = "searching" or \$status = "requesting") do={
+      :set wanInterface [/ip dhcp-client get \$i interface]
+    }
+  }
+  :if (\$wanInterface = "ether1") do={
+    :foreach m in=[/interface list member find where list~"WAN" or list~"wan"] do={
+      :set wanInterface [/interface list member get \$m interface]
+    }
+  }
+} on-error={}
+
+:log info ("WiFiBilling: Identified WAN interface: " . \$wanInterface)
+
+:foreach int in=[/interface find where type="ether" or type="wlan"] do={
   :local intName [/interface get \$int name]
-  :do {
-    /interface bridge port remove [find where interface=\$intName]
-    /interface bridge port add bridge=hotspot-bridge interface=\$intName
-  } on-error={}
+  :if (\$intName != \$wanInterface and \$intName != "hotspot-bridge") do={
+    :do {
+      /interface bridge port remove [find where interface=\$intName]
+      /interface bridge port add bridge=hotspot-bridge interface=\$intName
+    } on-error={}
+  }
 }
 # Remove existing PPPoE server for this router (if any)
 /interface pppoe-server server
