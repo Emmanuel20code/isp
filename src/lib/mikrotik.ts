@@ -219,39 +219,49 @@ export function generateModularScript(type: string, params: ScriptParams): strin
 # 4. Modular Fetch & Setup
 :do {
     :put "Downloading hotspot configuration..."
-    /tool fetch url="${cleanBase}/scripts/onboard/${token}/hotspot.rsc" dst-path=hotspotsetup.rsc check-certificate=no
-    :delay 2s
-    :put "Applying hotspot configuration..."
-    /import hotspotsetup.rsc
-    /file remove hotspotsetup.rsc
+    :do {
+        /tool fetch url="${cleanBase}/scripts/onboard/${token}/hotspot.rsc" dst-path=hotspotsetup.rsc check-certificate=no
+        :delay 2s
+        :put "Applying hotspot configuration..."
+        /import hotspotsetup.rsc
+    } on-error={ :log warning "WiFiBilling: Hotspot configuration encountered non-fatal issues during setup" }
+    :do { /file remove hotspotsetup.rsc } on-error={}
 
     :put "Downloading PPPoE configuration..."
-    /tool fetch url="${cleanBase}/scripts/onboard/${token}/pppoe.rsc" dst-path=pppoesetup.rsc check-certificate=no
-    :delay 2s
-    :put "Applying PPPoE configuration..."
-    /import pppoesetup.rsc
-    /file remove pppoesetup.rsc
+    :do {
+        /tool fetch url="${cleanBase}/scripts/onboard/${token}/pppoe.rsc" dst-path=pppoesetup.rsc check-certificate=no
+        :delay 2s
+        :put "Applying PPPoE configuration..."
+        /import pppoesetup.rsc
+    } on-error={ :log warning "WiFiBilling: PPPoE configuration encountered non-fatal issues during setup" }
+    :do { /file remove pppoesetup.rsc } on-error={}
 
     :put "Downloading users configuration..."
-    /tool fetch url="${cleanBase}/scripts/onboard/${token}/users.rsc" dst-path=users.rsc check-certificate=no
-    :delay 2s
-    :put "Applying users configuration..."
-    /import users.rsc
-    /file remove users.rsc
+    :do {
+        /tool fetch url="${cleanBase}/scripts/onboard/${token}/users.rsc" dst-path=users.rsc check-certificate=no
+        :delay 2s
+        :put "Applying users configuration..."
+        /import users.rsc
+    } on-error={ :log warning "WiFiBilling: System users configuration encountered non-fatal issues" }
+    :do { /file remove users.rsc } on-error={}
 
     :put "Downloading sync-users configuration..."
-    /tool fetch url="${cleanBase}/scripts/onboard/${token}/syncusers.rsc" dst-path=syncusers.rsc check-certificate=no
-    :delay 2s
-    :put "Applying sync-users configuration..."
-    /import syncusers.rsc
-    /file remove syncusers.rsc
+    :do {
+        /tool fetch url="${cleanBase}/scripts/onboard/${token}/syncusers.rsc" dst-path=syncusers.rsc check-certificate=no
+        :delay 2s
+        :put "Applying sync-users configuration..."
+        /import syncusers.rsc
+    } on-error={ :log warning "WiFiBilling: Sync users configuration encountered non-fatal issues" }
+    :do { /file remove syncusers.rsc } on-error={}
 
     :put "Downloading heartbeat configuration..."
-    /tool fetch url="${cleanBase}/scripts/onboard/${token}/heartbeat.rsc" dst-path=heartbeat.rsc check-certificate=no
-    :delay 2s
-    :put "Applying heartbeat configuration..."
-    /import heartbeat.rsc
-    /file remove heartbeat.rsc
+    :do {
+        /tool fetch url="${cleanBase}/scripts/onboard/${token}/heartbeat.rsc" dst-path=heartbeat.rsc check-certificate=no
+        :delay 2s
+        :put "Applying heartbeat configuration..."
+        /import heartbeat.rsc
+    } on-error={ :log warning "WiFiBilling: Heartbeat configuration encountered non-fatal issues" }
+    :do { /file remove heartbeat.rsc } on-error={}
 
     :put "Setting up DNS flush firewalls..."
     :foreach i in=[/system scheduler find where name="dns-flush"] do={ /system scheduler remove \$i }
@@ -288,10 +298,9 @@ export function generateModularScript(type: string, params: ScriptParams): strin
       return `# WiFiBilling Hotspot Setup Script
 # Sets bridge, address, pool, hotspot, profile, w-garden, NAT & mangle
 # ─── BRIDGE ─────────────────────────────────────────────────────────────
-:foreach i in=[/ip address find where interface="hotspot-bridge"] do={ /ip address remove \$i }
-#
-:foreach i in=[/interface bridge find where name=hotspot-bridge] do={ /interface bridge remove \$i }
-/interface bridge add name=hotspot-bridge
+:if ([:len [/interface bridge find where name="hotspot-bridge"]] = 0) do={
+    /interface bridge add name=hotspot-bridge
+}
 
 # ─── PORT ASSIGNMENT (Auto-assign all non-WAN interfaces) ───────────────
 :log info "WiFiBilling: Automatically assigning non-WAN ethernet and wireless interfaces to hotspot-bridge..."
@@ -304,17 +313,27 @@ export function generateModularScript(type: string, params: ScriptParams): strin
 }
 
 # ─── GATEWAY IP ─────────────────────────────────────────────────────────
-/ip address
-add address=10.10.0.1/24 interface=hotspot-bridge
+:if ([:len [/ip address find where address="10.10.0.1/24" and interface="hotspot-bridge"]] = 0) do={
+    :do { /ip address remove [find where interface="hotspot-bridge"] } on-error={}
+    /ip address add address=10.10.0.1/24 interface=hotspot-bridge
+}
+
 # ─── POOL ───────────────────────────────────────────────────────────────
-:foreach i in=[/ip pool find where name=hotspot] do={ /ip pool remove \$i }
-/ip pool add name=hotspot ranges=10.10.0.10-10.10.0.254
+:if ([:len [/ip pool find where name=hotspot]] = 0) do={
+    /ip pool add name=hotspot ranges=10.10.0.10-10.10.0.254
+} else={
+    /ip pool set [find where name=hotspot] ranges=10.10.0.10-10.10.0.254
+}
+
 # ─── HOTSPOT PROFILE (dns-name, hotspot-address, per-mac) ───────────────
 :local hsDir "hotspot"
 :if ([:len [/file find name="flash"]] > 0) do={ :set hsDir "flash/hotspot" }
-:foreach i in=[/ip hotspot profile find where name!="default"] do={ /ip hotspot profile remove $i }
-:foreach i in=[/ip hotspot profile find where name=hsprof1] do={ /ip hotspot profile remove $i }
-/ip hotspot profile add name="hsprof1" hotspot-address=10.10.0.1 dns-name="hotspot.lan" html-directory=$hsDir login-by=http-chap,http-pap ssl-certificate=none
+
+:if ([:len [/ip hotspot profile find where name="hsprof1"]] = 0) do={
+    /ip hotspot profile add name="hsprof1" hotspot-address=10.10.0.1 dns-name="hotspot.lan" html-directory=\$hsDir login-by=http-chap,http-pap ssl-certificate=none
+} else={
+    /ip hotspot profile set [find where name="hsprof1"] hotspot-address=10.10.0.1 dns-name="hotspot.lan" html-directory=\$hsDir login-by=http-chap,http-pap ssl-certificate=none
+}
 # Enable FreeRADIUS integration for hotspot authentication & accounting
 /ip hotspot profile set [find name=hsprof1] use-radius=yes radius-accounting=yes radius-interim-update=2m
 
@@ -324,26 +343,38 @@ add address=10.10.0.1/24 interface=hotspot-bridge
 :do { /ip dns static remove [find name="hotspot.lan"] } on-error={}
 /ip dns static add name="wifi.login" address=10.10.0.1
 /ip dns static add name="hotspot.lan" address=10.10.0.1
+
 # ─── HOTSPOT SERVER (uses profile) ──────────────────────────────────────
-:foreach i in=[/ip hotspot find where name=hotspot1] do={ /ip hotspot remove $i }
-/ip hotspot add name=hotspot1 interface=hotspot-bridge profile=hsprof1 address-pool=hotspot addresses-per-mac=1 disabled=no
+:if ([:len [/ip hotspot find where name="hotspot1"]] = 0) do={
+    /ip hotspot add name=hotspot1 interface=hotspot-bridge profile=hsprof1 address-pool=hotspot addresses-per-mac=1 disabled=no
+} else={
+    /ip hotspot set [find where name="hotspot1"] interface=hotspot-bridge profile=hsprof1 address-pool=hotspot addresses-per-mac=1 disabled=no
+}
+
 # ---------- DHCP-SERVER on hotspot-bridge ----------
-:foreach i in=[/ip dhcp-server find where name="hotspot-dhcp"] do={ /ip dhcp-server remove $i }
-/ip dhcp-server add name="hotspot-dhcp" interface=hotspot-bridge address-pool=hotspot lease-time=1h disabled=no
-:foreach j in=[/ip dhcp-server network find address="10.10.0.0/24"] do={ /ip dhcp-server network remove $j }
-/ip dhcp-server network add address=10.10.0.0/24 gateway=10.10.0.1 dns-server=8.8.8.8,8.8.4.4 comment="hotspot network"
+:if ([:len [/ip dhcp-server find where name="hotspot-dhcp"]] = 0) do={
+    /ip dhcp-server add name="hotspot-dhcp" interface=hotspot-bridge address-pool=hotspot lease-time=1h disabled=no
+} else={
+    /ip dhcp-server set [find where name="hotspot-dhcp"] interface=hotspot-bridge address-pool=hotspot lease-time=1h disabled=no
+}
+
+:if ([:len [/ip dhcp-server network find where address="10.10.0.0/24"]] = 0) do={
+    /ip dhcp-server network add address=10.10.0.0/24 gateway=10.10.0.1 dns-server=8.8.8.8,8.8.4.4 comment="hotspot network"
+} else={
+    /ip dhcp-server network set [find where address="10.10.0.0/24"] gateway=10.10.0.1 dns-server=8.8.8.8,8.8.4.4 comment="hotspot network"
+}
 
 # ─── HOTSPOT COUPLING & HEALTH CHECK VALIDATION ─────────────────────────
 :log info "WiFiBilling: Performing Hotspot profile coupling verification..."
 :local hsExists [/ip hotspot find where name=hotspot1]
-:if ([:len $hsExists] = 0) do={
+:if ([:len \$hsExists] = 0) do={
     /ip hotspot add name=hotspot1 interface=hotspot-bridge profile=hsprof1 address-pool=hotspot addresses-per-mac=1 disabled=no
 } else={
     /ip hotspot set [find where name=hotspot1] interface=hotspot-bridge profile=hsprof1 address-pool=hotspot addresses-per-mac=1 disabled=no
 }
 
 # ─── WALLED-GARDEN IP ───────────────────────────────────────────────────
-:foreach i in=[/ip hotspot walled-garden ip find where server=hotspot1] do={ /ip hotspot walled-garden ip remove $i }
+:foreach i in=[/ip hotspot walled-garden ip find where server=hotspot1] do={ /ip hotspot walled-garden ip remove \$i }
 /ip hotspot walled-garden ip
 add server=hotspot1 dst-address=10.10.0.1 protocol=udp dst-port=53 action=accept comment="Allow Router Local DNS (UDP)"
 add server=hotspot1 dst-address=10.10.0.1 protocol=tcp dst-port=53 action=accept comment="Allow Router Local DNS (TCP)"
@@ -355,11 +386,11 @@ add server=hotspot1 dst-address=196.201.214.208 action=accept comment="Safaricom
 
 :do {
   :local portalIP [:resolve "${domainOnly}"];
-  /ip hotspot walled-garden ip add dst-address=$portalIP action=accept comment="Allow Portal IP (Resolved)";
+  /ip hotspot walled-garden ip add dst-address=\$portalIP action=accept comment="Allow Portal IP (Resolved)";
 } on-error={ :log warning "WiFiBilling: Could not resolve portal IP during setup"; }
 
 # ─── WALLED-GARDEN (HTTP) ───────────────────────────────────────────────
-:foreach i in=[/ip hotspot walled-garden find where server=hotspot1] do={ /ip hotspot walled-garden remove $i }
+:foreach i in=[/ip hotspot walled-garden find where server=hotspot1] do={ /ip hotspot walled-garden remove \$i }
 /ip hotspot walled-garden
 add server=hotspot1 dst-host="${domainOnly}" action=allow comment="Allow Portal Site"
 add server=hotspot1 dst-host="*.${domainOnly}" action=allow comment="Allow Portal Assets"
