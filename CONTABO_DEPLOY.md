@@ -1,94 +1,108 @@
-# Manual HTTPS & SSL Setup on Contabo VPS
+# Hosting WiFi Billing System & FreeRADIUS on Contabo VPS
 
-Since you are already logged into your Contabo VPS via SSH, follow these direct manual steps to enable secure **HTTPS** for your `.site` domain using Nginx and Let's Encrypt Certbot.
+Hosting everything on your **Contabo VPS** is the ultimate, most cost-effective setup for an ISP. Because a VPS gives you a **dedicated public static IP address** and full root access, you can run your Web Billing Dashboard, PostgreSQL database, and FreeRADIUS server (UDP ports 1812 & 1813) all on the same machine without any port restrictions.
 
 ---
 
-### Step 1: Install Nginx & Certbot
+## Step 1: Connect to your Contabo VPS via SSH
 
-Run the following commands in your VPS terminal:
+Open your terminal (Mac/Linux) or PuTTY (Windows) and connect to your Contabo VPS:
 ```bash
-sudo apt update
-sudo apt install -y nginx certbot python3-certbot-nginx
+ssh root@YOUR_CONTABO_VPS_IP
+```
+*(Replace `YOUR_CONTABO_VPS_IP` with your actual Contabo server IP address).*
+
+---
+
+## Step 2: Run the Automated Setup Script
+
+We have included an automated setup script in your project (`contabo-setup.sh`). Run it on your VPS:
+
+```bash
+# 1. Download or upload your project files to your VPS (e.g., in /opt/wifibilling)
+cd /opt/wifibilling
+
+# 2. Make the setup script executable and run it
+chmod +x contabo-setup.sh
+./contabo-setup.sh
+```
+This script will automatically:
+- Install **Docker**, **Docker Compose**, and **Git**.
+- Configure **UFW Firewall** to open:
+  - `TCP 80` & `TCP 443` (Web Traffic)
+  - `TCP 3000` (Direct Web App access)
+  - `UDP 1812` (RADIUS Authentication)
+  - `UDP 1813` (RADIUS Accounting)
+  - `UDP 3799` (RADIUS CoA / Disconnect)
+
+---
+
+## Step 3: Configure Your Environment Variables
+
+Create your production `.env` file from `.env.example`:
+
+```bash
+cp .env.example .env
+nano .env
+```
+
+Fill in your production details:
+```env
+# Database (either your remote Supabase/PostgreSQL URL, or local docker postgres)
+DATABASE_URL=postgres://postgres:postgres@postgres:5432/postgres
+
+# Supabase keys (if using Supabase)
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+SUPABASE_PUBLISHABLE_KEY=your-publishable-key
+
+# App Public URL
+APP_URL=http://YOUR_CONTABO_VPS_IP:3000
+
+# RADIUS Secret
+RADIUS_SECRET=emmatech_radius_secret_2026
+
+# M-Pesa Daraja API Credentials
+MPESA_CONSUMER_KEY=your_key
+MPESA_CONSUMER_SECRET=your_secret
+MPESA_PASSKEY=your_passkey
+MPESA_SHORTCODE=your_shortcode
 ```
 
 ---
 
-### Step 2: Create Nginx Reverse Proxy Configuration
+## Step 4: Start Everything with Docker Compose
 
-1. Create a new Nginx configuration file for your domain:
-   ```bash
-   sudo nano /etc/nginx/sites-available/wifibilling
-   ```
+Run the production stack in detached mode:
 
-2. Paste the following configuration (replace `yourdomain.site` with your actual `.site` domain name):
-   ```nginx
-   server {
-       listen 80;
-       server_name yourdomain.site;
-
-       location / {
-           proxy_pass http://127.0.0.1:3000;
-           proxy_http_version 1.1;
-           proxy_set_header Upgrade $http_upgrade;
-           proxy_set_header Connection 'upgrade';
-           proxy_set_header Host $host;
-           proxy_set_header X-Real-IP $remote_addr;
-           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-           proxy_set_header X-Forwarded-Proto $scheme;
-           proxy_cache_bypass $http_upgrade;
-       }
-   }
-   ```
-   *(Save and exit nano by pressing `Ctrl+O`, `Enter`, then `Ctrl+X`).*
-
-3. Enable the site, remove default configuration, test, and restart Nginx:
-   ```bash
-   sudo ln -sf /etc/nginx/sites-available/wifibilling /etc/nginx/sites-enabled/
-   sudo rm -f /etc/nginx/sites-enabled/default
-   sudo nginx -t
-   sudo systemctl restart nginx
-   ```
-
----
-
-### Step 3: Obtain Free SSL Certificate via Let's Encrypt
-
-Run Certbot to automatically configure SSL for your `.site` domain:
 ```bash
-sudo certbot --nginx -d yourdomain.site
-```
-*(Follow the prompts, enter your email, and select option **2 (Redirect)** to automatically redirect all HTTP traffic to HTTPS).*
+# If using local PostgreSQL on the VPS along with web app and radius:
+sudo docker compose --profile local-db up -d --build
 
----
-
-### Step 4: Update Your `.env` File
-
-1. Navigate to your app installation directory:
-   ```bash
-   cd /opt/wifibilling # (or wherever your docker-compose.yml is located)
-   ```
-
-2. Edit your `.env` file:
-   ```bash
-   nano .env
-   ```
-
-3. Ensure `APP_URL` uses `https://`:
-   ```env
-   APP_URL=https://yourdomain.site
-   ```
-   *(Save and exit).*
-
----
-
-### Step 5: Restart Docker Containers
-
-Restart your containers to apply the HTTPS base URL:
-```bash
-sudo docker compose down
+# Or if using remote Supabase/Railway database:
 sudo docker compose up -d --build
 ```
 
-Your app is now live and fully secured at **`https://yourdomain.site`**, ready for MikroTik routers and M-Pesa webhooks!
+---
 
+## Step 5: Verify Services Are Running
+
+Check container health and logs:
+```bash
+sudo docker compose ps
+sudo docker compose logs -f
+```
+
+---
+
+## Step 6: Configure Your MikroTik Routers
+
+In your MikroTik RouterOS terminal, point your routers directly to your Contabo VPS IP:
+
+```mikrotik
+/radius add address=YOUR_CONTABO_VPS_IP secret=emmatech_radius_secret_2026 service=ppp,hotspot
+/radius incoming set enabled=yes
+/ppp aaa set use-radius=yes
+```
+
+*(Replace `YOUR_CONTABO_VPS_IP` with your Contabo VPS public IP address).*

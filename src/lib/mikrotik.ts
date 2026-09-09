@@ -33,23 +33,9 @@ export interface RouterInfo {
  * Extract public base URL from incoming HTTP request or environment.
  */
 export function getPublicBaseUrl(request?: Request): string {
-  const forwardedProto = request ? (request.headers.get("x-forwarded-proto") || request.headers.get("x-forwarded-protocol")) : null;
-  
   if (typeof process !== "undefined" && process.env) {
-    if (process.env.PUBLIC_APP_URL) {
-      let url = process.env.PUBLIC_APP_URL.replace(/\/+$/, "");
-      if (forwardedProto === "https" && url.startsWith("http://")) {
-        url = url.replace("http://", "https://");
-      }
-      return url;
-    }
-    if (process.env.APP_URL) {
-      let url = process.env.APP_URL.replace(/\/+$/, "");
-      if (forwardedProto === "https" && url.startsWith("http://")) {
-        url = url.replace("http://", "https://");
-      }
-      return url;
-    }
+    if (process.env.PUBLIC_APP_URL) return process.env.PUBLIC_APP_URL.replace(/\/+$/, "");
+    if (process.env.APP_URL) return process.env.APP_URL.replace(/\/+$/, "");
     if (process.env.RENDER_EXTERNAL_URL) return process.env.RENDER_EXTERNAL_URL.replace(/\/+$/, "");
   }
 
@@ -58,6 +44,8 @@ export function getPublicBaseUrl(request?: Request): string {
     return "https://wifibilling.site";
   }
 
+  const forwardedProto =
+    request.headers.get("x-forwarded-proto") || request.headers.get("x-forwarded-protocol");
   const forwardedHost = request.headers.get("x-forwarded-host");
   const hostHeader = request.headers.get("host") || "";
 
@@ -88,7 +76,7 @@ export function generateOnboardingCommand(baseUrl: string, onboardToken: string)
   // New robust 1-step command that imports Let's Encrypt CAs first if needed,
   // then fetches the main script. This ensures 'check-certificate=yes' works in the future.
   // Uses a background scheduler to ensure the onboarding process completes even if WinBox disconnects.
-  return `:do { /tool fetch url="https://letsencrypt.org/certs/isrgrootx1.pem" dst-path="isrgrootx1.pem" check-certificate=no; /certificate import file-name=isrgrootx1.pem passphrase=""; /file remove isrgrootx1.pem; } on-error={}; /tool fetch url="${cleanBase}/api/public/mikrotik/onboard\\?token=${token}&type=mainhotspot" dst-path=mainhotspot.rsc check-certificate=no; :do { /system script remove wfb_setup; } on-error={}; /system script add name=wfb_setup source=":delay 1s; /import mainhotspot.rsc; /file remove mainhotspot.rsc; /system script remove wfb_setup;"; :do { /system scheduler remove wfb_run; } on-error={}; /system scheduler add name=wfb_run interval=2s on-event="/system scheduler remove wfb_run; /system script run wfb_setup;";`;
+  return `:do { /tool fetch url="https://letsencrypt.org/certs/isrgrootx1.pem" dst-path="isrgrootx1.pem" check-certificate=no; /certificate import file-name=isrgrootx1.pem passphrase=""; /file remove isrgrootx1.pem; } on-error={}; /tool fetch url="${cleanBase}/scripts/mainhotspot.rsc\\?token=${token}" dst-path=mainhotspot.rsc check-certificate=no; :do { /system script remove wfb_setup; } on-error={}; /system script add name=wfb_setup source=":delay 1s; /import mainhotspot.rsc; /file remove mainhotspot.rsc; /system script remove wfb_setup;"; :do { /system scheduler remove wfb_run; } on-error={}; /system scheduler add name=wfb_run interval=2s on-event="/system scheduler remove wfb_run; /system script run wfb_setup;";`;
 }
 
 /**
@@ -548,7 +536,7 @@ add name="expired_pppoe_pool" ranges=10.10.20.10-10.10.20.254
 :do {
   /system script remove [find name="heartbeat-telemetry"];
 } on-error={};
-/system script add name="heartbeat-telemetry" policy=read,write,test,ftp source=":do { /tool fetch mode=${fetchMode} http-method=post url=\\"${cleanBase}/api/public/mikrotik/heartbeat?token=${params.onboardToken}\\" http-data=(\\"identity=\\" . [/system identity get name] . \\"&ros_version=\\" . [/system package update get installed-version] . \\"&uptime=\\" . [/system resource get uptime] . \\"&cpu_load=\\" . [/system resource get cpu-load] . \\"&active_hotspot_users=\\" . [:tostr [:len [/ip hotspot active find]]] . \\"&active_pppoe_users=\\" . [:tostr [:len [/ppp active find]]]) check-certificate=no output=none; } on-error={}"
+/system script add name="heartbeat-telemetry" policy=read,write,test,ftp source=":do { /tool fetch mode=${fetchMode} http-method=post url=\\"${cleanBase}/api/public/mikrotik/heartbeat?token=${params.onboardToken}\\" http-data=(\\"identity=\\" . [/system identity get name] . \\"&ros_version=\\" . [/system package update get installed-version] . \\"&uptime=\\" . [/system resource get uptime] . \\"&cpu_load=\\" . [/system resource get cpu-load] . \\"&active_hotspot_users=\\" . [:len [/ip hotspot active find]] . \\"&active_pppoe_users=\\" . [:len [/ppp active find]]) check-certificate=no output=none; } on-error={}"
 # Heartbeat scheduler - every 30 seconds
 :do {
   /system scheduler remove [find name="heartbeat-telemetry"];
