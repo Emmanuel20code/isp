@@ -308,51 +308,86 @@ export function generateModularScript(type: string, params: ScriptParams): strin
     case "hotspotsetup":
       return `# WiFiBilling Hotspot Setup Script
 # Sets bridge, address, pool, hotspot, profile, w-garden, NAT & mangle
-# ─── BRIDGE ─────────────────────────────────────────────────────────────
-:if ([:len [/interface bridge find where name="hotspot-bridge"]] = 0) do={
-    /interface bridge add name=hotspot-bridge
-}
+# ─── BRIDGE & PORT PRESERVATION ─────────────────────────────────────────
+:local targetBridge "hotspot-bridge"
+:local existingBridges [/interface bridge find]
+:local isNewBridge false
 
-# ─── PORT ASSIGNMENT (Auto-assign all non-WAN interfaces) ───────────────
-:log info "WiFiBilling: Automatically assigning non-WAN ethernet and wireless interfaces to hotspot-bridge..."
-:local wanInterface "ether1"
-:do {
-  :foreach i in=[/ip dhcp-client find] do={ 
-    :local status [/ip dhcp-client get \$i status]
-    :if (\$status = "bound" or \$status = "searching" or \$status = "requesting") do={
-      :set wanInterface [/ip dhcp-client get \$i interface]
-    }
-  }
-  :if (\$wanInterface = "ether1") do={
-    :foreach m in=[/interface list member find where list~"WAN" or list~"wan"] do={
-      :set wanInterface [/interface list member get \$m interface]
-    }
-  }
-} on-error={}
-
-:log info ("WiFiBilling: Identified WAN interface: " . \$wanInterface)
-
-:foreach int in=[/interface find where type="ether" or type="wlan"] do={
-  :local intName [/interface get \$int name]
-  :if (\$intName != \$wanInterface and \$intName != "hotspot-bridge") do={
-    :do {
-      /interface bridge port remove [find where interface=\$intName]
-      /interface bridge port add bridge=hotspot-bridge interface=\$intName
-    } on-error={}
-  }
-}
-
-# ─── GATEWAY IP ─────────────────────────────────────────────────────────
-:if ([:len [/ip address find where address="10.10.0.1/24" and interface="hotspot-bridge"]] = 0) do={
-    :do { /ip address remove [find where interface="hotspot-bridge"] } on-error={}
-    /ip address add address=10.10.0.1/24 interface=hotspot-bridge
-}
-
-# ─── POOL ───────────────────────────────────────────────────────────────
-:if ([:len [/ip pool find where name=hotspot]] = 0) do={
-    /ip pool add name=hotspot ranges=10.10.0.10-10.10.0.254
+:if ([:len \$existingBridges] > 0) do={
+    :set targetBridge [/interface bridge get (\$existingBridges->0) name]
+    :log info ("WiFiBilling: Found existing bridge: " . \$targetBridge . ". Preserving ports to prevent WinBox disconnection.")
 } else={
-    /ip pool set [find where name=hotspot] ranges=10.10.0.10-10.10.0.254
+    :set isNewBridge true
+    /interface bridge add name="hotspot-bridge"
+    :log info "WiFiBilling: No existing bridge found. Created hotspot-bridge."
+}
+
+# ─── PORT ASSIGNMENT (Only run if we created a brand-new bridge) ────────
+:if (\$isNewBridge) do={
+    :local wanInterface "ether1"
+    :do {
+      :foreach i in=[/ip dhcp-client find] do={ 
+        :local status [/ip dhcp-client get \$i status]
+        :if (\$status = "bound" or \$status = "searching" or \$status = "requesting") do={
+          :set wanInterface [/ip dhcp-client get \$i interface]
+        }
+      }
+      :if (\$wanInterface = "ether1") do={
+        :foreach m in=[/interface list member find where list~"WAN" or list~"wan"] do={
+          :set wanInterface [/interface list member get \$m interface]
+        }
+      }
+    } on-error={}
+
+    :log info ("WiFiBilling: Identified WAN interface: " . \$wanInterface)
+
+    :foreach int in=[/interface find where type="ether" or type="wlan"] do={
+      :local intName [/interface get \$int name]
+      :if (\$intName != \$wanInterface and \$intName != "hotspot-bridge") do={
+        :do {
+          /interface bridge port add bridge=hotspot-bridge interface=\$intName
+        } on-error={}
+      }
+    }
+}
+
+# ─── IP CONFIGURATION (Use existing or setup 10.10.0.1) ─────────────────
+:local hsGateway "10.10.0.1"
+:local hsNetwork "10.10.0.0/24"
+:local hsPool "hotspot"
+
+# Check if the bridge already has an assigned IP address
+:local existingAddrs [/ip address find where interface=\$targetBridge]
+:if ([:len \$existingAddrs] > 0) do={
+    :local fullAddr [/ip address get (\$existingAddrs->0) address]
+    :local slashPos [:find \$fullAddr "/"]
+    :set hsGateway [:pick \$fullAddr 0 \$slashPos]
+    :set hsNetwork [/ip address get (\$existingAddrs->0) network]
+    :log info ("WiFiBilling: Preserving existing bridge IP " . \$hsGateway . " and network " . \$hsNetwork)
+} else={
+    # Assign default 10.10.0.1/24 gateway
+    /ip address add address=10.10.0.1/24 interface=\$targetBridge
+    :log info "WiFiBilling: Assigned new gateway IP 10.10.0.1/24 to bridge."
+}
+
+# ─── DHCP SERVER & POOL RESOLUTION ──────────────────────────────────────
+:local existingDhcp [/ip dhcp-server find where interface=\$targetBridge]
+:if ([:len \$existingDhcp] > 0) do={
+    :set hsPool [/ip dhcp-server get (\$existingDhcp->0) address-pool]
+    :log info ("WiFiBilling: Preserving existing DHCP server with pool: " . \$hsPool)
+} else={
+    # Create address pool
+    :if ([:len [/ip pool find where name="hotspot"]] = 0) do={
+        /ip pool add name=hotspot ranges=10.10.0.10-10.10.0.254
+    }
+    # Setup DHCP server
+    :if ([:len [/ip dhcp-server find where name="hotspot-dhcp"]] = 0) do={
+        /ip dhcp-server add name="hotspot-dhcp" interface=\$targetBridge address-pool=hotspot lease-time=1h disabled=no
+    }
+    # Setup DHCP network
+    :if ([:len [/ip dhcp-server network find where address="10.10.0.0/24"]] = 0) do={
+        /ip dhcp-server network add address=10.10.0.0/24 gateway=10.10.0.1 dns-server=8.8.8.8,8.8.4.4 comment="hotspot network"
+    }
 }
 
 # ─── HOTSPOT PROFILE (dns-name, hotspot-address, per-mac) ───────────────
@@ -360,9 +395,9 @@ export function generateModularScript(type: string, params: ScriptParams): strin
 :if ([:len [/file find name="flash"]] > 0) do={ :set hsDir "flash/hotspot" }
 
 :if ([:len [/ip hotspot profile find where name="hsprof1"]] = 0) do={
-    /ip hotspot profile add name="hsprof1" hotspot-address=10.10.0.1 dns-name="hotspot.lan" html-directory=\$hsDir login-by=http-chap,http-pap ssl-certificate=none
+    /ip hotspot profile add name="hsprof1" hotspot-address=\$hsGateway dns-name="hotspot.lan" html-directory=\$hsDir login-by=http-chap,http-pap ssl-certificate=none
 } else={
-    /ip hotspot profile set [find where name="hsprof1"] hotspot-address=10.10.0.1 dns-name="hotspot.lan" html-directory=\$hsDir login-by=http-chap,http-pap ssl-certificate=none
+    /ip hotspot profile set [find where name="hsprof1"] hotspot-address=\$hsGateway dns-name="hotspot.lan" html-directory=\$hsDir login-by=http-chap,http-pap ssl-certificate=none
 }
 # Enable FreeRADIUS integration for hotspot authentication & accounting
 /ip hotspot profile set [find name=hsprof1] use-radius=yes radius-accounting=yes radius-interim-update=2m
@@ -371,43 +406,21 @@ export function generateModularScript(type: string, params: ScriptParams): strin
 :do { /ip dns static remove [find name="wifi.login"] } on-error={}
 :do { /ip dns static remove [find name="hotspot.local"] } on-error={}
 :do { /ip dns static remove [find name="hotspot.lan"] } on-error={}
-/ip dns static add name="wifi.login" address=10.10.0.1
-/ip dns static add name="hotspot.lan" address=10.10.0.1
+/ip dns static add name="wifi.login" address=\$hsGateway
+/ip dns static add name="hotspot.lan" address=\$hsGateway
 
 # ─── HOTSPOT SERVER (uses profile) ──────────────────────────────────────
 :if ([:len [/ip hotspot find where name="hotspot1"]] = 0) do={
-    /ip hotspot add name=hotspot1 interface=hotspot-bridge profile=hsprof1 address-pool=hotspot addresses-per-mac=1 disabled=no
+    /ip hotspot add name=hotspot1 interface=\$targetBridge profile=hsprof1 address-pool=\$hsPool addresses-per-mac=1 disabled=no
 } else={
-    /ip hotspot set [find where name="hotspot1"] interface=hotspot-bridge profile=hsprof1 address-pool=hotspot addresses-per-mac=1 disabled=no
-}
-
-# ---------- DHCP-SERVER on hotspot-bridge ----------
-:if ([:len [/ip dhcp-server find where name="hotspot-dhcp"]] = 0) do={
-    /ip dhcp-server add name="hotspot-dhcp" interface=hotspot-bridge address-pool=hotspot lease-time=1h disabled=no
-} else={
-    /ip dhcp-server set [find where name="hotspot-dhcp"] interface=hotspot-bridge address-pool=hotspot lease-time=1h disabled=no
-}
-
-:if ([:len [/ip dhcp-server network find where address="10.10.0.0/24"]] = 0) do={
-    /ip dhcp-server network add address=10.10.0.0/24 gateway=10.10.0.1 dns-server=8.8.8.8,8.8.4.4 comment="hotspot network"
-} else={
-    /ip dhcp-server network set [find where address="10.10.0.0/24"] gateway=10.10.0.1 dns-server=8.8.8.8,8.8.4.4 comment="hotspot network"
-}
-
-# ─── HOTSPOT COUPLING & HEALTH CHECK VALIDATION ─────────────────────────
-:log info "WiFiBilling: Performing Hotspot profile coupling verification..."
-:local hsExists [/ip hotspot find where name=hotspot1]
-:if ([:len \$hsExists] = 0) do={
-    /ip hotspot add name=hotspot1 interface=hotspot-bridge profile=hsprof1 address-pool=hotspot addresses-per-mac=1 disabled=no
-} else={
-    /ip hotspot set [find where name=hotspot1] interface=hotspot-bridge profile=hsprof1 address-pool=hotspot addresses-per-mac=1 disabled=no
+    /ip hotspot set [find where name="hotspot1"] interface=\$targetBridge profile=hsprof1 address-pool=\$hsPool addresses-per-mac=1 disabled=no
 }
 
 # ─── WALLED-GARDEN IP ───────────────────────────────────────────────────
 :foreach i in=[/ip hotspot walled-garden ip find where server=hotspot1] do={ /ip hotspot walled-garden ip remove \$i }
 /ip hotspot walled-garden ip
-add server=hotspot1 dst-address=10.10.0.1 protocol=udp dst-port=53 action=accept comment="Allow Router Local DNS (UDP)"
-add server=hotspot1 dst-address=10.10.0.1 protocol=tcp dst-port=53 action=accept comment="Allow Router Local DNS (TCP)"
+add server=hotspot1 dst-address=\$hsGateway protocol=udp dst-port=53 action=accept comment="Allow Router Local DNS (UDP)"
+add server=hotspot1 dst-address=\$hsGateway protocol=tcp dst-port=53 action=accept comment="Allow Router Local DNS (TCP)"
 add server=hotspot1 dst-address=69.46.46.122 action=accept comment="Allow Safaricom M-Pesa API"
 add server=hotspot1 dst-address=196.201.214.200 action=accept comment="Safaricom Daraja Sandbox"
 add server=hotspot1 dst-address=196.201.214.206 action=accept comment="Safaricom Daraja Production"
@@ -475,9 +488,9 @@ add server=hotspot1 dst-host="*.tigo.co.tz" action=allow
   /ip hotspot user profile set [find] on-login="" on-logout="";
 } on-error={}
 # ─── NAT MASQUERADE ─────────────────────────────────────────────────────
-:foreach i in=[/ip firewall nat find where chain=srcnat and action=masquerade and src-address~"10.10.0"] do={ /ip firewall nat remove \$i }
+:foreach i in=[/ip firewall nat find where chain=srcnat and action=masquerade and src-address~\$hsNetwork] do={ /ip firewall nat remove \$i }
 /ip firewall nat
-add chain=srcnat action=masquerade src-address=10.10.0.0/24
+add chain=srcnat action=masquerade src-address=\$hsNetwork
 # ─── MANGLE ─────────────────────────────────────────────────────────────
 :foreach i in=[/ip firewall mangle find where comment~"anti-sharing|hide-router"] do={ /ip firewall mangle remove \$i }
 /ip firewall mangle
@@ -501,44 +514,55 @@ add chain=prerouting action=change-ttl new-ttl=increment:2 passthrough=yes comme
     case "pppoe":
     case "pppoesetup":
       return `# WiFiBilling PPPoE Setup Script
-# Create bridge if not exists
-:if ([:len [/interface bridge find where name=hotspot-bridge]] = 0) do={
-    /interface bridge add name=hotspot-bridge
+# ─── BRIDGE & PORT PRESERVATION ─────────────────────────────────────────
+:local targetBridge "hotspot-bridge"
+:local existingBridges [/interface bridge find]
+:local isNewBridge false
+
+:if ([:len \$existingBridges] > 0) do={
+    :set targetBridge [/interface bridge get (\$existingBridges->0) name]
+    :log info ("WiFiBilling: Found existing bridge: " . \$targetBridge . ". Preserving ports to prevent WinBox disconnection.")
+} else={
+    :set isNewBridge true
+    /interface bridge add name="hotspot-bridge"
+    :log info "WiFiBilling: No existing bridge found. Created hotspot-bridge."
 }
-# ─── PORT ASSIGNMENT (Auto-assign all non-WAN interfaces) ───────────────
-:log info "WiFiBilling: Automatically assigning non-WAN ethernet and wireless interfaces to hotspot-bridge for PPPoE..."
-:local wanInterface "ether1"
-:do {
-  :foreach i in=[/ip dhcp-client find] do={ 
-    :local status [/ip dhcp-client get \$i status]
-    :if (\$status = "bound" or \$status = "searching" or \$status = "requesting") do={
-      :set wanInterface [/ip dhcp-client get \$i interface]
-    }
-  }
-  :if (\$wanInterface = "ether1") do={
-    :foreach m in=[/interface list member find where list~"WAN" or list~"wan"] do={
-      :set wanInterface [/interface list member get \$m interface]
-    }
-  }
-} on-error={}
 
-:log info ("WiFiBilling: Identified WAN interface: " . \$wanInterface)
-
-:foreach int in=[/interface find where type="ether" or type="wlan"] do={
-  :local intName [/interface get \$int name]
-  :if (\$intName != \$wanInterface and \$intName != "hotspot-bridge") do={
+# ─── PORT ASSIGNMENT (Only run if we created a brand-new bridge) ────────
+:if (\$isNewBridge) do={
+    :local wanInterface "ether1"
     :do {
-      /interface bridge port remove [find where interface=\$intName]
-      /interface bridge port add bridge=hotspot-bridge interface=\$intName
+      :foreach i in=[/ip dhcp-client find] do={ 
+        :local status [/ip dhcp-client get \$i status]
+        :if (\$status = "bound" or \$status = "searching" or \$status = "requesting") do={
+          :set wanInterface [/ip dhcp-client get \$i interface]
+        }
+      }
+      :if (\$wanInterface = "ether1") do={
+        :foreach m in=[/interface list member find where list~"WAN" or list~"wan"] do={
+          :set wanInterface [/interface list member get \$m interface]
+        }
+      }
     } on-error={}
-  }
+
+    :log info ("WiFiBilling: Identified WAN interface: " . \$wanInterface)
+
+    :foreach int in=[/interface find where type="ether" or type="wlan"] do={
+      :local intName [/interface get \$int name]
+      :if (\$intName != \$wanInterface and \$intName != "hotspot-bridge") do={
+        :do {
+          /interface bridge port add bridge=hotspot-bridge interface=\$intName
+        } on-error={}
+      }
+    }
 }
+
 # Remove existing PPPoE server for this router (if any)
 /interface pppoe-server server
 :foreach i in=[find where service-name="pppoe_billing"] do={ remove \$i }
 # Add PPPoE server
 /interface pppoe-server server
-add service-name="pppoe_billing" interface=hotspot-bridge default-profile=default disabled=no one-session-per-host=yes
+add service-name="pppoe_billing" interface=\$targetBridge default-profile=default disabled=no one-session-per-host=yes
 # Remove existing pool named "PPPOE ACTIVE POOL" then add fresh
 /ip pool
 :foreach p in=[find where name="PPPOE ACTIVE POOL"] do={ remove \$p }
