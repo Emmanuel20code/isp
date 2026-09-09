@@ -34,14 +34,21 @@ export interface RouterInfo {
  */
 export function getPublicBaseUrl(request?: Request): string {
   if (typeof process !== "undefined" && process.env) {
-    if (process.env.PUBLIC_APP_URL) return process.env.PUBLIC_APP_URL.replace(/\/+$/, "");
-    if (process.env.APP_URL) return process.env.APP_URL.replace(/\/+$/, "");
-    if (process.env.RENDER_EXTERNAL_URL) return process.env.RENDER_EXTERNAL_URL.replace(/\/+$/, "");
+    const envUrl = process.env.PUBLIC_APP_URL || process.env.APP_URL || process.env.RENDER_EXTERNAL_URL;
+    if (envUrl) {
+      const cleanUrl = envUrl.replace(/\/+$/, "");
+      // Safety filter: If the env URL has an IPv6, 127.0.0.1, or custom internal port like 3000,
+      // ignore it and proceed to request headers or the production domain fallback.
+      const isInternal = cleanUrl.includes("::") || cleanUrl.includes("127.0.0.1") || (cleanUrl.includes(":3000") && !cleanUrl.includes("localhost"));
+      if (!isInternal) {
+        return cleanUrl;
+      }
+    }
   }
 
   if (!request) {
     console.warn("getPublicBaseUrl: No request and no APP_URL env, defaulting to wifibilling.site");
-    return "https://wifibilling.site";
+    return "https://www.wifibilling.site";
   }
 
   const forwardedProto =
@@ -58,7 +65,17 @@ export function getPublicBaseUrl(request?: Request): string {
 
   if (!host) {
     console.warn("getPublicBaseUrl: No host found, defaulting to wifibilling.site");
-    return "https://wifibilling.site";
+    return "https://www.wifibilling.site";
+  }
+
+  // If the host is an IPv6 address, internal proxy IP, or unrecognized non-domain host,
+  // default to the verified public domain to prevent routers on the internet from getting 404/connection errors.
+  const isIPv6 = host.includes("]") || (host.match(/:/g) || []).length > 1;
+  const isIPv4 = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/.test(host);
+  const isLocal = host.includes("localhost") || host.includes("127.0.0.1");
+
+  if ((isIPv6 || isIPv4) && !isLocal) {
+    return "https://www.wifibilling.site";
   }
 
   return `${proto}://${host}`;
