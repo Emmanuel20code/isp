@@ -536,7 +536,7 @@ add name="expired_pppoe_pool" ranges=10.10.20.10-10.10.20.254
 :do {
   /system script remove [find name="heartbeat-telemetry"];
 } on-error={};
-/system script add name="heartbeat-telemetry" policy=read,write,test,ftp source=":do { /tool fetch mode=${fetchMode} http-method=post url=\\"${cleanBase}/api/public/mikrotik/heartbeat?token=${params.onboardToken}\\" http-data=(\\"identity=\\" . [/system identity get name] . \\"&ros_version=\\" . [/system package update get installed-version] . \\"&uptime=\\" . [/system resource get uptime] . \\"&cpu_load=\\" . [/system resource get cpu-load] . \\"&active_hotspot_users=\\" . [:len [/ip hotspot active find]] . \\"&active_pppoe_users=\\" . [:len [/ppp active find]]) check-certificate=no output=none; } on-error={}"
+/system script add name="heartbeat-telemetry" policy=read,write,test,ftp source=":do { /tool fetch mode=${fetchMode} http-method=post url=\\"${cleanBase}/api/public/mikrotik/heartbeat?token=${params.onboardToken}\\" http-data=(\\"identity=\\" . [/system identity get name] . \\"&ros_version=\\" . [/system package update get installed-version] . \\"&uptime=\\" . [/system resource get uptime] . \\"&cpu_load=\\" . [/system resource get cpu-load] . \\"&active_hotspot_users=\\" . [:tostr [:len [/ip hotspot active find]]] . \\"&active_pppoe_users=\\" . [:tostr [:len [/ppp active find]]]) check-certificate=no output=none; } on-error={}"
 # Heartbeat scheduler - every 30 seconds
 :do {
   /system scheduler remove [find name="heartbeat-telemetry"];
