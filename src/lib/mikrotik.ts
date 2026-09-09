@@ -191,9 +191,13 @@ export function generateModularScript(type: string, params: ScriptParams): strin
 :put "Ensuring SSL/TLS trust chain is trusted..."
 :do {
     /tool fetch url="https://letsencrypt.org/certs/isrgrootx1.pem" dst-path="isrgrootx1.pem" check-certificate=no
-    /certificate import file-name=isrgrootx1.pem passphrase=""
-    /file remove isrgrootx1.pem
-    :log info "ISRG Root X1 CA imported successfully"
+    :if ([:len [/file find name="isrgrootx1.pem"]] > 0) do={
+        /certificate import file-name=isrgrootx1.pem passphrase=""
+        /file remove isrgrootx1.pem
+        :log info "ISRG Root X1 CA imported successfully"
+    } else={
+        :log error "Failed to download ISRG Root X1 CA file"
+    }
 } on-error={ :log warning "Could not import ISRG Root X1 CA. HTTPS might require check-certificate=no" }
 
 # 3. Environment Check
