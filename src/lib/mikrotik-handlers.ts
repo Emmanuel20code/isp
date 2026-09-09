@@ -10,27 +10,11 @@ export async function handleOnboardRequest(
   token: string | null | undefined,
   request: Request,
 ): Promise<Response> {
-  const url = new URL(request.url);
-  let cleanToken = token?.trim();
-  let type = url.searchParams.get("type")?.trim();
-
-  // Try path-based extraction first
-  if (url.pathname.startsWith("/scripts/onboard/")) {
-    const parts = url.pathname.split("/").filter(Boolean); // ["scripts", "onboard", "TOKEN", "TYPE.rsc"]
-    if (parts.length >= 4) {
-      cleanToken = parts[2].trim();
-      type = parts[3].replace(/\.rsc$/, "").trim();
-    }
-  } else if (url.pathname.startsWith("/scripts/mainhotspot/")) {
-    const parts = url.pathname.split("/");
-    const filename = parts[parts.length - 1]; // "TOKEN.rsc"
-    cleanToken = filename.replace(/\.rsc$/, "").trim();
-    type = "mainhotspot";
-  }
+  const cleanToken = token?.trim();
 
   if (!cleanToken) {
     return new Response(
-      '# ERROR: Missing onboarding token.\n# Usage: /tool fetch url="https://your-domain/scripts/mainhotspot/TOKEN.rsc" dst-path=mainhotspot.rsc check-certificate=no; :delay 1s; /import mainhotspot.rsc\n',
+      '# ERROR: Missing onboarding token.\n# Usage: /tool fetch url="https://your-domain/api/public/mikrotik/onboard\\?token=XXXX" dst-path=onboard.auto.rsc check-certificate=no; :delay 1s; /import onboard.auto.rsc\n',
       {
         status: 401,
         headers: { "Content-Type": "text/plain; charset=utf-8" },
@@ -42,7 +26,7 @@ export async function handleOnboardRequest(
 
   // Log attempt
   console.log(
-    `[MikroTik Onboard] Token: ${cleanToken}, Type: ${type || "master"}, IP: ${request.headers.get("x-forwarded-for") || "unknown"}`,
+    `[MikroTik Onboard] Token: ${cleanToken}, IP: ${request.headers.get("x-forwarded-for") || "unknown"}`,
   );
 
   // Validate token against active routers
@@ -104,7 +88,10 @@ export async function handleOnboardRequest(
   const tenantSlug = tenant?.slug || tenant?.id || router.tenant_id;
   const tenantName = tenant?.name || "WiFi Hotspot";
 
-  if (type === "success" || type === "heartbeat") {
+  const url = new URL(request.url);
+  const type = url.searchParams.get("type")?.trim();
+
+  if (type === "success") {
     await supabaseAdmin
       .from("routers")
       .update({
@@ -114,9 +101,7 @@ export async function handleOnboardRequest(
         last_seen_at: new Date().toISOString(),
       })
       .eq("id", router.id);
-    if (type === "success") {
-      return new Response("OK", { status: 200, headers: { "Content-Type": "text/plain" } });
-    }
+    return new Response("OK", { status: 200, headers: { "Content-Type": "text/plain" } });
   }
 
   const routerWalledGarden = router.walled_garden_domains || [];
@@ -208,17 +193,8 @@ export async function handlePortalFileRequest(
   file: string | null | undefined,
   request: Request,
 ): Promise<Response> {
-  const url = new URL(request.url);
-  let cleanToken = token?.trim();
-  let cleanFile = file?.trim() || "login.html";
-
-  if (url.pathname.startsWith("/scripts/portal/")) {
-    const parts = url.pathname.split("/").filter(Boolean); // ["scripts", "portal", "TOKEN", "login.html"]
-    if (parts.length >= 4) {
-      cleanToken = parts[2].trim();
-      cleanFile = parts[3].trim();
-    }
-  }
+  const cleanToken = token?.trim();
+  const cleanFile = file?.trim() || "login.html";
 
   if (!cleanToken) {
     return new Response("Unauthorized: Missing token", { status: 401 });

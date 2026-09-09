@@ -1043,7 +1043,7 @@ export const getRouterScript = createServerFn({ method: "POST" })
     const cleanBaseUrl = baseUrl.replace(/\/+$/, "");
     const command =
       scriptType === "modular"
-        ? `/tool fetch url="${cleanBaseUrl}/scripts/mainhotspot/${router.onboard_token || ""}.rsc" dst-path="mainhotspot.rsc" check-certificate=no; :delay 2s; /import mainhotspot.rsc; /file remove mainhotspot.rsc;`
+        ? `/tool fetch url="${cleanBaseUrl}/scripts/mainhotspot.rsc\\?token=${router.onboard_token || ""}" dst-path="mainhotspot.rsc" check-certificate=no; :delay 2s; /import mainhotspot.rsc`
         : scriptType === "portal"
           ? `# Manually copy the HTML above and place it in your router's hotspot/login.html file`
           : generateOnboardingCommand(baseUrl, router.onboard_token || "");
