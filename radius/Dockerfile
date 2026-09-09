@@ -24,6 +24,7 @@ COPY queries.conf /etc/freeradius/3.0/queries.conf
 COPY mods-available/sql /etc/freeradius/3.0/mods-available/sql
 COPY sites-available/default /etc/freeradius/3.0/sites-available/default
 COPY radiusd.conf /etc/freeradius/3.0/radiusd.conf
+COPY users /etc/freeradius/3.0/users
 
 # Copy entrypoint script
 COPY entrypoint.sh /entrypoint.sh

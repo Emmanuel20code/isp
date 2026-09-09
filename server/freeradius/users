@@ -1,0 +1,14 @@
+# -*- text -*-
+##
+## users -- FreeRADIUS static user file
+##
+
+# Local testing user (allows checking RADIUS server health without database)
+testuser Cleartext-Password := "testpass"
+	Mikrotik-Rate-Limit = "10M/10M",
+	Session-Timeout = 86400,
+	Reply-Message = "Welcome to EMMATECH Multi-Tenant Billing Service!"
+
+# Fallback profile for unauthenticated clients (Optional)
+DEFAULT Auth-Type := Reject
+	Reply-Message = "EMMATECH: Authentication Failed. Contact Admin."

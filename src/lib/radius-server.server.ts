@@ -25,10 +25,16 @@ export function ensureRadiusDictionaries(): void {
 let poolInstance: Pool | null = null;
 function getPgPool(): Pool {
   if (!poolInstance) {
-    const connStr = process.env.DATABASE_URL;
+    const connStr = process.env.DATABASE_URL || "";
+    const isLocal =
+      connStr.includes("localhost") ||
+      connStr.includes("127.0.0.1") ||
+      connStr.includes("@postgres:") ||
+      connStr.includes("sslmode=disable");
+
     poolInstance = new Pool({
       connectionString: connStr,
-      ssl: { rejectUnauthorized: false },
+      ssl: isLocal ? false : { rejectUnauthorized: false },
       max: 10,
     });
   }

@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 set -e
 
 echo "======================================================"
@@ -21,24 +21,24 @@ if [ -n "$DATABASE_URL" ]; then
     HOST_PORT_DB="$(echo "$URL_NO_PROTO" | sed -e "s,^$USER_PASS@,,")"
     
     if [ -n "$USER_PASS" ]; then
-        PGUSER="$(echo "$USER_PASS" | cut -d: -f1)"
-        PGPASSWORD="$(echo "$USER_PASS" | cut -d: -f2-)"
+        URL_USER="$(echo "$USER_PASS" | cut -d: -f1)"
+        URL_PASS="$(echo "$USER_PASS" | cut -d: -f2-)"
     fi
     
     # Extract host, port, db
     HOST_PORT="$(echo "$HOST_PORT_DB" | cut -d/ -f1)"
-    PGDATABASE="$(echo "$HOST_PORT_DB" | cut -d/ -f2- | cut -d? -f1)"
+    URL_DB="$(echo "$HOST_PORT_DB" | cut -d/ -f2- | cut -d? -f1)"
     
-    PGHOST="$(echo "$HOST_PORT" | cut -d: -f1)"
-    PGPORT="$(echo "$HOST_PORT" | grep : | cut -d: -f2)"
+    URL_HOST="$(echo "$HOST_PORT" | cut -d: -f1)"
+    URL_PORT="$(echo "$HOST_PORT" | grep : | cut -d: -f2)"
 fi
 
-# Fallbacks
-PGHOST="${PGHOST:-postgres}"
-PGPORT="${PGPORT:-5432}"
-PGUSER="${PGUSER:-postgres}"
-PGPASSWORD="${PGPASSWORD:-postgres}"
-PGDATABASE="${PGDATABASE:-postgres}"
+# Fallbacks and precedence: Explicit env vars take precedence over DATABASE_URL
+PGHOST="${PGHOST:-${POSTGRES_HOST:-${URL_HOST:-postgres}}}"
+PGPORT="${PGPORT:-${POSTGRES_PORT:-${URL_PORT:-5432}}}"
+PGUSER="${PGUSER:-${POSTGRES_USER:-${URL_USER:-postgres}}}"
+PGPASSWORD="${PGPASSWORD:-${POSTGRES_PASSWORD:-${URL_PASS:-postgres}}}"
+PGDATABASE="${PGDATABASE:-${POSTGRES_DB:-${URL_DB:-postgres}}}"
 RADIUS_SECRET="${RADIUS_SECRET:-emmatech_radius_secret_2026}"
 
 echo "[Entrypoint] Target PostgreSQL: $PGHOST:$PGPORT / Database: $PGDATABASE"
@@ -148,23 +148,102 @@ CREATE TABLE IF NOT EXISTS nas (
 );
 EOSQL
 
-# 2. Substitute credentials into sql module config
-if [ -f "$RADDB/mods-available/sql" ]; then
-    sed -i "s|@@PGHOST@@|$PGHOST|g" "$RADDB/mods-available/sql"
-    sed -i "s|@@PGPORT@@|$PGPORT|g" "$RADDB/mods-available/sql"
-    sed -i "s|@@PGUSER@@|$PGUSER|g" "$RADDB/mods-available/sql"
-    sed -i "s|@@PGPASSWORD@@|$PGPASSWORD|g" "$RADDB/mods-available/sql"
-    sed -i "s|@@PGDATABASE@@|$PGDATABASE|g" "$RADDB/mods-available/sql"
-fi
+# 2. Safely generate sql module config with exact credentials
+cat << EOF > "$RADDB/mods-available/sql"
+# -*- text -*-
+##
+## sql module configuration for PostgreSQL
+##
 
-# 3. Substitute shared secret into clients.conf
-if [ -f "$RADDB/clients.conf" ]; then
-    sed -i "s|@@RADIUS_SECRET@@|$RADIUS_SECRET|g" "$RADDB/clients.conf"
+sql {
+	driver = "rlm_sql_postgresql"
+	dialect = "postgresql"
+
+	# Connection parameters
+	server = "$PGHOST"
+	port = "$PGPORT"
+	login = "$PGUSER"
+	password = "$PGPASSWORD"
+	radius_db = "$PGDATABASE"
+
+	# Connection pool settings
+	pool {
+		start = 5
+		min = 3
+		max = 20
+		spare = 3
+		uses = 0
+		retry_delay = 5
+		lifetime = 3600
+		idle_timeout = 60
+	}
+
+	# Table names
+	authcheck_table = "radcheck"
+	authreply_table = "radreply"
+	groupcheck_table = "radgroupcheck"
+	groupreply_table = "radgroupreply"
+	usergroup_table = "radusergroup"
+	acct_table1 = "radacct"
+	postauth_table = "radpostauth"
+	client_table = "nas"
+
+	# Group Membership Processing
+	read_groups = yes
+	group_attribute = "SQL-Group"
+
+	# Dynamic clients from database
+	read_clients = yes
+	client_query = "SELECT id, nasname, shortname, type, secret, server FROM nas"
+
+	# Include PostgreSQL queries
+	\$INCLUDE $RADDB/queries.conf
+}
+EOF
+
+# 3. Safely generate clients.conf
+cat << EOF > "$RADDB/clients.conf"
+client localhost {
+	ipaddr = 127.0.0.1
+	proto = *
+	secret = testing123
+	require_message_authenticator = no
+	nas_type = other
+	limit {
+		max_connections = 16
+		lifetime = 0
+		idle_timeout = 30
+	}
+}
+
+client docker_network {
+	ipaddr = 0.0.0.0/0
+	proto = *
+	secret = $RADIUS_SECRET
+	require_message_authenticator = no
+	nas_type = other
+	limit {
+		max_connections = 64
+		lifetime = 0
+		idle_timeout = 30
+	}
+}
+EOF
+
+# Ensure dictionary.mikrotik and SQL-Group attribute are loaded by the master dictionary
+if [ -f "$RADDB/dictionary" ]; then
+    # Clean up any previous references
+    sed -i "/SQL-Group/d" "$RADDB/dictionary"
+    sed -i "/dictionary.mikrotik/d" "$RADDB/dictionary"
+    
+    echo "Registering SQL-Group attribute and dictionary.mikrotik..."
+    echo "ATTRIBUTE SQL-Group 3000 string" >> "$RADDB/dictionary"
+    echo '$INCLUDE dictionary.mikrotik' >> "$RADDB/dictionary"
 fi
 
 # 4. Enable SQL module and standard modules
 mkdir -p "$RADDB/mods-enabled" "$RADDB/sites-enabled"
-for mod in sql pap chap mschap preprocess acct_unique detail digest expiration logintime always; do
+for mod in sql pap chap mschap preprocess detail digest expiration logintime always files; do
     if [ -f "$RADDB/mods-available/$mod" ]; then
         ln -sf "$RADDB/mods-available/$mod" "$RADDB/mods-enabled/$mod"
     fi

@@ -316,8 +316,8 @@ add address=10.10.0.1/24 interface=hotspot-bridge
 :foreach i in=[/ip hotspot profile find where name!="default"] do={ /ip hotspot profile remove $i }
 :foreach i in=[/ip hotspot profile find where name=hsprof1] do={ /ip hotspot profile remove $i }
 /ip hotspot profile add name="hsprof1" hotspot-address=10.10.0.1 dns-name="hotspot.lan" html-directory=$hsDir login-by=http-chap,http-pap ssl-certificate=none
-# Disable hotspot popups for unauthorized users to let them browse the portal smoothly
-/ip hotspot profile set [find name=hsprof1] use-radius=no
+# Enable FreeRADIUS integration for hotspot authentication & accounting
+/ip hotspot profile set [find name=hsprof1] use-radius=yes radius-accounting=yes radius-interim-update=2m
 
 # ─── DNS REDIRECT ───────────────────────────────────────────────────────
 :do { /ip dns static remove [find name="wifi.login"] } on-error={}
@@ -922,13 +922,13 @@ export function generateNetworkConfigurationScript(params: ScriptParams): string
 } on-error={};
 
 :do {
-  # Enforce http-chap, http-pap and cookie for valid session persistence. Keep trial disabled.
-  /ip hotspot profile set [find] login-by=http-chap,http-pap,cookie split-user-domain=no http-cookie-lifetime=1d use-radius=no;
+  # Enforce http-chap, http-pap, cookie and strict FreeRADIUS authentication & accounting
+  /ip hotspot profile set [find] login-by=http-chap,http-pap,cookie split-user-domain=no http-cookie-lifetime=1d use-radius=yes radius-accounting=yes radius-interim-update=2m;
   
   :if ([:len [/ip hotspot profile find name="billing_hsprof"]] = 0) do={
-    /ip hotspot profile add name="billing_hsprof" hotspot-address=10.10.0.1 dns-name="hotspot.lan" html-directory="hotspot" login-by=http-chap,http-pap,cookie split-user-domain=no http-cookie-lifetime=1d use-radius=no;
+    /ip hotspot profile add name="billing_hsprof" hotspot-address=10.10.0.1 dns-name="hotspot.lan" html-directory="hotspot" login-by=http-chap,http-pap,cookie split-user-domain=no http-cookie-lifetime=1d use-radius=yes radius-accounting=yes radius-interim-update=2m;
   } else={
-    /ip hotspot profile set [find name="billing_hsprof"] hotspot-address=10.10.0.1 dns-name="hotspot.lan" html-directory="hotspot" login-by=http-chap,http-pap,cookie split-user-domain=no http-cookie-lifetime=1d use-radius=no;
+    /ip hotspot profile set [find name="billing_hsprof"] hotspot-address=10.10.0.1 dns-name="hotspot.lan" html-directory="hotspot" login-by=http-chap,http-pap,cookie split-user-domain=no http-cookie-lifetime=1d use-radius=yes radius-accounting=yes radius-interim-update=2m;
   };
 } on-error={};
 
@@ -1034,7 +1034,7 @@ export function generateRepeaterProtectionScript(): string {
 # CRITICAL: Keep trial disabled by omitting 'trial' from login-by.
 # NEVER set trial-uptime-limit=0s (in RouterOS, 0s = UNLIMITED FREE TRIAL!).
 :do {
-  /ip hotspot profile set [find] login-by=http-chap,http-pap,cookie split-user-domain=no http-cookie-lifetime=1d use-radius=no;
+  /ip hotspot profile set [find] login-by=http-chap,http-pap,cookie split-user-domain=no http-cookie-lifetime=1d use-radius=yes radius-accounting=yes radius-interim-update=2m;
 } on-error={};
 
 # 3. Ensure all Hotspot Servers are enabled and enforce 1 device per MAC

@@ -144,9 +144,9 @@
   :local hsDir "hotspot"
   :if ([:len [/file find name="flash"]] > 0) do={ :set hsDir "flash/hotspot" }
   :if ([:len [/ip hotspot profile find name="billing_hsprof"]] = 0) do={
-    /ip hotspot profile add name="billing_hsprof" hotspot-address=10.10.0.1 dns-name="hotspot.local" html-directory=$hsDir login-by=http-chap,http-pap,cookie split-user-domain=no http-cookie-lifetime=1d use-radius=no ssl-certificate=none
+    /ip hotspot profile add name="billing_hsprof" hotspot-address=10.10.0.1 dns-name="hotspot.local" html-directory=$hsDir login-by=http-chap,http-pap,cookie split-user-domain=no http-cookie-lifetime=1d use-radius=yes radius-accounting=yes radius-interim-update=2m ssl-certificate=none
   } else={
-    /ip hotspot profile set [find name="billing_hsprof"] hotspot-address=10.10.0.1 dns-name="hotspot.local" html-directory=$hsDir login-by=http-chap,http-pap,cookie split-user-domain=no http-cookie-lifetime=1d use-radius=no ssl-certificate=none
+    /ip hotspot profile set [find name="billing_hsprof"] hotspot-address=10.10.0.1 dns-name="hotspot.local" html-directory=$hsDir login-by=http-chap,http-pap,cookie split-user-domain=no http-cookie-lifetime=1d use-radius=yes radius-accounting=yes radius-interim-update=2m ssl-certificate=none
   }
 } on-error={}
 

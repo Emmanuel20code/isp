@@ -343,12 +343,40 @@ export const getPPPoEActiveSessions = createServerFn({ method: "GET" })
     const { supabase, userId } = context;
     const tenantId = await requireTenant(supabase, userId);
 
+    // Fetch tenant customer usernames to ensure active sessions are matched even if trigger didn't link tenant_id
+    const { data: tenantCustomers } = await supabase
+      .from("customers")
+      .select("username, full_name, phone, packages(name)")
+      .eq("tenant_id", tenantId);
+
+    const customerUsernames = (tenantCustomers || [])
+      .map((c: any) => c.username)
+      .filter(Boolean);
+
+    // Fetch router IPs for this tenant
+    const { data: routers } = await supabase
+      .from("routers")
+      .select("public_ip")
+      .eq("tenant_id", tenantId);
+
+    const routerIps = (routers || []).map((r: any) => r.public_ip).filter(Boolean);
+
     // Try reading active sessions from radacct table
-    const { data: radSessions } = await (supabase as any)
+    let radQuery = (supabase as any)
       .from("radacct")
       .select("*")
-      .eq("tenant_id", tenantId)
-      .is("acctstoptime", null)
+      .is("acctstoptime", null);
+
+    const orFilters: string[] = [`tenant_id.eq.${tenantId}`];
+    if (customerUsernames.length > 0) {
+      orFilters.push(`username.in.(${customerUsernames.map((u) => `"${u}"`).join(",")})`);
+    }
+    if (routerIps.length > 0) {
+      orFilters.push(`nasipaddress.in.(${routerIps.map((ip) => `"${ip}"`).join(",")})`);
+    }
+
+    const { data: radSessions } = await radQuery
+      .or(orFilters.join(","))
       .order("acctstarttime", { ascending: false });
 
     if (radSessions && radSessions.length > 0) {
@@ -563,27 +591,49 @@ export const getRadiusConfigAndLogs = createServerFn({ method: "GET" })
     const { supabase, userId } = context;
     const tenantId = await requireTenant(supabase, userId);
 
-    // 1. Fetch recent RADIUS auth logs from radpostauth
-    const { data: logs } = await (supabase as any)
-      .from("radpostauth")
-      .select("*")
-      .eq("tenant_id", tenantId)
-      .order("authdate", { ascending: false })
-      .limit(30);
+    // 1. Fetch customer usernames for this tenant
+    const { data: tenantCustomers } = await supabase
+      .from("customers")
+      .select("username")
+      .eq("tenant_id", tenantId);
+    const customerUsernames = (tenantCustomers || [])
+      .map((c: any) => c.username)
+      .filter(Boolean);
 
     // 2. Fetch routers with their radius secrets and NAS IP
     const { data: routers } = await supabase
       .from("routers")
       .select("id, name, public_ip, agent_key, is_disabled")
       .eq("tenant_id", tenantId);
+    const routerIps = (routers || [])
+      .map((r: any) => r.public_ip)
+      .filter(Boolean);
 
-    // 3. Compute server host & ports
+    // 3. Fetch recent RADIUS auth logs from radpostauth
+    let logsQuery = (supabase as any)
+      .from("radpostauth")
+      .select("*");
+
+    const orFilters: string[] = [`tenant_id.eq.${tenantId}`];
+    if (customerUsernames.length > 0) {
+      orFilters.push(`username.in.(${customerUsernames.map((u) => `"${u}"`).join(",")})`);
+    }
+    if (routerIps.length > 0) {
+      orFilters.push(`nasipaddress.in.(${routerIps.map((ip) => `"${ip}"`).join(",")})`);
+    }
+
+    const { data: logs } = await logsQuery
+      .or(orFilters.join(","))
+      .order("authdate", { ascending: false })
+      .limit(50);
+
+    // 4. Compute server host & ports
     const radiusHost = process.env.RADIUS_SERVER_HOST || process.env.RAILWAY_PUBLIC_DOMAIN || "radius.emmatech.io";
     const authPort = Number(process.env.RADIUS_AUTH_PORT || 1812);
     const acctPort = Number(process.env.RADIUS_ACCT_PORT || 1813);
     const defaultSecret = process.env.RADIUS_SECRET || "emmatech_radius_secret_2026";
 
-    // 4. Generate RouterOS setup script
+    // 5. Generate RouterOS setup script
     const mikrotikCliScript = [
       `# ==========================================`,
       `# EMMATECH FreeRADIUS RouterOS Configuration`,
@@ -612,21 +662,44 @@ export const testRadiusLiveAuth = createServerFn({ method: "POST" })
     const { supabase, userId } = context;
     const tenantId = await requireTenant(supabase, userId);
 
-    // Use internal radius-server test client
+    // Try live test against FreeRADIUS container or embedded daemon
     try {
       const { testRadiusAuth, isRadiusServerRunning, startRadiusServer } = await import(
         "@/lib/radius-server.server"
       );
-      if (!isRadiusServerRunning()) {
-        await startRadiusServer();
-      }
 
-      const res = await testRadiusAuth({
-        host: "127.0.0.1",
+      const targetHost = process.env.RADIUS_SERVER_HOST || "radius";
+      const targetSecret = process.env.RADIUS_SECRET || "emmatech_radius_secret_2026";
+      const authPort = Number(process.env.RADIUS_AUTH_PORT || 1812);
+
+      // Attempt test against remote / container host first
+      let res = await testRadiusAuth({
+        host: targetHost,
+        port: authPort,
         username: data.username,
         password: data.password || "test",
-        secret: "testing123",
+        secret: targetSecret,
+        timeoutMs: 2500,
       });
+
+      // If container was unreachable, test localhost or boot local fallback
+      if (!res.success && res.code === "Timeout") {
+        if (!isRadiusServerRunning()) {
+          try {
+            await startRadiusServer();
+          } catch {
+            // ignore if port is already bound
+          }
+        }
+        res = await testRadiusAuth({
+          host: "127.0.0.1",
+          port: authPort,
+          username: data.username,
+          password: data.password || "test",
+          secret: "testing123",
+          timeoutMs: 2000,
+        });
+      }
 
       return {
         success: res.success,

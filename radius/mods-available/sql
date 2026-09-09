@@ -36,10 +36,14 @@ sql {
 	postauth_table = "radpostauth"
 	client_table = "nas"
 
+	# Group Membership Processing
+	read_groups = yes
+	group_attribute = "SQL-Group"
+
 	# Dynamic clients from database
 	read_clients = yes
 	client_query = "SELECT id, nasname, shortname, type, secret, server FROM nas"
 
 	# Include PostgreSQL queries
-	$INCLUDE queries.conf
+	$INCLUDE /etc/freeradius/3.0/queries.conf
 }

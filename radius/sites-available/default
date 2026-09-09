@@ -32,6 +32,7 @@ server default {
 		mschap
 		digest
 		sql
+		files
 		pap
 	}
 
@@ -49,7 +50,6 @@ server default {
 
 	preacct {
 		preprocess
-		acct_unique
 	}
 
 	accounting {
@@ -65,7 +65,6 @@ server default {
 		sql
 		Post-Auth-Type REJECT {
 			sql
-			attr_filter.access_reject
 		}
 	}
 }
