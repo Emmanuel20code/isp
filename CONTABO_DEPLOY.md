@@ -1,51 +1,94 @@
-# Hosting WiFi Billing System & FreeRADIUS on Contabo VPS
+# Manual HTTPS & SSL Setup on Contabo VPS
 
-Hosting everything on your **Contabo VPS** is the ultimate, most cost-effective setup for an ISP. Because a VPS gives you a **dedicated public static IP address** and full root access, you can run your Web Billing Dashboard, PostgreSQL database, and FreeRADIUS server (UDP ports 1812 & 1813) all on the same machine without any port restrictions.
-
----
-
-## Step 1: Connect to your Contabo VPS via SSH
-
-Open your terminal (Mac/Linux) or PuTTY (Windows) and connect to your Contabo VPS:
-```bash
-ssh root@YOUR_CONTABO_VPS_IP
-```
-*(Replace `YOUR_CONTABO_VPS_IP` with your actual Contabo server IP address).*
+Since you are already logged into your Contabo VPS via SSH, follow these direct manual steps to enable secure **HTTPS** for your `.site` domain using Nginx and Let's Encrypt Certbot.
 
 ---
 
-## Step 2: Run the One-Click Complete Setup Script (Docker + Nginx + SSL / HTTPS)
+### Step 1: Install Nginx & Certbot
 
-We have updated the automated setup script (`contabo-setup.sh`) to automatically configure Docker, UFW firewall, Nginx reverse proxy, and **Let's Encrypt SSL (HTTPS)** in one go!
-
+Run the following commands in your VPS terminal:
 ```bash
-# 1. Navigate to your project directory on your VPS (e.g. /opt/wifibilling)
-cd /opt/wifibilling
-
-# 2. Run the automated setup script with sudo
-sudo bash contabo-setup.sh
+sudo apt update
+sudo apt install -y nginx certbot python3-certbot-nginx
 ```
-
-When prompted:
-1. Enter your domain name (e.g., `billing.yourdomain.com` pointing to your Contabo VPS IP).
-2. Enter your email address for Let's Encrypt SSL notifications.
-
-The script will automatically:
-- Install **Docker**, **Docker Compose**, **Nginx**, and **Certbot**.
-- Configure **UFW Firewall** (`TCP 80`, `TCP 443`, `TCP 3000`, and `UDP 1812/1813/3799`).
-- Set up **Nginx Reverse Proxy** to forward traffic to port `3000`.
-- Obtain and install a free **Let's Encrypt SSL Certificate** with auto-redirect to **HTTPS**.
-- Update your `.env` file with `APP_URL=https://yourdomain.com`.
-- Build and start your Docker containers.
 
 ---
 
-## Step 3: Verify Your Deployment
+### Step 2: Create Nginx Reverse Proxy Configuration
 
-Check container status and logs:
+1. Create a new Nginx configuration file for your domain:
+   ```bash
+   sudo nano /etc/nginx/sites-available/wifibilling
+   ```
+
+2. Paste the following configuration (replace `yourdomain.site` with your actual `.site` domain name):
+   ```nginx
+   server {
+       listen 80;
+       server_name yourdomain.site;
+
+       location / {
+           proxy_pass http://127.0.0.1:3000;
+           proxy_http_version 1.1;
+           proxy_set_header Upgrade $http_upgrade;
+           proxy_set_header Connection 'upgrade';
+           proxy_set_header Host $host;
+           proxy_set_header X-Real-IP $remote_addr;
+           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+           proxy_set_header X-Forwarded-Proto $scheme;
+           proxy_cache_bypass $http_upgrade;
+       }
+   }
+   ```
+   *(Save and exit nano by pressing `Ctrl+O`, `Enter`, then `Ctrl+X`).*
+
+3. Enable the site, remove default configuration, test, and restart Nginx:
+   ```bash
+   sudo ln -sf /etc/nginx/sites-available/wifibilling /etc/nginx/sites-enabled/
+   sudo rm -f /etc/nginx/sites-enabled/default
+   sudo nginx -t
+   sudo systemctl restart nginx
+   ```
+
+---
+
+### Step 3: Obtain Free SSL Certificate via Let's Encrypt
+
+Run Certbot to automatically configure SSL for your `.site` domain:
 ```bash
-sudo docker compose ps
-sudo docker compose logs -f
+sudo certbot --nginx -d yourdomain.site
+```
+*(Follow the prompts, enter your email, and select option **2 (Redirect)** to automatically redirect all HTTP traffic to HTTPS).*
+
+---
+
+### Step 4: Update Your `.env` File
+
+1. Navigate to your app installation directory:
+   ```bash
+   cd /opt/wifibilling # (or wherever your docker-compose.yml is located)
+   ```
+
+2. Edit your `.env` file:
+   ```bash
+   nano .env
+   ```
+
+3. Ensure `APP_URL` uses `https://`:
+   ```env
+   APP_URL=https://yourdomain.site
+   ```
+   *(Save and exit).*
+
+---
+
+### Step 5: Restart Docker Containers
+
+Restart your containers to apply the HTTPS base URL:
+```bash
+sudo docker compose down
+sudo docker compose up -d --build
 ```
 
-Your billing system, M-Pesa webhooks, and MikroTik routers can now securely communicate over **`https://yourdomain.com`**!
+Your app is now live and fully secured at **`https://yourdomain.site`**, ready for MikroTik routers and M-Pesa webhooks!
+
