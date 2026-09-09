@@ -400,130 +400,20 @@ add server=hotspot1 dst-host="*.tigo.co.tz" action=allow
 
 # ─── CLEANUP ──
 /ip dns cache flush
-# ─── FIREWALL LAYER 7 & CONNECTION TRACKING ────────────────────────────
-:do { /system script remove [find name="firewall-connection-tracking"] } on-error={}
-/system script add name=firewall-connection-tracking source={
-  :global pqCount
-  :if ([:typeof \$pqCount] = "nil") do={
-    :local entries [/log find where message~"PQ_" and message~"trying to log in"]
-    :global pqCount [:len \$entries]
-    :return []
-  }
-  :local entries [/log find where message~"PQ_" and message~"trying to log in"]
-  :local totalEntries [:len \$entries]
-  :if (\$totalEntries <= \$pqCount) do={ :return [] }
-  :if (\$totalEntries < \$pqCount) do={
-    :global pqCount 0
-    :return []
-  }
-  :local counter 0
-  :foreach i in=\$entries do={
-    :if (\$counter >= \$pqCount) do={
-      :local msg [/log get \$i message]
-      :local pos [:find \$msg "PQ_"]
-      :if ([:typeof \$pos] != "nil") do={
-        :local data [:pick \$msg \$pos [:len \$msg]]
-        :local spacePos [:find \$data " "]
-        :if ([:typeof \$spacePos] != "nil") do={ :set data [:pick \$data 0 \$spacePos] }
-        :local p1 [:find \$data "_" 3]
-        :if ([:typeof \$p1] != "nil") do={
-          :local phone [:pick \$data 3 \$p1]
-          :local rest [:pick \$data (\$p1+1) [:len \$data]]
-          :local p2 [:find \$rest "_"]
-          :if ([:typeof \$p2] != "nil") do={
-            :local planId [:pick \$rest 0 \$p2]
-            :local rest2 [:pick \$rest (\$p2+1) [:len \$rest]]
-            :local p3 [:find \$rest2 "_"]
-            :if ([:typeof \$p3] != "nil") do={
-              :local routerId [:pick \$rest2 0 \$p3]
-              :local rest3 [:pick \$rest2 (\$p3+1) [:len \$rest2]]
-              :local p4 [:find \$rest3 "_"]
-              :local macSuf \$rest3
-              :if ([:typeof \$p4] != "nil") do={ :set macSuf [:pick \$rest3 0 \$p4] }
-              :local macFormatted ([:pick \$macSuf 0 1] . ":" . [:pick \$macSuf 1 [:len \$macSuf]])
-              :local postData ("phone_number=" . \$phone . "&plan_id=" . \$planId . "&router_id=" . \$routerId . "&mac_suffix=" . \$macFormatted . "&mac_address=")
-              :local fetchUrl "${cleanBase}/api/mikrotik/create-user"
-              :do {
-                /tool fetch url=\$fetchUrl mode=${fetchMode} http-method=post http-data=\$postData check-certificate=no output=none
-              } on-error={}
-            }
-          }
-        }
-      }
-    }
-    :set counter (\$counter + 1)
-  }
-  :global pqCount \$totalEntries
-}
-:do { /system scheduler remove [find name="firewall-connection-tracking"] } on-error={}
-/system scheduler add name="firewall-connection-tracking" interval=10s on-event="/system script run firewall-connection-tracking"
-# ─── BINDING SPEED CAP HEAL ─────────────────────────────────────────────
-:do { /system script remove [find name="freeisp-binding-heal"] } on-error={}
-/system script add name="freeisp-binding-heal" policy=read,write,test source={
-:foreach q in=[/queue simple find where name~"^binding-"] do={
-    :local qname [/queue simple get \$q name]
-    :if (([:len \$qname] = 25) && ([:pick \$qname 10 11] = "-")) do={
-        :local m ""
-        :for i from=8 to=24 do={
-            :local c [:pick \$qname \$i (\$i + 1)]
-            :if (\$c = "-") do={ :set c ":" } else={
-                :local p [:find "abcdef" \$c]
-                :if ([:typeof \$p] != "nil") do={ :set c [:pick "ABCDEF" \$p (\$p + 1)] }
-            }
-            :set m (\$m . \$c)
-        }
-        :local ip ""
-        :do {
-            :local bestIdle [:totime 604800]
-            :foreach h in=[/ip hotspot host find where mac-address=\$m] do={
-                :local idle [:totime [/ip hotspot host get \$h idle-time]]
-                :if (\$idle <= \$bestIdle) do={
-                    :set bestIdle \$idle
-                    :set ip [:tostr [/ip hotspot host get \$h address]]
-                }
-            }
-        } on-error={}
-        :if ([:len \$ip] = 0) do={
-            :do {
-                :foreach l in=[/ip dhcp-server lease find where mac-address=\$m] do={
-                    :if ([:len \$ip] = 0) do={
-                        :if ([:tostr [/ip dhcp-server lease get \$l status]] = "bound") do={
-                            :set ip [:tostr [/ip dhcp-server lease get \$l address]]
-                        }
-                    }
-                }
-            } on-error={}
-        }
-        :if ([:len \$ip] = 0) do={
-            :do {
-                :foreach a in=[/ip arp find where mac-address=\$m] do={
-                    :if ([:len \$ip] = 0) do={
-                        :if ([:tostr [/ip arp get \$a status]] != "stale") do={
-                            :set ip [:tostr [/ip arp get \$a address]]
-                        }
-                    }
-                }
-            } on-error={}
-        }
-        :if ([:len \$ip] = 0) do={
-            :do {
-                :local aa [/ip arp find where mac-address=\$m]
-                :if ([:len \$aa] > 0) do={ :set ip [:tostr [/ip arp get [:pick \$aa 0] address]] }
-            } on-error={}
-        }
-        :if ([:len \$ip] > 0) do={
-            :local tgt (\$ip . "/32")
-            :do {
-                :if ([:tostr [/queue simple get \$q target]] != \$tgt) do={
-                    /queue simple set \$q target=\$tgt
-                }
-            } on-error={}
-        }
-    }
-}
-}
-:do { /system scheduler remove [find name="freeisp-binding-heal"] } on-error={}
-/system scheduler add name="freeisp-binding-heal" interval=2h on-event="/system script run freeisp-binding-heal" start-time=startup policy=read,write,test comment="binding speed cap heal"
+
+# ─── FREERADIUS INTEGRATION (Pure RADIUS Mode) ───
+:do {
+  /radius remove [find comment~"FreeRADIUS" or comment~"WiFiBilling" or comment~"EMMATECH"];
+  /radius add address=13.140.174.60 secret="emmatech_radius_secret_2026" service=hotspot,ppp authentication-port=1812 accounting-port=1813 timeout=3000ms comment="EMMATECH FreeRADIUS";
+  /radius incoming set accept=yes port=3799;
+  /ip hotspot profile set [find name=hsprof1] use-radius=yes radius-accounting=yes radius-interim-update=2m login-by=http-chap,http-pap,pap,chap;
+  /ppp aaa set use-radius=yes accounting=yes interim-update=2m;
+  
+  # Remove legacy schedulers & scripts
+  /system scheduler remove [find name~"sync" or name~"wfb" or name~"firewall-connection" or name~"freeisp-binding"];
+  /system script remove [find name~"sync" or name~"wfb" or name~"firewall-connection" or name~"freeisp-binding"];
+  /ip hotspot user profile set [find] on-login="" on-logout="";
+} on-error={}
 # ─── NAT MASQUERADE ─────────────────────────────────────────────────────
 :foreach i in=[/ip firewall nat find where chain=srcnat and action=masquerade and src-address~"10.10.0"] do={ /ip firewall nat remove \$i }
 /ip firewall nat
@@ -592,57 +482,25 @@ add name="expired_pppoe_pool" ranges=10.10.20.10-10.10.20.254
 
     case "syncusers":
     case "sync-users":
-      return `# WiFiBilling Agent Sync Scheduler
+    case "radius":
+      return `# WiFiBilling FreeRADIUS AAA Configuration
 # Router ID: ${params.routerId}
 
-# Remove old scheduler and script if they exist
-:foreach i in=[/system scheduler find where name="sync-users"] do={ /system scheduler remove $i }
-:foreach i in=[/system script find where name="sync-users-script"] do={ /system script remove $i }
+# Remove legacy schedulers & scripts
+:foreach i in=[/system scheduler find where name~"sync" or name~"wfb"] do={ /system scheduler remove $i }
+:foreach i in=[/system script find where name~"sync" or name~"wfb"] do={ /system script remove $i }
+:do { /ip hotspot user profile set [find] on-login="" on-logout="" } on-error={}
 
-# Create the sync agent script that fetches and executes remote commands
-/system script add name="sync-users-script" policy=read,write,test,ftp source={
-  :do {
-    :log info "WiFiBilling: Fetching management commands..."
-    /tool fetch url="${cleanBase}/api/public/mikrotik/sync?router_id=${params.routerId}&agent_key=${params.agentKey}" dst-path=sync_commands.rsc check-certificate=no
-    :delay 1s
-    :if ([:len [/file find name=sync_commands.rsc]] > 0) do={
-      :log info "WiFiBilling: Executing management commands..."
-      /import sync_commands.rsc
-      /file remove sync_commands.rsc
-      :global lastSyncSuccess;
-      :set lastSyncSuccess ([/system clock get date] . " " . [/system clock get time]);
-    }
-  } on-error={
-    :log warning "WiFiBilling: Sync failed (Network or Auth error)"
-  }
-}
+# Configure FreeRADIUS Server
+:do {
+  /radius remove [find comment~"FreeRADIUS" or comment~"WiFiBilling" or comment~"EMMATECH"]
+  /radius add address=13.140.174.60 secret="emmatech_radius_secret_2026" service=hotspot,ppp authentication-port=1812 accounting-port=1813 timeout=3000ms comment="EMMATECH FreeRADIUS"
+  /radius incoming set accept=yes port=3799
+  /ip hotspot profile set [find] use-radius=yes radius-accounting=yes radius-interim-update=2m
+  /ppp aaa set use-radius=yes accounting=yes interim-update=2m
+} on-error={}
 
-# Create the scheduler to run every 15 seconds for near-real-time responsiveness
-/system scheduler add name="sync-users" interval=15s on-event="/system script run sync-users-script" policy=read,write,test,ftp
-
-# Add a Watchdog Agent to monitor Sync Health
-:foreach i in=[/system scheduler find where name="sync-watchdog"] do={ /system scheduler remove $i }
-:foreach i in=[/system script find where name="sync-watchdog-script"] do={ /system script remove $i }
-
-/system script add name="sync-watchdog-script" policy=read,write,test source={
-  :global lastSyncSuccess
-  :if ([:typeof $lastSyncSuccess] = "nil") do={
-    :log warning "WiFiBilling: Watchdog - Sync has never run successfully."
-    :return []
-  }
-  # Logic to check if lastSyncSuccess was more than 10 mins ago could be added here
-  # For now, we just ensure the sync scheduler is enabled
-  :if ([/system scheduler get [find name="sync-users"] disabled]) do={
-    /system scheduler enable [find name="sync-users"]
-    :log warning "WiFiBilling: Watchdog - Re-enabled sync-users scheduler."
-  }
-}
-/system scheduler add name="sync-watchdog" interval=10m on-event="/system script run sync-watchdog-script" policy=read,write,test
-
-# Disable fetch logging (run once and clean up)
-:do { /system logging set [find topics~"info"] topics=info,!fetch } on-error={}
-
-:log info "Agent sync & watchdog agents installed (router_id=${params.routerId})"
+:log info "EMMATECH: FreeRADIUS AAA is active. Legacy polling removed."
 `;
 
     case "syncsource":
@@ -837,6 +695,21 @@ export function generateNetworkConfigurationScript(params: ScriptParams): string
   };
 } on-error={};
 
+# 5.1 FreeRADIUS Server & AAA Configuration (Pure RADIUS Mode)
+:do {
+  /radius remove [find comment~"FreeRADIUS" or comment~"WiFiBilling" or comment~"EMMATECH"];
+  /radius add address=13.140.174.60 secret="emmatech_radius_secret_2026" service=hotspot,ppp authentication-port=1812 accounting-port=1813 timeout=3000ms comment="EMMATECH FreeRADIUS";
+  /radius incoming set accept=yes port=3799;
+  /ppp aaa set use-radius=yes accounting=yes interim-update=2m;
+  
+  # Remove legacy schedulers, polling scripts & local user databases
+  /system scheduler remove [find name~"sync" or name~"wfb" or name~"heartbeat" or name~"watchdog"];
+  /system script remove [find name~"sync" or name~"wfb" or name~"heartbeat" or name~"watchdog"];
+  /ip hotspot user profile set [find] on-login="" on-logout="";
+  /ip hotspot user remove [find name!="default-trial"];
+  /ppp secret remove [find];
+} on-error={};
+
 # 6. DNS Setup & Local Portal Domain Routing
 :do { /ip dns set allow-remote-requests=yes servers=8.8.8.8,1.1.1.1; } on-error={};
 :do {
@@ -932,17 +805,9 @@ export function generateNetworkConfigurationScript(params: ScriptParams): string
   };
 } on-error={};
 
-# 8.1 Event-Driven Webhook hooks for Hotspot User Logins and Logouts
+# 8.1 Ensure clean profile state without legacy fetch webhooks
 :do {
-  /ip hotspot user profile set [find] on-login={
-    :do {
-      /tool fetch url="${cleanBase}/api/public/mikrotik/webhook?router_id=${params.routerId}&agent_key=${params.agentKey}&event=login&username=\$user&mac=\$(""mac-address"")&ip=\$address" http-method=post mode=http check-certificate=no;
-    } on-error={};
-  } on-logout={
-    :do {
-      /tool fetch url="${cleanBase}/api/public/mikrotik/webhook?router_id=${params.routerId}&agent_key=${params.agentKey}&event=logout&username=\$user&mac=\$(""mac-address"")&ip=\$address" http-method=post mode=http check-certificate=no;
-    } on-error={};
-  }
+  /ip hotspot user profile set [find] on-login="" on-logout="";
 } on-error={};
 
 # 8. Hotspot Server Attachment to br-hotspot
