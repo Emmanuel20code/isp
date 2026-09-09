@@ -33,9 +33,23 @@ export interface RouterInfo {
  * Extract public base URL from incoming HTTP request or environment.
  */
 export function getPublicBaseUrl(request?: Request): string {
+  const forwardedProto = request ? (request.headers.get("x-forwarded-proto") || request.headers.get("x-forwarded-protocol")) : null;
+  
   if (typeof process !== "undefined" && process.env) {
-    if (process.env.PUBLIC_APP_URL) return process.env.PUBLIC_APP_URL.replace(/\/+$/, "");
-    if (process.env.APP_URL) return process.env.APP_URL.replace(/\/+$/, "");
+    if (process.env.PUBLIC_APP_URL) {
+      let url = process.env.PUBLIC_APP_URL.replace(/\/+$/, "");
+      if (forwardedProto === "https" && url.startsWith("http://")) {
+        url = url.replace("http://", "https://");
+      }
+      return url;
+    }
+    if (process.env.APP_URL) {
+      let url = process.env.APP_URL.replace(/\/+$/, "");
+      if (forwardedProto === "https" && url.startsWith("http://")) {
+        url = url.replace("http://", "https://");
+      }
+      return url;
+    }
     if (process.env.RENDER_EXTERNAL_URL) return process.env.RENDER_EXTERNAL_URL.replace(/\/+$/, "");
   }
 
@@ -44,8 +58,6 @@ export function getPublicBaseUrl(request?: Request): string {
     return "https://wifibilling.site";
   }
 
-  const forwardedProto =
-    request.headers.get("x-forwarded-proto") || request.headers.get("x-forwarded-protocol");
   const forwardedHost = request.headers.get("x-forwarded-host");
   const hostHeader = request.headers.get("host") || "";
 
