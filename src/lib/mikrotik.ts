@@ -90,7 +90,7 @@ export function generateOnboardingCommand(baseUrl: string, onboardToken: string)
   const cleanBase = baseUrl.replace(/\/+$/, "");
   const token = onboardToken.trim();
 
-  return `/ip dns set servers=8.8.8.8,1.1.1.1 allow-remote-requests=yes; /ip dhcp-client enable [find]; :delay 2s; /tool fetch url="${cleanBase}/api/public/mikrotik/onboard\\?token=${token}" dst-path=onboard.auto.rsc check-certificate=no; :delay 1s; /import onboard.auto.rsc`;
+  return `/ip dns set servers=8.8.8.8,1.1.1.1 allow-remote-requests=yes; :delay 2s; /tool fetch url="${cleanBase}/api/public/mikrotik/onboard\\?token=${token}" dst-path=onboard.auto.rsc check-certificate=no; :delay 1s; /import onboard.auto.rsc`;
 }
 
 /**
