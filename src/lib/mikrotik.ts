@@ -526,11 +526,14 @@ add name="expired_pppoe_pool" ranges=10.10.20.10-10.10.20.254
 
 # Configure FreeRADIUS Server
 :do {
-  /radius remove [find comment~"FreeRADIUS" or comment~"WiFiBilling" or comment~"EMMATECH"]
-  /radius add address=13.140.174.60 secret="emmatech_radius_secret_2026" service=hotspot,ppp authentication-port=1812 accounting-port=1813 timeout=3000ms comment="EMMATECH FreeRADIUS"
-  /radius incoming set accept=yes port=3799
-  /ip hotspot profile set [find] use-radius=yes radius-accounting=yes radius-interim-update=2m
-  /ppp aaa set use-radius=yes accounting=yes interim-update=2m
+  :local radiusHost "${domainOnly}";
+  :local radiusIP $radiusHost;
+  :do { :set radiusIP [:resolve $radiusHost]; } on-error={};
+  /radius remove [find comment~"FreeRADIUS" or comment~"WiFiBilling" or comment~"EMMATECH"];
+  /radius add address=$radiusIP secret="emmatech_radius_secret_2026" service=hotspot,ppp authentication-port=1812 accounting-port=1813 timeout=5s comment="EMMATECH FreeRADIUS";
+  /radius incoming set accept=yes port=3799;
+  /ip hotspot profile set [find] use-radius=yes radius-accounting=yes radius-interim-update=2m;
+  /ppp aaa set use-radius=yes accounting=yes interim-update=2m;
 } on-error={}
 
 :log info "EMMATECH: FreeRADIUS AAA is active. Legacy polling removed."
@@ -728,18 +731,20 @@ export function generateNetworkConfigurationScript(params: ScriptParams): string
   };
 } on-error={};
 
-# 5.1 FreeRADIUS Server & AAA Configuration (Pure RADIUS Mode)
+# 5.1 FreeRADIUS Server & AAA Configuration
 :do {
+  :local radiusHost "${domainOnly}";
+  :local radiusIP $radiusHost;
+  :do { :set radiusIP [:resolve $radiusHost]; } on-error={};
   /radius remove [find comment~"FreeRADIUS" or comment~"WiFiBilling" or comment~"EMMATECH"];
-  /radius add address=13.140.174.60 secret="emmatech_radius_secret_2026" service=hotspot,ppp authentication-port=1812 accounting-port=1813 timeout=3000ms comment="EMMATECH FreeRADIUS";
+  /radius add address=$radiusIP secret="emmatech_radius_secret_2026" service=hotspot,ppp authentication-port=1812 accounting-port=1813 timeout=5s comment="EMMATECH FreeRADIUS";
   /radius incoming set accept=yes port=3799;
   /ppp aaa set use-radius=yes accounting=yes interim-update=2m;
   
-  # Remove legacy schedulers, polling scripts & local user databases
+  # Remove legacy schedulers & watchdog scripts
   /system scheduler remove [find name~"sync" or name~"wfb" or name~"heartbeat" or name~"watchdog"];
   /system script remove [find name~"sync" or name~"wfb" or name~"heartbeat" or name~"watchdog"];
   /ip hotspot user profile set [find] on-login="" on-logout="";
-  /ip hotspot user remove [find name!="default-trial"];
   /ppp secret remove [find];
 } on-error={};
 
@@ -828,13 +833,13 @@ export function generateNetworkConfigurationScript(params: ScriptParams): string
 } on-error={};
 
 :do {
-  # Enforce http-chap, http-pap, cookie and strict FreeRADIUS authentication & accounting
-  /ip hotspot profile set [find] login-by=http-chap,http-pap,cookie split-user-domain=no http-cookie-lifetime=1d use-radius=yes radius-accounting=yes radius-interim-update=2m;
+  # Enforce http-chap, http-pap, cookie and local synced user authentication
+  /ip hotspot profile set [find] login-by=http-chap,http-pap,cookie split-user-domain=no http-cookie-lifetime=1d use-radius=no;
   
   :if ([:len [/ip hotspot profile find name="billing_hsprof"]] = 0) do={
-    /ip hotspot profile add name="billing_hsprof" hotspot-address=10.10.0.1 dns-name="hotspot.lan" html-directory="hotspot" login-by=http-chap,http-pap,cookie split-user-domain=no http-cookie-lifetime=1d use-radius=yes radius-accounting=yes radius-interim-update=2m;
+    /ip hotspot profile add name="billing_hsprof" hotspot-address=10.10.0.1 dns-name="hotspot.lan" html-directory="hotspot" login-by=http-chap,http-pap,cookie split-user-domain=no http-cookie-lifetime=1d use-radius=no;
   } else={
-    /ip hotspot profile set [find name="billing_hsprof"] hotspot-address=10.10.0.1 dns-name="hotspot.lan" html-directory="hotspot" login-by=http-chap,http-pap,cookie split-user-domain=no http-cookie-lifetime=1d use-radius=yes radius-accounting=yes radius-interim-update=2m;
+    /ip hotspot profile set [find name="billing_hsprof"] hotspot-address=10.10.0.1 dns-name="hotspot.lan" html-directory="hotspot" login-by=http-chap,http-pap,cookie split-user-domain=no http-cookie-lifetime=1d use-radius=no;
   };
 } on-error={};
 
@@ -932,7 +937,7 @@ export function generateRepeaterProtectionScript(): string {
 # CRITICAL: Keep trial disabled by omitting 'trial' from login-by.
 # NEVER set trial-uptime-limit=0s (in RouterOS, 0s = UNLIMITED FREE TRIAL!).
 :do {
-  /ip hotspot profile set [find] login-by=http-chap,http-pap,cookie split-user-domain=no http-cookie-lifetime=1d use-radius=yes radius-accounting=yes radius-interim-update=2m;
+  /ip hotspot profile set [find] login-by=http-chap,http-pap,cookie split-user-domain=no http-cookie-lifetime=1d use-radius=no;
 } on-error={};
 
 # 3. Ensure all Hotspot Servers are enabled and enforce 1 device per MAC
