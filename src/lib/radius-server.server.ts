@@ -178,13 +178,18 @@ export async function startRadiusServer(options?: {
           if (attribute === "Calling-Station-Id") {
             if (op === "=~") {
               try {
-                const regex = new RegExp(value, "i");
+                let cleanVal = value;
+                if (cleanVal.startsWith("(?i)")) {
+                  cleanVal = cleanVal.substring(4);
+                }
+                const regex = new RegExp(cleanVal, "i");
                 if (!regex.test(callingStation)) {
                   isAllowed = false;
                   rejectReason = `MAC mismatch: ${callingStation} not authorized for this package`;
                   break;
                 }
-              } catch {
+              } catch (err: any) {
+                console.warn("[RadiusServer] Regex match failed fallback to direct match:", err.message);
                 if (callingStation.toUpperCase() !== value.toUpperCase()) {
                   isAllowed = false;
                   rejectReason = `MAC mismatch: ${callingStation}`;
