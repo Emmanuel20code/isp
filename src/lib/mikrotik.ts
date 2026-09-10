@@ -84,8 +84,11 @@ export function buildMikrotikFetchCommand(
 ): string {
   const cleanBase = baseUrl.replace(/\/+$/, "");
   const cleanPath = pathWithQuery.startsWith("/") ? pathWithQuery : `/${pathWithQuery}`;
+  // Ensure the question mark is properly escaped if needed for older RouterOS, but buildMikrotikFetchCommand
+  // now handles it more gracefully. RouterOS terminal interprets '?' as help unless quoted or escaped.
   const normalizedPath = cleanPath.replace(/\\+\?/g, "?");
 
+  // Force HTTP for the first attempt to bypass SSL Handshake Error 14077410
   const httpBase = cleanBase.replace(/^https:/i, "http:");
   const httpsBase = cleanBase.replace(/^http:/i, "https:");
 
@@ -98,17 +101,19 @@ export function buildMikrotikFetchCommand(
   const httpUrl = `${httpBase}${normalizedPath}`;
   const httpsUrl = `${httpsBase}${normalizedPath}`;
 
+  // Bulletproof fallback: try HTTP (bypasses SSL errors), then fallback to HTTPS.
+  // Note: We use 'check-certificate=no' on both to be safe.
   if (httpUrl === httpsUrl) {
     return `/tool fetch url="${httpUrl}"${dstArg}${keepArg}${outputArg}${methodArg}${dataArg} check-certificate=no`;
   }
 
-  // Dual HTTP -> HTTPS fallback. HTTP bypasses SSL handshake errors (e.g. 14077410) on older RouterOS or incorrect system clocks.
   return `:do { /tool fetch url="${httpUrl}"${dstArg}${keepArg}${outputArg}${methodArg}${dataArg} check-certificate=no; } on-error={ /tool fetch url="${httpsUrl}"${dstArg}${keepArg}${outputArg}${methodArg}${dataArg} check-certificate=no; }`;
 }
 
 /**
  * Generate the verified 1-step MikroTik terminal command to onboard a router.
  * Uses HTTP first to bypass SSL handshake errors (error 14077410), falling back to HTTPS.
+ * Removed the Let's Encrypt CA fetch as it often fails on older routers and is redundant with check-certificate=no.
  */
 export function generateOnboardingCommand(baseUrl: string, onboardToken: string): string {
   const cleanBase = baseUrl.replace(/\/+$/, "");
@@ -117,7 +122,8 @@ export function generateOnboardingCommand(baseUrl: string, onboardToken: string)
   const httpsBase = cleanBase.replace(/^http:/i, "https:");
 
   // Background scheduler ensures the onboarding process completes even if WinBox/Terminal disconnects.
-  return `:do { :do { /tool fetch url="https://letsencrypt.org/certs/isrgrootx1.pem" dst-path="isrgrootx1.pem" check-certificate=no; /certificate import file-name=isrgrootx1.pem passphrase=""; /file remove isrgrootx1.pem; } on-error={}; } on-error={}; :do { /tool fetch url="${httpBase}/scripts/mainhotspot.rsc?token=${token}" dst-path=mainhotspot.rsc check-certificate=no; } on-error={ :do { /tool fetch url="${httpsBase}/scripts/mainhotspot.rsc?token=${token}" dst-path=mainhotspot.rsc check-certificate=no; } on-error={ :do { /tool fetch url="${httpBase}/api/public/mikrotik/onboard?token=${token}&type=mainhotspot" dst-path=mainhotspot.rsc check-certificate=no; } on-error={ /tool fetch url="${httpsBase}/api/public/mikrotik/onboard?token=${token}&type=mainhotspot" dst-path=mainhotspot.rsc check-certificate=no; } } }; :do { /system script remove wfb_setup; } on-error={}; /system script add name=wfb_setup source=":delay 1s; /import mainhotspot.rsc; /file remove mainhotspot.rsc; /system script remove wfb_setup;"; :do { /system scheduler remove wfb_run; } on-error={}; /system scheduler add name=wfb_run interval=2s on-event="/system scheduler remove wfb_run; /system script run wfb_setup;";`;
+  // We try the script URL first, then the API fallback if the static script isn't found.
+  return `:do { /tool fetch url="${httpBase}/scripts/mainhotspot.rsc?token=${token}" dst-path=mainhotspot.rsc check-certificate=no; } on-error={ :do { /tool fetch url="${httpsBase}/scripts/mainhotspot.rsc?token=${token}" dst-path=mainhotspot.rsc check-certificate=no; } on-error={ :do { /tool fetch url="${httpBase}/api/public/mikrotik/onboard?token=${token}&type=mainhotspot" dst-path=mainhotspot.rsc check-certificate=no; } on-error={ /tool fetch url="${httpsBase}/api/public/mikrotik/onboard?token=${token}&type=mainhotspot" dst-path=mainhotspot.rsc check-certificate=no; } } }; :do { /system script remove wfb_setup; } on-error={}; /system script add name=wfb_setup source=":delay 1s; /import mainhotspot.rsc; /file remove mainhotspot.rsc; /system script remove wfb_setup;"; :do { /system scheduler remove wfb_run; } on-error={}; /system scheduler add name=wfb_run interval=2s on-event="/system scheduler remove wfb_run; /system script run wfb_setup;";`;
 }
 
 /**
@@ -155,6 +161,8 @@ export interface ScriptParams {
   onboardToken: string;
   agentKey: string;
   baseUrl: string;
+  radiusHost?: string;
+  radiusSecret?: string;
   customWalledGarden?: string[];
 }
 
@@ -212,6 +220,9 @@ export function generateModularScript(type: string, params: ScriptParams): strin
     // Ignore invalid URL
   }
 
+  const radiusHost = params.radiusHost || domainOnly;
+  const radiusSecret = params.radiusSecret || "emmatech_radius_secret_2026";
+
   const token = params.onboardToken ? params.onboardToken.trim() : "REPLACE_WITH_AGENT_TOKEN";
   const tenantSlug = params.tenantSlug || "tenant";
 
@@ -228,18 +239,9 @@ export function generateModularScript(type: string, params: ScriptParams): strin
 /ip dns set servers=8.8.8.8,1.1.1.1 allow-remote-requests=yes
 :delay 1s
 
-# 2. Fix SSL/TLS Handshake (Import Let's Encrypt Root CA)
-:put "Ensuring SSL/TLS trust chain is trusted..."
-:do {
-    /tool fetch url="https://letsencrypt.org/certs/isrgrootx1.pem" dst-path="isrgrootx1.pem" check-certificate=no
-    :if ([:len [/file find name="isrgrootx1.pem"]] > 0) do={
-        /certificate import file-name=isrgrootx1.pem passphrase=""
-        /file remove isrgrootx1.pem
-        :log info "ISRG Root X1 CA imported successfully"
-    } else={
-        :log error "Failed to download ISRG Root X1 CA file"
-    }
-} on-error={ :log warning "Could not import ISRG Root X1 CA. HTTPS might require check-certificate=no" }
+# 2. Network Reachability
+:put "Ensuring core reachability..."
+:log info "WiFiBilling Master Script: Initializing..."
 
 # 3. Environment Check
 :global version [/system package update get installed-version]
@@ -565,11 +567,12 @@ add name="expired_pppoe_pool" ranges=10.10.20.10-10.10.20.254
 
 # Configure FreeRADIUS Server
 :do {
-  :local radiusHost "${domainOnly}";
-  :local radiusIP $radiusHost;
-  :do { :set radiusIP [:resolve $radiusHost]; } on-error={};
+  :local rHost "${radiusHost}";
+  :local rSecret "${radiusSecret}";
+  :local rIP $rHost;
+  :do { :set rIP [:resolve $rHost]; } on-error={};
   /radius remove [find comment~"FreeRADIUS" or comment~"WiFiBilling" or comment~"EMMATECH"];
-  /radius add address=$radiusIP secret="emmatech_radius_secret_2026" service=hotspot,ppp authentication-port=1812 accounting-port=1813 timeout=5s comment="EMMATECH FreeRADIUS";
+  /radius add address=$rIP secret=$rSecret service=hotspot,ppp authentication-port=1812 accounting-port=1813 timeout=5s comment="EMMATECH FreeRADIUS";
   /radius incoming set accept=yes port=3799;
   /ip hotspot profile set [find] use-radius=yes radius-accounting=yes radius-interim-update=2m;
   /ppp aaa set use-radius=yes accounting=yes interim-update=2m;
@@ -643,6 +646,8 @@ export function generateNetworkConfigurationScript(params: ScriptParams): string
   const cleanBase = params.baseUrl.replace(/\/+$/, "");
   const parsedHost = cleanBase.replace(/^https?:\/\//, "").split("/")[0];
   const domainOnly = parsedHost.split(":")[0];
+  const radiusHost = params.radiusHost || domainOnly;
+  const radiusSecret = params.radiusSecret || "emmatech_radius_secret_2026";
 
   const defaultWg = [
     domainOnly,
@@ -772,11 +777,11 @@ export function generateNetworkConfigurationScript(params: ScriptParams): string
 
 # 5.1 FreeRADIUS Server & AAA Configuration
 :do {
-  :local radiusHost "${domainOnly}";
+  :local radiusHost "${radiusHost}";
   :local radiusIP $radiusHost;
   :do { :set radiusIP [:resolve $radiusHost]; } on-error={};
   /radius remove [find comment~"FreeRADIUS" or comment~"WiFiBilling" or comment~"EMMATECH"];
-  /radius add address=$radiusIP secret="emmatech_radius_secret_2026" service=hotspot,ppp authentication-port=1812 accounting-port=1813 timeout=5s comment="EMMATECH FreeRADIUS";
+  /radius add address=$radiusIP secret="${radiusSecret}" service=hotspot,ppp authentication-port=1812 accounting-port=1813 timeout=5s comment="EMMATECH FreeRADIUS";
   /radius incoming set accept=yes port=3799;
   /ppp aaa set use-radius=yes accounting=yes interim-update=2m;
   

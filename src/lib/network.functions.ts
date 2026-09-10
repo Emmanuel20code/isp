@@ -1031,6 +1031,8 @@ export const getRouterScript = createServerFn({ method: "POST" })
       onboardToken: router.onboard_token || "DEMO-TOKEN",
       agentKey: router.agent_key,
       baseUrl,
+      radiusHost: process.env.RADIUS_SERVER_HOST,
+      radiusSecret: process.env.RADIUS_SECRET,
       customWalledGarden: router.walled_garden_domains || [],
     };
 

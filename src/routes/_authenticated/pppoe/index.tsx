@@ -1049,7 +1049,7 @@ function PPPoEManager() {
                       <span className="text-muted-foreground">Server Host:</span>
                       <div className="flex items-center gap-1">
                         <code className="font-mono text-foreground font-semibold">
-                          {radiusInfo.data?.radiusHost || "radius.emmatech.io"}
+                          {radiusInfo.data?.radiusHost || "wifibilling.site"}
                         </code>
                         <Button
                           variant="ghost"
@@ -1057,7 +1057,7 @@ function PPPoEManager() {
                           className="size-6"
                           onClick={() =>
                             handleCopyParam(
-                              radiusInfo.data?.radiusHost || "radius.emmatech.io",
+                              radiusInfo.data?.radiusHost || "wifibilling.site",
                               "Host",
                             )
                           }
