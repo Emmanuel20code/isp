@@ -6,7 +6,7 @@ import { z } from "zod";
 export const getRadiusAuthLogs = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const tenantId = context.user.id;
+    const tenantId = context.userId;
 
     // Fetch recent RADIUS auth logs from radpostauth for this tenant
     const { data: logs, error } = await supabaseAdmin
@@ -41,7 +41,7 @@ export const automateRouterRadiusConfig = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => z.object({ routerId: z.string() }).parse(input))
   .handler(async ({ data, context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const tenantId = context.user.id;
+    const tenantId = context.userId;
 
     // 1. Fetch router details and current RADIUS settings
     const { data: router } = await supabaseAdmin

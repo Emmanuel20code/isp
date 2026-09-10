@@ -51,6 +51,7 @@ export const getDashboard = createServerFn({ method: "GET" })
       .maybeSingle();
 
     const tenantId = membership?.tenant_id ?? null;
+    console.log(`[Dashboard] Fetching dashboard for user ${userId}, tenant ${tenantId}`);
 
     // Trigger background maintenance task (rate-limited internally)
     try {

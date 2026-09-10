@@ -17,6 +17,7 @@ export const getMyContext = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { supabase, userId } = context;
+    console.log(`[Tenancy] Fetching context for user ${userId}`);
 
     const [{ data: profile }, { data: roles }, { data: memberships }, { data: settings }] =
       await Promise.all([
