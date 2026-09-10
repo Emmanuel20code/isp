@@ -7,6 +7,7 @@ import {
   generateUniversalOnboardingScript,
   generateModularScript,
   generateOnboardingCommand,
+  buildMikrotikFetchCommand,
   getPublicBaseUrl,
   generateMikrotikPortalHtml,
 } from "@/lib/mikrotik";
@@ -1043,7 +1044,7 @@ export const getRouterScript = createServerFn({ method: "POST" })
     const cleanBaseUrl = baseUrl.replace(/\/+$/, "");
     const command =
       scriptType === "modular"
-        ? `/tool fetch url="${cleanBaseUrl}/scripts/mainhotspot.rsc\\?token=${router.onboard_token || ""}" dst-path="mainhotspot.rsc" check-certificate=no; :delay 2s; /import mainhotspot.rsc`
+        ? `${buildMikrotikFetchCommand(cleanBaseUrl, `/scripts/mainhotspot.rsc?token=${router.onboard_token || ""}`, { dstPath: "mainhotspot.rsc" })}; :delay 2s; /import mainhotspot.rsc`
         : scriptType === "portal"
           ? `# Manually copy the HTML above and place it in your router's hotspot/login.html file`
           : generateOnboardingCommand(baseUrl, router.onboard_token || "");

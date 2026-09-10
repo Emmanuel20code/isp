@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { listNetwork, getAICustomRouterScript } from "@/lib/network.functions";
+import { buildMikrotikFetchCommand } from "@/lib/mikrotik";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -129,9 +130,10 @@ export function AiScriptGenerator() {
   };
 
   const selectedRouter = network?.routers?.find((r) => r.id === selectedRouterId);
+  const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://wifibilling.site";
   const terminalCommand = selectedRouter
-    ? `/tool fetch url="https://wifibilling.site/api/public/mikrotik/onboard?token=${selectedRouter.onboard_token}" dst-path=onboard.auto.rsc check-certificate=no; /import onboard.auto.rsc`
-    : `/tool fetch url="https://wifibilling.site/api/public/mikrotik/onboard?token=TOKEN" dst-path=onboard.auto.rsc check-certificate=no; /import onboard.auto.rsc`;
+    ? `${buildMikrotikFetchCommand(baseUrl, `/api/public/mikrotik/onboard?token=${selectedRouter.onboard_token}`, { dstPath: "onboard.auto.rsc" })}; /import onboard.auto.rsc`
+    : `${buildMikrotikFetchCommand(baseUrl, `/api/public/mikrotik/onboard?token=TOKEN`, { dstPath: "onboard.auto.rsc" })}; /import onboard.auto.rsc`;
 
   const samplePrompts = [
     {

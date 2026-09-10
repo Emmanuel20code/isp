@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { buildMikrotikFetchCommand } from "@/lib/mikrotik";
 
 export type ToolCategory = "READ" | "WRITE" | "DANGEROUS";
 
@@ -560,7 +561,7 @@ export async function executeAiTool(
       if (!router) return { error: "Router not found" };
       return {
         router_name: router.name,
-        command: `/tool fetch url="https://wifibilling.site/api/public/mikrotik/onboard?token=${router.onboard_token}" dst-path=onboard.auto.rsc check-certificate=no; /import onboard.auto.rsc`,
+        command: `${buildMikrotikFetchCommand("https://wifibilling.site", `/api/public/mikrotik/onboard?token=${router.onboard_token}`, { dstPath: "onboard.auto.rsc" })}; /import onboard.auto.rsc`,
       };
     }
 

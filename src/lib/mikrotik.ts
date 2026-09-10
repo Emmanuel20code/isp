@@ -65,18 +65,59 @@ export function getPublicBaseUrl(request?: Request): string {
 }
 
 /**
+ * Helper to generate a bulletproof /tool fetch command string for RouterOS (v6 & v7).
+ * Handles query strings cleanly without stray backslashes, and falls back from HTTP to HTTPS
+ * (or vice versa) if an SSL handshake error or connection failure occurs.
+ */
+export function buildMikrotikFetchCommand(
+  baseUrl: string,
+  pathWithQuery: string,
+  options: {
+    dstPath?: string;
+    keepResult?: boolean;
+    output?: string;
+    mode?: string;
+    asValue?: boolean;
+    httpMethod?: string;
+    httpData?: string;
+  } = {}
+): string {
+  const cleanBase = baseUrl.replace(/\/+$/, "");
+  const cleanPath = pathWithQuery.startsWith("/") ? pathWithQuery : `/${pathWithQuery}`;
+  const normalizedPath = cleanPath.replace(/\\+\?/g, "?");
+
+  const httpBase = cleanBase.replace(/^https:/i, "http:");
+  const httpsBase = cleanBase.replace(/^http:/i, "https:");
+
+  const dstArg = options.dstPath ? ` dst-path="${options.dstPath}"` : "";
+  const keepArg = options.keepResult === false ? " keep-result=no" : "";
+  const outputArg = options.output ? ` output=${options.output}` : "";
+  const methodArg = options.httpMethod ? ` http-method=${options.httpMethod}` : "";
+  const dataArg = options.httpData ? ` http-data=${options.httpData}` : "";
+
+  const httpUrl = `${httpBase}${normalizedPath}`;
+  const httpsUrl = `${httpsBase}${normalizedPath}`;
+
+  if (httpUrl === httpsUrl) {
+    return `/tool fetch url="${httpUrl}"${dstArg}${keepArg}${outputArg}${methodArg}${dataArg} check-certificate=no`;
+  }
+
+  // Dual HTTP -> HTTPS fallback. HTTP bypasses SSL handshake errors (e.g. 14077410) on older RouterOS or incorrect system clocks.
+  return `:do { /tool fetch url="${httpUrl}"${dstArg}${keepArg}${outputArg}${methodArg}${dataArg} check-certificate=no; } on-error={ /tool fetch url="${httpsUrl}"${dstArg}${keepArg}${outputArg}${methodArg}${dataArg} check-certificate=no; }`;
+}
+
+/**
  * Generate the verified 1-step MikroTik terminal command to onboard a router.
- * Uses /api/public/mikrotik/onboard\?token=TOKEN with the escaped question mark
- * so RouterOS terminal does not intercept '?' as CLI autocomplete/help.
+ * Uses HTTP first to bypass SSL handshake errors (error 14077410), falling back to HTTPS.
  */
 export function generateOnboardingCommand(baseUrl: string, onboardToken: string): string {
   const cleanBase = baseUrl.replace(/\/+$/, "");
   const token = encodeURIComponent(onboardToken.trim());
+  const httpBase = cleanBase.replace(/^https:/i, "http:");
+  const httpsBase = cleanBase.replace(/^http:/i, "https:");
 
-  // New robust 1-step command that imports Let's Encrypt CAs first if needed,
-  // then fetches the main script. This ensures 'check-certificate=yes' works in the future.
-  // Uses a background scheduler to ensure the onboarding process completes even if WinBox disconnects.
-  return `:do { /tool fetch url="https://letsencrypt.org/certs/isrgrootx1.pem" dst-path="isrgrootx1.pem" check-certificate=no; /certificate import file-name=isrgrootx1.pem passphrase=""; /file remove isrgrootx1.pem; } on-error={}; /tool fetch url="${cleanBase}/scripts/mainhotspot.rsc\\?token=${token}" dst-path=mainhotspot.rsc check-certificate=no; :do { /system script remove wfb_setup; } on-error={}; /system script add name=wfb_setup source=":delay 1s; /import mainhotspot.rsc; /file remove mainhotspot.rsc; /system script remove wfb_setup;"; :do { /system scheduler remove wfb_run; } on-error={}; /system scheduler add name=wfb_run interval=2s on-event="/system scheduler remove wfb_run; /system script run wfb_setup;";`;
+  // Background scheduler ensures the onboarding process completes even if WinBox/Terminal disconnects.
+  return `:do { :do { /tool fetch url="https://letsencrypt.org/certs/isrgrootx1.pem" dst-path="isrgrootx1.pem" check-certificate=no; /certificate import file-name=isrgrootx1.pem passphrase=""; /file remove isrgrootx1.pem; } on-error={}; } on-error={}; :do { /tool fetch url="${httpBase}/scripts/mainhotspot.rsc?token=${token}" dst-path=mainhotspot.rsc check-certificate=no; } on-error={ :do { /tool fetch url="${httpsBase}/scripts/mainhotspot.rsc?token=${token}" dst-path=mainhotspot.rsc check-certificate=no; } on-error={ :do { /tool fetch url="${httpBase}/api/public/mikrotik/onboard?token=${token}&type=mainhotspot" dst-path=mainhotspot.rsc check-certificate=no; } on-error={ /tool fetch url="${httpsBase}/api/public/mikrotik/onboard?token=${token}&type=mainhotspot" dst-path=mainhotspot.rsc check-certificate=no; } } }; :do { /system script remove wfb_setup; } on-error={}; /system script add name=wfb_setup source=":delay 1s; /import mainhotspot.rsc; /file remove mainhotspot.rsc; /system script remove wfb_setup;"; :do { /system scheduler remove wfb_run; } on-error={}; /system scheduler add name=wfb_run interval=2s on-event="/system scheduler remove wfb_run; /system script run wfb_setup;";`;
 }
 
 /**
@@ -225,7 +266,7 @@ export function generateModularScript(type: string, params: ScriptParams): strin
 :do {
     :put "Downloading hotspot configuration..."
     :do {
-        /tool fetch url="${cleanBase}/api/public/mikrotik/onboard\\?token=${token}&type=hotspot" dst-path=hotspotsetup.rsc check-certificate=no
+        ${buildMikrotikFetchCommand(cleanBase, `/api/public/mikrotik/onboard?token=${token}&type=hotspot`, { dstPath: "hotspotsetup.rsc" })}
     } on-error={ :log error "WiFiBilling: Failed to download hotspot configuration" }
     :delay 2s
     :put "Applying hotspot configuration..."
@@ -237,7 +278,7 @@ export function generateModularScript(type: string, params: ScriptParams): strin
 
     :put "Downloading PPPoE configuration..."
     :do {
-        /tool fetch url="${cleanBase}/api/public/mikrotik/onboard\\?token=${token}&type=pppoe" dst-path=pppoesetup.rsc check-certificate=no
+        ${buildMikrotikFetchCommand(cleanBase, `/api/public/mikrotik/onboard?token=${token}&type=pppoe`, { dstPath: "pppoesetup.rsc" })}
     } on-error={ :log error "WiFiBilling: Failed to download PPPoE configuration" }
     :delay 2s
     :put "Applying PPPoE configuration..."
@@ -249,7 +290,7 @@ export function generateModularScript(type: string, params: ScriptParams): strin
 
     :put "Downloading users configuration..."
     :do {
-        /tool fetch url="${cleanBase}/api/public/mikrotik/onboard\\?token=${token}&type=users" dst-path=users.rsc check-certificate=no
+        ${buildMikrotikFetchCommand(cleanBase, `/api/public/mikrotik/onboard?token=${token}&type=users`, { dstPath: "users.rsc" })}
     } on-error={ :log error "WiFiBilling: Failed to download users configuration" }
     :delay 2s
     :put "Applying users configuration..."
@@ -261,7 +302,7 @@ export function generateModularScript(type: string, params: ScriptParams): strin
 
     :put "Downloading sync-users configuration..."
     :do {
-        /tool fetch url="${cleanBase}/api/public/mikrotik/onboard\\?token=${token}&type=syncusers" dst-path=syncusers.rsc check-certificate=no
+        ${buildMikrotikFetchCommand(cleanBase, `/api/public/mikrotik/onboard?token=${token}&type=syncusers`, { dstPath: "syncusers.rsc" })}
     } on-error={ :log error "WiFiBilling: Failed to download sync-users configuration" }
     :delay 2s
     :put "Applying sync-users configuration..."
@@ -273,7 +314,7 @@ export function generateModularScript(type: string, params: ScriptParams): strin
 
     :put "Downloading heartbeat configuration..."
     :do {
-        /tool fetch url="${cleanBase}/api/public/mikrotik/onboard\\?token=${token}&type=heartbeat" dst-path=heartbeat.rsc check-certificate=no
+        ${buildMikrotikFetchCommand(cleanBase, `/api/public/mikrotik/onboard?token=${token}&type=heartbeat`, { dstPath: "heartbeat.rsc" })}
     } on-error={ :log error "WiFiBilling: Failed to download heartbeat configuration" }
     :delay 2s
     :put "Applying heartbeat configuration..."
@@ -298,7 +339,7 @@ export function generateModularScript(type: string, params: ScriptParams): strin
 
     :put "All configurations completed successfully."
     :log info "MikroTik Onboarding Complete."
-    :do { /tool fetch url="${cleanBase}/api/public/mikrotik/onboard\\?token=${token}&type=success" keep-result=no; } on-error={}
+    :do { ${buildMikrotikFetchCommand(cleanBase, `/api/public/mikrotik/onboard?token=${token}&type=success`, { keepResult: false })} } on-error={}
 } on-error={
     :put "Setup failed. Check system logs for details."
     :log error "MikroTik Onboarding Failed."
@@ -462,12 +503,10 @@ add chain=prerouting action=change-ttl new-ttl=increment:2 passthrough=yes comme
 # FETCH CAPTIVE PORTAL HTML FILES
 :local hsDir "hotspot"
 :if ([:len [/file find name="flash"]] > 0) do={ :set hsDir "flash/hotspot" }
-:do {
-    /tool fetch url="${cleanBase}/api/public/mikrotik/portal-file\\?token=${token}&file=login.html" dst-path="\$hsDir/login.html" check-certificate=no;
-    /tool fetch url="${cleanBase}/api/public/mikrotik/portal-file\\?token=${token}&file=alogin.html" dst-path="\$hsDir/alogin.html" check-certificate=no;
-    /tool fetch url="${cleanBase}/api/public/mikrotik/portal-file\\?token=${token}&file=rlogin.html" dst-path="\$hsDir/rlogin.html" check-certificate=no;
-    /tool fetch url="${cleanBase}/api/public/mikrotik/portal-file\\?token=${token}&file=redirect.html" dst-path="\$hsDir/redirect.html" check-certificate=no;
-} on-error={};
+:do { ${buildMikrotikFetchCommand(cleanBase, `/api/public/mikrotik/portal-file?token=${token}&file=login.html`, { dstPath: "$hsDir/login.html" })} } on-error={};
+:do { ${buildMikrotikFetchCommand(cleanBase, `/api/public/mikrotik/portal-file?token=${token}&file=alogin.html`, { dstPath: "$hsDir/alogin.html" })} } on-error={};
+:do { ${buildMikrotikFetchCommand(cleanBase, `/api/public/mikrotik/portal-file?token=${token}&file=rlogin.html`, { dstPath: "$hsDir/rlogin.html" })} } on-error={};
+:do { ${buildMikrotikFetchCommand(cleanBase, `/api/public/mikrotik/portal-file?token=${token}&file=redirect.html`, { dstPath: "$hsDir/redirect.html" })} } on-error={};
 
 :log info "Hotspot configuration applied successfully."
 `;
@@ -899,12 +938,10 @@ ${uniqueWg
   .join("")}
 
 # 12. Fetch Captive Portal HTML Files
-:do {
-  /tool fetch url="${cleanBase}/api/public/mikrotik/portal-file?token=${params.onboardToken}&file=login.html" dst-path="hotspot/login.html" check-certificate=no;
-  /tool fetch url="${cleanBase}/api/public/mikrotik/portal-file?token=${params.onboardToken}&file=alogin.html" dst-path="hotspot/alogin.html" check-certificate=no;
-  /tool fetch url="${cleanBase}/api/public/mikrotik/portal-file?token=${params.onboardToken}&file=rlogin.html" dst-path="hotspot/rlogin.html" check-certificate=no;
-  /tool fetch url="${cleanBase}/api/public/mikrotik/portal-file?token=${params.onboardToken}&file=redirect.html" dst-path="hotspot/redirect.html" check-certificate=no;
-} on-error={};
+:do { ${buildMikrotikFetchCommand(cleanBase, `/api/public/mikrotik/portal-file?token=${params.onboardToken}&file=login.html`, { dstPath: "hotspot/login.html" })} } on-error={};
+:do { ${buildMikrotikFetchCommand(cleanBase, `/api/public/mikrotik/portal-file?token=${params.onboardToken}&file=alogin.html`, { dstPath: "hotspot/alogin.html" })} } on-error={};
+:do { ${buildMikrotikFetchCommand(cleanBase, `/api/public/mikrotik/portal-file?token=${params.onboardToken}&file=rlogin.html`, { dstPath: "hotspot/rlogin.html" })} } on-error={};
+:do { ${buildMikrotikFetchCommand(cleanBase, `/api/public/mikrotik/portal-file?token=${params.onboardToken}&file=redirect.html`, { dstPath: "hotspot/redirect.html" })} } on-error={};
 
 # 13. Real-Time Heartbeat via Netwatch
 :do {
