@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { z } from "zod";
 
 export const getRadiusAuthLogs = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -53,16 +54,19 @@ export const automateRouterRadiusConfig = createServerFn({ method: "POST" })
     if (!router) throw new Error("Router not found or unauthorized");
 
     const radiusSecret = process.env.RADIUS_SECRET || "emmatech_radius_secret_2026";
-    // We assume the web app and RADIUS server share the same public IP/Host for simplicity in this ISP setup
-    const serverIp = process.env.RADIUS_SERVER_HOST || "13.140.174.60"; 
+    // Strictly use the Contabo IP for this specific deployment
+    const serverIp = "13.140.174.60"; 
 
     console.log(`[RADIUS Automation] Configuring router ${router.name} to use RADIUS server ${serverIp}`);
 
-    // 2. Prepare MikroTik commands
+    // 2. Prepare MikroTik commands - Including cleanup for the 'random' cloud IPs and existing server entries
     const commands = [
+      `/radius remove [find address~"69.46."]`, // Remove the 'random' cloud IPs
+      `/radius remove [find address="${serverIp}"]`, // Remove if it already exists to avoid duplication errors
       `/radius add address=${serverIp} secret="${radiusSecret}" service=hotspot,ppp timeout=3000ms`,
       `/ip hotspot profile set [find where name="default"] use-radius=yes`,
       `/ppp profile set [find where name="default"] use-radius=yes`,
+      `/ip hotspot profile set [find where name="hsprof1"] use-radius=yes`, // Common MikroTik hotspot profile name
       `/radius incoming set accept=yes port=3799`
     ];
 

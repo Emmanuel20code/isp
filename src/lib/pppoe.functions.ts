@@ -659,62 +659,11 @@ export const testRadiusLiveAuth = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((data: { username: string; password?: string }) => data)
   .handler(async ({ context, data }) => {
-    const { supabase, userId } = context;
-    const tenantId = await requireTenant(supabase, userId);
-
-    // Try live test against FreeRADIUS container or embedded daemon
-    try {
-      const { testRadiusAuth, isRadiusServerRunning, startRadiusServer } = await import(
-        "@/lib/radius-server.server"
-      );
-
-      const targetHost = process.env.RADIUS_SERVER_HOST || "radius";
-      const targetSecret = process.env.RADIUS_SECRET || "emmatech_radius_secret_2026";
-      const authPort = Number(process.env.RADIUS_AUTH_PORT || 1812);
-
-      // Attempt test against remote / container host first
-      let res = await testRadiusAuth({
-        host: targetHost,
-        port: authPort,
-        username: data.username,
-        password: data.password || "test",
-        secret: targetSecret,
-        timeoutMs: 2500,
-      });
-
-      // If container was unreachable, test localhost or boot local fallback
-      if (!res.success && res.code === "Timeout") {
-        if (!isRadiusServerRunning()) {
-          try {
-            await startRadiusServer();
-          } catch {
-            // ignore if port is already bound
-          }
-        }
-        res = await testRadiusAuth({
-          host: "127.0.0.1",
-          port: authPort,
-          username: data.username,
-          password: data.password || "test",
-          secret: "testing123",
-          timeoutMs: 2000,
-        });
-      }
-
-      return {
-        success: res.success,
-        code: res.code,
-        attributes: res.attributes || {},
-        latencyMs: res.latencyMs,
-        error: res.error,
-      };
-    } catch (err: any) {
-      return {
-        success: false,
-        code: "ServerUnreachable",
-        latencyMs: 0,
-        error: err.message || "Could not reach RADIUS daemon",
-      };
-    }
+    // We are disabling the inbuilt RADIUS test logic to prevent port conflicts with FreeRADIUS
+    return {
+      success: false,
+      code: "Disabled",
+      error: "Built-in RADIUS test is disabled to favor external FreeRADIUS server."
+    };
   });
 
