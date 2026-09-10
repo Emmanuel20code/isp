@@ -833,13 +833,13 @@ export function generateNetworkConfigurationScript(params: ScriptParams): string
 } on-error={};
 
 :do {
-  # Enforce http-chap, http-pap, cookie and local synced user authentication
-  /ip hotspot profile set [find] login-by=http-chap,http-pap,cookie split-user-domain=no http-cookie-lifetime=1d use-radius=no;
+  # Enforce http-chap, http-pap, cookie and strict FreeRADIUS authentication & accounting
+  /ip hotspot profile set [find] login-by=http-chap,http-pap,cookie split-user-domain=no http-cookie-lifetime=1d use-radius=yes radius-accounting=yes radius-interim-update=2m;
   
   :if ([:len [/ip hotspot profile find name="billing_hsprof"]] = 0) do={
-    /ip hotspot profile add name="billing_hsprof" hotspot-address=10.10.0.1 dns-name="hotspot.lan" html-directory="hotspot" login-by=http-chap,http-pap,cookie split-user-domain=no http-cookie-lifetime=1d use-radius=no;
+    /ip hotspot profile add name="billing_hsprof" hotspot-address=10.10.0.1 dns-name="hotspot.lan" html-directory="hotspot" login-by=http-chap,http-pap,cookie split-user-domain=no http-cookie-lifetime=1d use-radius=yes radius-accounting=yes radius-interim-update=2m;
   } else={
-    /ip hotspot profile set [find name="billing_hsprof"] hotspot-address=10.10.0.1 dns-name="hotspot.lan" html-directory="hotspot" login-by=http-chap,http-pap,cookie split-user-domain=no http-cookie-lifetime=1d use-radius=no;
+    /ip hotspot profile set [find name="billing_hsprof"] hotspot-address=10.10.0.1 dns-name="hotspot.lan" html-directory="hotspot" login-by=http-chap,http-pap,cookie split-user-domain=no http-cookie-lifetime=1d use-radius=yes radius-accounting=yes radius-interim-update=2m;
   };
 } on-error={};
 
@@ -937,7 +937,7 @@ export function generateRepeaterProtectionScript(): string {
 # CRITICAL: Keep trial disabled by omitting 'trial' from login-by.
 # NEVER set trial-uptime-limit=0s (in RouterOS, 0s = UNLIMITED FREE TRIAL!).
 :do {
-  /ip hotspot profile set [find] login-by=http-chap,http-pap,cookie split-user-domain=no http-cookie-lifetime=1d use-radius=no;
+  /ip hotspot profile set [find] login-by=http-chap,http-pap,cookie split-user-domain=no http-cookie-lifetime=1d use-radius=yes radius-accounting=yes radius-interim-update=2m;
 } on-error={};
 
 # 3. Ensure all Hotspot Servers are enabled and enforce 1 device per MAC

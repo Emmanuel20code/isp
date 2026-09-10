@@ -638,7 +638,7 @@ export const getRadiusConfigAndLogs = createServerFn({ method: "GET" })
       `# ==========================================`,
       `# EMMATECH FreeRADIUS RouterOS Configuration`,
       `# ==========================================`,
-      `/radius add service=ppp address=${radiusHost} auth-port=${authPort} acct-port=${acctPort} secret="${defaultSecret}" authentication-port=${authPort} accounting-port=${acctPort} timeout=3000ms comment="EMMATECH FreeRADIUS"`,
+      `/radius add service=hotspot,ppp address=${radiusHost} auth-port=${authPort} acct-port=${acctPort} secret="${defaultSecret}" authentication-port=${authPort} accounting-port=${acctPort} timeout=3000ms comment="EMMATECH FreeRADIUS"`,
       `/ppp aaa set use-radius=yes accounting=yes interim-update=5m`,
       `/radius incoming set accept=yes port=3799`,
       `/ip dns set allow-remote-requests=yes servers=8.8.8.8,1.1.1.1`,

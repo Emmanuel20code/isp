@@ -3,6 +3,7 @@ import path from "node:path";
 import { Pool } from "pg";
 // @ts-expect-error - radius is a CJS module without type declarations
 import radiusModule from "radius";
+import { logAuthQueryDetails } from "./auth-logger";
 
 const radius = radiusModule.default || radiusModule;
 
@@ -131,11 +132,11 @@ export async function startRadiusServer(options?: {
       const callingProtocol = packet.attributes["Framed-Protocol"] || "";
       const isPppRequest = callingProtocol === "PPP" || callingProtocol === 1;
 
+      const sqlQuery = `SELECT attribute, op, value FROM radcheck WHERE username = $1 ORDER BY id`;
+      const queryParams = [username];
+
       // 1. Query radcheck rules for user
-      const checkRes = await pool.query(
-        `SELECT attribute, op, value FROM radcheck WHERE username = $1 ORDER BY id`,
-        [username]
-      );
+      const checkRes = await pool.query(sqlQuery, queryParams);
 
       let isAllowed = true;
       let rejectReason = "";
@@ -199,6 +200,26 @@ export async function startRadiusServer(options?: {
             }
           }
         }
+      }
+
+      // Log exact SQL query, input parameters vs database schema, and result
+      try {
+        logAuthQueryDetails({
+          authType: isPppRequest ? "pppoe_username" : "hotspot_mac",
+          username,
+          password,
+          callingStation,
+          nasIp,
+          callingProtocol,
+          isPppRequest,
+          sqlQuery,
+          queryParams,
+          returnedRows: checkRes.rows,
+          isAllowed,
+          rejectReason,
+        });
+      } catch (logErr) {
+        console.warn("[RadiusServer] Auth query logger error:", logErr);
       }
 
       // 2. Fetch radreply attributes if allowed

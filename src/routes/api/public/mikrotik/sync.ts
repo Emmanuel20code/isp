@@ -428,11 +428,11 @@ async function handleSyncRequest(request: Request): Promise<Response> {
         `:do { /ip firewall mangle remove [find comment="WiFiBilling: Anti-Repeater-NAT"]; } on-error={};`,
       );
 
-      // 2. Fix Hotspot Profiles: Enforce HTTP-CHAP, HTTP-PAP and COOKIE for local synced authentication.
+      // 2. Fix Hotspot Profiles: Enforce HTTP-CHAP, HTTP-PAP and COOKIE with FreeRADIUS integration.
       // CRITICAL: Omit 'trial' from login-by to ensure free trial is disabled.
       // NEVER set trial-uptime-limit=0s (in RouterOS, 0s = UNLIMITED FREE TRIAL!).
       rscLines.push(
-        `:do { /ip hotspot profile set [find] login-by=http-chap,http-pap,cookie split-user-domain=no http-cookie-lifetime=1d use-radius=no; } on-error={};`,
+        `:do { /ip hotspot profile set [find] login-by=http-chap,http-pap,cookie split-user-domain=no http-cookie-lifetime=1d use-radius=yes radius-accounting=yes radius-interim-update=2m; } on-error={};`,
       );
 
       // 3. Ensure all Hotspot Servers are enabled and enforce 1 device per MAC
