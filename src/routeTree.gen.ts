@@ -20,6 +20,7 @@ import { Route as AuthenticatedDatagridRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedDevicesRouteImport } from './routes/_authenticated/devices'
 import { Route as AuthenticatedGatewaysRouteImport } from './routes/_authenticated/gateways'
 import { Route as AuthenticatedPackagesRouteImport } from './routes/_authenticated/packages'
+import { Route as AuthenticatedRadiusLogsRouteImport } from './routes/_authenticated/radius-logs'
 import { Route as AuthenticatedRoutersRouteImport } from './routes/_authenticated/routers'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedSubscriptionRouteImport } from './routes/_authenticated/subscription'
@@ -104,6 +105,11 @@ const AuthenticatedGatewaysRoute = AuthenticatedGatewaysRouteImport.update({
 const AuthenticatedPackagesRoute = AuthenticatedPackagesRouteImport.update({
   id: '/packages',
   path: '/packages',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedRadiusLogsRoute = AuthenticatedRadiusLogsRouteImport.update({
+  id: '/radius-logs',
+  path: '/radius-logs',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedRoutersRoute = AuthenticatedRoutersRouteImport.update({
@@ -281,6 +287,7 @@ export interface FileRoutesByFullPath {
   '/devices': typeof AuthenticatedDevicesRoute
   '/gateways': typeof AuthenticatedGatewaysRoute
   '/packages': typeof AuthenticatedPackagesRoute
+  '/radius-logs': typeof AuthenticatedRadiusLogsRoute
   '/routers': typeof AuthenticatedRoutersRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/subscription': typeof AuthenticatedSubscriptionRoute
@@ -323,6 +330,7 @@ export interface FileRoutesByTo {
   '/devices': typeof AuthenticatedDevicesRoute
   '/gateways': typeof AuthenticatedGatewaysRoute
   '/packages': typeof AuthenticatedPackagesRoute
+  '/radius-logs': typeof AuthenticatedRadiusLogsRoute
   '/routers': typeof AuthenticatedRoutersRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/subscription': typeof AuthenticatedSubscriptionRoute
@@ -367,6 +375,7 @@ export interface FileRoutesById {
   '/_authenticated/devices': typeof AuthenticatedDevicesRoute
   '/_authenticated/gateways': typeof AuthenticatedGatewaysRoute
   '/_authenticated/packages': typeof AuthenticatedPackagesRoute
+  '/_authenticated/radius-logs': typeof AuthenticatedRadiusLogsRoute
   '/_authenticated/routers': typeof AuthenticatedRoutersRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/subscription': typeof AuthenticatedSubscriptionRoute
@@ -411,6 +420,7 @@ export interface FileRouteTypes {
     | '/devices'
     | '/gateways'
     | '/packages'
+    | '/radius-logs'
     | '/routers'
     | '/settings'
     | '/subscription'
@@ -453,6 +463,7 @@ export interface FileRouteTypes {
     | '/devices'
     | '/gateways'
     | '/packages'
+    | '/radius-logs'
     | '/routers'
     | '/settings'
     | '/subscription'
@@ -496,6 +507,7 @@ export interface FileRouteTypes {
     | '/_authenticated/devices'
     | '/_authenticated/gateways'
     | '/_authenticated/packages'
+    | '/_authenticated/radius-logs'
     | '/_authenticated/routers'
     | '/_authenticated/settings'
     | '/_authenticated/subscription'
@@ -632,6 +644,13 @@ declare module '@tanstack/react-router' {
       path: '/packages'
       fullPath: '/packages'
       preLoaderRoute: typeof AuthenticatedPackagesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/radius-logs': {
+      id: '/_authenticated/radius-logs'
+      path: '/radius-logs'
+      fullPath: '/radius-logs'
+      preLoaderRoute: typeof AuthenticatedRadiusLogsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/routers': {
@@ -856,6 +875,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedDevicesRoute: typeof AuthenticatedDevicesRoute
   AuthenticatedGatewaysRoute: typeof AuthenticatedGatewaysRoute
   AuthenticatedPackagesRoute: typeof AuthenticatedPackagesRoute
+  AuthenticatedRadiusLogsRoute: typeof AuthenticatedRadiusLogsRoute
   AuthenticatedRoutersRoute: typeof AuthenticatedRoutersRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedSubscriptionRoute: typeof AuthenticatedSubscriptionRoute
@@ -874,6 +894,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDevicesRoute: AuthenticatedDevicesRoute,
   AuthenticatedGatewaysRoute: AuthenticatedGatewaysRoute,
   AuthenticatedPackagesRoute: AuthenticatedPackagesRoute,
+  AuthenticatedRadiusLogsRoute: AuthenticatedRadiusLogsRoute,
   AuthenticatedRoutersRoute: AuthenticatedRoutersRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedSubscriptionRoute: AuthenticatedSubscriptionRoute,
