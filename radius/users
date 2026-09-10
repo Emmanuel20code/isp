@@ -10,5 +10,3 @@ testuser Cleartext-Password := "testpass"
 	Reply-Message = "Welcome to EMMATECH Multi-Tenant Billing Service!"
 
 # Fallback profile for unauthenticated clients (Optional)
-DEFAULT Auth-Type := Reject
-	Reply-Message = "EMMATECH: Authentication Failed. Contact Admin."

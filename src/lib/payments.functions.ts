@@ -936,6 +936,7 @@ export async function activateCustomerPackage(
       code,
       status: "active",
       phone: txn.phone,
+      mac_address: macAddress,
       activated_at: new Date().toISOString(),
       expires_at: expiresAt,
     })
@@ -945,6 +946,25 @@ export async function activateCustomerPackage(
   if (voucherErr || !voucher) {
     console.error("[Activation] Failed to insert voucher:", voucherErr);
     throw new Error(`Failed to generate voucher: ${voucherErr?.message || "Unknown error"}`);
+  }
+
+  // Synchronize credentials to FreeRADIUS radcheck & radreply tables
+  try {
+    const { syncRadiusCredentials } = await import("@/lib/billing-helpers");
+    const rateLimit = `${pkg.speed_up_mbps ?? 5}M/${pkg.speed_down_mbps ?? 5}M`;
+    await syncRadiusCredentials(db, {
+      username: voucher.code,
+      password: pppPassword,
+      tenantId: txn.tenant_id,
+      serviceType: pkg.kind ?? "hotspot",
+      macAddress: macAddress,
+      rateLimit,
+      durationHours: hours,
+      expiresAt,
+      deviceLimit: pkg.device_limit ?? 1,
+    });
+  } catch (syncErr) {
+    console.error("[Activation] Failed to sync voucher to RADIUS tables:", syncErr);
   }
 
   // Link voucher, customer and router to transaction

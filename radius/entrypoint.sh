@@ -47,7 +47,7 @@ echo "[Entrypoint] Target PostgreSQL: $PGHOST:$PGPORT / Database: $PGDATABASE"
 echo "[Entrypoint] Waiting for PostgreSQL at $PGHOST:$PGPORT to be ready..."
 MAX_RETRIES=30
 RETRY_COUNT=0
-until nc -z -w 2 "$PGHOST" "$PGPORT" 2>/dev/null || [ "$RETRY_COUNT" -ge "$MAX_RETRIES" ]; do
+until psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -c "SELECT 1" >/dev/null 2>&1 || [ "$RETRY_COUNT" -ge "$MAX_RETRIES" ]; do
     RETRY_COUNT=$((RETRY_COUNT+1))
     echo "[Entrypoint] PostgreSQL not yet ready. Retrying ($RETRY_COUNT/$MAX_RETRIES)..."
     sleep 2
@@ -256,6 +256,10 @@ rm -f "$RADDB/sites-enabled/inner-tunnel" 2>/dev/null || true
 
 # 5. Fix permissions
 chown -R freerad:freerad "$RADDB" /var/log/freeradius /var/run/freeradius 2>/dev/null || true
+
+# !!! THIS IS THE FIX !!! FORCE ENABLE SQL IN ALL BLOCKS
+sed -i "s/^[[:space:]]*#[[:space:]]*-sql/\tsql/g" "$RADDB/sites-available/default"
+sed -i "s/^[[:space:]]*-sql/\tsql/g" "$RADDB/sites-available/default"
 
 echo "[Entrypoint] Configuration complete. Launching FreeRADIUS..."
 

@@ -226,7 +226,50 @@ CREATE TRIGGER trg_sync_voucher_to_radius
 AFTER INSERT OR UPDATE OR DELETE ON vouchers
 FOR EACH ROW EXECUTE FUNCTION sync_voucher_to_radius();
 
--- 7. Trigger for accounting and post-auth auto-linkage
+-- 7. Trigger to automatically synchronize Routers to NAS
+CREATE OR REPLACE FUNCTION sync_router_to_nas()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    INSERT INTO nas (
+      id, nasname, shortname, type, secret, "tenantId", tenant_id, router_id, description, "createdAt", "updatedAt"
+    ) VALUES (
+      gen_random_uuid(),
+      COALESCE(NEW.public_ip, '0.0.0.0/0'),
+      NEW.name,
+      'mikrotik',
+      COALESCE(NEW.radius_secret, 'emmatech_radius_secret_2026'),
+      NEW.tenant_id,
+      NEW.tenant_id,
+      NEW.id,
+      'Auto-synced router ' || NEW.name,
+      NOW(),
+      NOW()
+    );
+  ELSIF TG_OP = 'UPDATE' THEN
+    UPDATE nas SET 
+      nasname = COALESCE(NEW.public_ip, '0.0.0.0/0'),
+      shortname = NEW.name,
+      secret = COALESCE(NEW.radius_secret, 'emmatech_radius_secret_2026'),
+      "updatedAt" = NOW()
+    WHERE router_id = NEW.id;
+  ELSIF TG_OP = 'DELETE' THEN
+    DELETE FROM nas WHERE router_id = OLD.id;
+  END IF;
+  
+  IF TG_OP = 'DELETE' THEN
+    RETURN OLD;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_sync_router_to_nas ON routers;
+CREATE TRIGGER trg_sync_router_to_nas
+AFTER INSERT OR UPDATE OR DELETE ON routers
+FOR EACH ROW EXECUTE FUNCTION sync_router_to_nas();
+
+-- 8. Trigger for accounting and post-auth auto-linkage
 CREATE OR REPLACE FUNCTION trg_autolink_radius_event()
 RETURNS TRIGGER AS $$
 DECLARE

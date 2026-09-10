@@ -93,6 +93,46 @@ export const createCustomer = createServerFn({ method: "POST" })
       .single();
     if (error) throw new Error(error.message);
 
+    if (row?.username) {
+      try {
+        const { syncRadiusCredentials } = await import("@/lib/billing-helpers");
+        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+        
+        let rateLimit = "5M/5M";
+        let durationHours = 24;
+        let deviceLimit = 1;
+
+        if (data.packageId) {
+          const { data: pkg } = await supabaseAdmin
+            .from("packages")
+            .select("speed_up_mbps, speed_down_mbps, duration_hours, device_limit")
+            .eq("id", data.packageId)
+            .maybeSingle();
+          if (pkg) {
+            if (pkg.speed_up_mbps && pkg.speed_down_mbps) {
+              rateLimit = `${pkg.speed_up_mbps}M/${pkg.speed_down_mbps}M`;
+            }
+            durationHours = pkg.duration_hours ?? 24;
+            deviceLimit = pkg.device_limit ?? 1;
+          }
+        }
+
+        await syncRadiusCredentials(supabaseAdmin, {
+          username: row.username,
+          password: row.password || row.phone || row.username,
+          tenantId,
+          serviceType: data.kind,
+          macAddress: row.mac_address,
+          rateLimit,
+          durationHours,
+          expiresAt,
+          deviceLimit,
+        });
+      } catch (syncErr) {
+        console.error("[Customer] Error syncing RADIUS credentials:", syncErr);
+      }
+    }
+
     if (data.routerId && row?.username) {
       const { enqueueRouterCommands } = await import("@/lib/agent-commands.server");
       await enqueueRouterCommands([
@@ -248,7 +288,7 @@ export const generateVouchers = createServerFn({ method: "POST" })
 
     const { data: pkg } = await supabase
       .from("packages")
-      .select("id")
+      .select("id, speed_up_mbps, speed_down_mbps, duration_hours, device_limit")
       .eq("id", data.packageId)
       .eq("tenant_id", tenantId)
       .maybeSingle();
@@ -266,6 +306,26 @@ export const generateVouchers = createServerFn({ method: "POST" })
       .insert(rows)
       .select("id, code");
     if (error) throw new Error(error.message);
+
+    // Sync generated vouchers to RADIUS radcheck & radreply
+    if (inserted && inserted.length > 0) {
+      const { syncRadiusCredentials } = await import("@/lib/billing-helpers");
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const rateLimit = pkg.speed_up_mbps && pkg.speed_down_mbps ? `${pkg.speed_up_mbps}M/${pkg.speed_down_mbps}M` : "5M/5M";
+      
+      for (const v of inserted) {
+        await syncRadiusCredentials(supabaseAdmin, {
+          username: v.code,
+          password: v.code,
+          tenantId,
+          serviceType: "hotspot",
+          rateLimit,
+          durationHours: pkg.duration_hours ?? 24,
+          deviceLimit: pkg.device_limit ?? 1,
+        });
+      }
+    }
+
     return { created: inserted?.length ?? 0 };
   });
 

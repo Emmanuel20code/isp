@@ -128,55 +128,101 @@ export async function startRadiusServer(options?: {
         return;
       }
 
-      // Query customer, package, and tenant
-      const custRes = await pool.query(
-        `SELECT 
-           c.id, c.tenant_id, c.username, c.password, c.status, c.expires_at, c.router_id,
-           p.speed_up_mbps, p.speed_down_mbps, p.name as package_name,
-           t.is_active as tenant_active, t.subscription_status as tenant_sub_status
-         FROM customers c
-         JOIN tenants t ON t.id = c.tenant_id
-         LEFT JOIN packages p ON p.id = c.package_id
-         WHERE c.username = $1 AND c.kind IN ('pppoe', 'hotspot')
-         LIMIT 1`,
+      const callingProtocol = packet.attributes["Framed-Protocol"] || "";
+      const isPppRequest = callingProtocol === "PPP" || callingProtocol === 1;
+
+      // 1. Query radcheck rules for user
+      const checkRes = await pool.query(
+        `SELECT attribute, op, value FROM radcheck WHERE username = $1 ORDER BY id`,
         [username]
       );
 
-      let isAllowed = false;
+      let isAllowed = true;
       let rejectReason = "";
+
+      if (checkRes.rows.length === 0) {
+        isAllowed = false;
+        rejectReason = "User credentials not found";
+      } else {
+        for (const row of checkRes.rows) {
+          const { attribute, op, value } = row;
+
+          if (attribute === "Auth-Type" && value === "Reject") {
+            isAllowed = false;
+            rejectReason = "Account suspended or expired";
+            break;
+          }
+
+          if (attribute === "Cleartext-Password") {
+            if (password && value !== password) {
+              isAllowed = false;
+              rejectReason = "Password mismatch";
+              break;
+            }
+          }
+
+          if (attribute === "Framed-Protocol") {
+            if (op === "==" && value === "PPP" && !isPppRequest) {
+              isAllowed = false;
+              rejectReason = "PPPoE credentials cannot be used for Hotspot";
+              break;
+            }
+            if (op === "!=" && value === "PPP" && isPppRequest) {
+              isAllowed = false;
+              rejectReason = "Hotspot voucher cannot be used for PPPoE";
+              break;
+            }
+          }
+
+          if (attribute === "Calling-Station-Id") {
+            if (op === "=~") {
+              try {
+                const regex = new RegExp(value, "i");
+                if (!regex.test(callingStation)) {
+                  isAllowed = false;
+                  rejectReason = `MAC mismatch: ${callingStation} not authorized for this package`;
+                  break;
+                }
+              } catch {
+                if (callingStation.toUpperCase() !== value.toUpperCase()) {
+                  isAllowed = false;
+                  rejectReason = `MAC mismatch: ${callingStation}`;
+                  break;
+                }
+              }
+            } else if (op === "==" || op === ":=") {
+              if (callingStation.toUpperCase() !== value.toUpperCase()) {
+                isAllowed = false;
+                rejectReason = `MAC mismatch: ${callingStation}`;
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      // 2. Fetch radreply attributes if allowed
+      const replyAttributes: any[] = [];
       let rateLimit = "5M/10M";
       let sessionTimeout = 86400;
 
-      if (custRes.rows.length === 0) {
-        rejectReason = "User not found";
-      } else {
-        const cust = custRes.rows[0];
+      if (isAllowed) {
+        const replyRes = await pool.query(
+          `SELECT attribute, value FROM radreply WHERE username = $1 ORDER BY id`,
+          [username]
+        );
 
-        // 1. Check Tenant Status
-        const tenantOk = cust.tenant_active === true && ["trialing", "active"].includes(cust.tenant_sub_status);
-        if (!tenantOk) {
-          rejectReason = "Tenant account suspended";
-        }
-        // 2. Check Customer Status
-        else if (cust.status !== "active") {
-          rejectReason = `Account is ${cust.status}`;
-        }
-        // 3. Check Expiry
-        else if (cust.expires_at && new Date(cust.expires_at).getTime() <= Date.now()) {
-          rejectReason = "Subscription expired";
-        }
-        // 4. Check Password
-        else if (cust.password && password && cust.password !== password) {
-          rejectReason = "Password mismatch";
-        }
-        else {
-          isAllowed = true;
-          if (cust.speed_up_mbps && cust.speed_down_mbps) {
-            rateLimit = `${cust.speed_up_mbps}M/${cust.speed_down_mbps}M`;
-          }
-          if (cust.expires_at) {
-            const diffSec = Math.max(60, Math.floor((new Date(cust.expires_at).getTime() - Date.now()) / 1000));
-            sessionTimeout = diffSec;
+        for (const row of replyRes.rows) {
+          if (row.attribute === "Framed-Protocol") {
+            replyAttributes.push(["Framed-Protocol", row.value]);
+          } else if (row.attribute === "Service-Type") {
+            replyAttributes.push(["Service-Type", row.value]);
+          } else if (row.attribute === "Session-Timeout") {
+            sessionTimeout = parseInt(row.value, 10) || 86400;
+            replyAttributes.push(["Session-Timeout", sessionTimeout]);
+          } else if (row.attribute === "Mikrotik-Rate-Limit") {
+            rateLimit = row.value;
+            replyAttributes.push(["Vendor-Specific", 14988, [["Mikrotik-Rate-Limit", rateLimit]]]);
           }
         }
       }
@@ -186,20 +232,20 @@ export async function startRadiusServer(options?: {
         await pool.query(
           `INSERT INTO radpostauth (username, pass, reply, authdate, nasipaddress, callingstationid, reason)
            VALUES ($1, $2, $3, NOW(), $4, $5, $6)`,
-          [username, isAllowed ? "******" : password || "******", isAllowed ? "Access-Accept" : "Access-Reject", nasIp, callingStation, rejectReason || "Authorized"]
+          [
+            username,
+            isAllowed ? "******" : password || "******",
+            isAllowed ? "Access-Accept" : "Access-Reject",
+            nasIp,
+            callingStation,
+            isAllowed ? "Authorized" : rejectReason,
+          ]
         );
       } catch (logErr) {
         console.warn("[RadiusServer] Failed to insert radpostauth:", logErr);
       }
 
       if (isAllowed) {
-        const replyAttributes: any[] = [
-          ["Framed-Protocol", "PPP"],
-          ["Service-Type", "Framed-User"],
-          ["Session-Timeout", sessionTimeout],
-          ["Vendor-Specific", 14988, [["Mikrotik-Rate-Limit", rateLimit]]],
-        ];
-
         const responsePacket = radius.encode_response({
           packet,
           code: "Access-Accept",

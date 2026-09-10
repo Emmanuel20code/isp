@@ -1,0 +1,19 @@
+name = freeradius
+confdir = ${raddbdir}
+modconfdir = ${confdir}/mods-config
+certdir = ${confdir}/certs
+cadir = ${confdir}/certs
+radacctdir = ${logdir}/radacct
+libdir = /usr/lib/freeradius
+confdir = ${raddbdir}
+
+modconfdir = ${confdir}/mods-config
+
+certdir = ${confdir}/certs
+
+cadir = ${confdir}/certs
+
+radacctdir = ${logdir}/radacct
+
+libdir = /usr/lib/freeradius
+run_dir = ${localstatedir}/run/${name}

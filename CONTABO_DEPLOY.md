@@ -56,8 +56,8 @@ SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 SUPABASE_PUBLISHABLE_KEY=your-publishable-key
 
-# App Public URL
-APP_URL=http://YOUR_CONTABO_VPS_IP:3000
+# App Public URL (Must be your HTTPS domain so MikroTik onboarding scripts fetch correctly)
+APP_URL=https://wifibilling.site
 
 # RADIUS Secret
 RADIUS_SECRET=emmatech_radius_secret_2026
@@ -82,6 +82,12 @@ sudo docker compose --profile local-db up -d --build
 # Or if using remote Supabase/Railway database:
 sudo docker compose up -d --build
 ```
+
+> **Updating APP_URL Later (Leaving FreeRADIUS untouched):**
+> If you update `APP_URL=https://wifibilling.site` in your `.env` file, you can recreate **only** the billing web application container without restarting or affecting your running FreeRADIUS server:
+> ```bash
+> sudo docker compose up -d --no-deps --build app
+> ```
 
 ---
 

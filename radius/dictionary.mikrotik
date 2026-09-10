@@ -32,8 +32,6 @@ ATTRIBUTE	Mikrotik-Address-List			19	string
 ATTRIBUTE	Mikrotik-Wireless-MPKey			20	string
 ATTRIBUTE	Mikrotik-Wireless-Comment		21	string
 ATTRIBUTE	Mikrotik-Delegated-IPv6-Pool		22	string
-ATTRIBUTE	Mikrotik-DHCP-Option-Param-STR1		23	string
-ATTRIBUTE	Mikrotik-DHCP-Option-Param-STR2		24	string
 
 VALUE	Mikrotik-Wireless-Forward	Disabled		0
 VALUE	Mikrotik-Wireless-Forward	Enabled			1

@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     freeradius-postgresql \
     freeradius-utils \
     postgresql-client \
-    netcat-openbsd \
+    netcat-traditional \
     ca-certificates \
     curl \
     && rm -rf /var/lib/apt/lists/*

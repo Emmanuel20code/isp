@@ -558,8 +558,28 @@ export const redeemPortalVoucher = createServerFn({ method: "POST" })
           activated_at: now.toISOString(),
           expires_at: expiresAt,
           router_id: targetRouterId,
+          mac_address: mac,
         })
         .eq("id", voucher.id);
+
+      // Sync RADIUS credentials for redeemed voucher
+      try {
+        const { syncRadiusCredentials } = await import("@/lib/billing-helpers");
+        const rateLimit = pkg?.speed_up_mbps && pkg?.speed_down_mbps ? `${pkg.speed_up_mbps}M/${pkg.speed_down_mbps}M` : "5M/5M";
+        await syncRadiusCredentials(supabaseAdmin, {
+          username: voucher.code,
+          password: voucher.code,
+          tenantId: tenant.id,
+          serviceType: pkg?.kind ?? "hotspot",
+          macAddress: mac,
+          rateLimit,
+          durationHours: durationHours,
+          expiresAt,
+          deviceLimit: pkg?.device_limit ?? 1,
+        });
+      } catch (radErr) {
+        console.error("[Portal] Error syncing voucher to RADIUS tables:", radErr);
+      }
 
       // Enqueue MikroTik commands for the activated voucher across applicable router(s)
       let targetRouterIds: string[] = targetRouterId ? [targetRouterId] : [];
