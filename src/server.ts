@@ -109,6 +109,25 @@ export default {
         return await handleOnboardRequest(token, newRequest);
       }
 
+      if (url.pathname === "/api/radius/auth" && request.method === "POST") {
+        const { username, password } = await request.json();
+        const { supabaseAdmin } = await import("./integrations/supabase/client.server");
+        const { data, error } = await supabaseAdmin.auth.signInWithPassword({
+          email: username,
+          password: password,
+        });
+        if (error) {
+          return new Response(JSON.stringify({ status: "reject" }), {
+            status: 401,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        return new Response(JSON.stringify({ status: "accept" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
       const normalized = await normalizeCatastrophicSsrResponse(request, response);

@@ -631,7 +631,7 @@ export const getRadiusConfigAndLogs = createServerFn({ method: "GET" })
     const radiusHost = process.env.RADIUS_SERVER_HOST || process.env.PUBLIC_APP_URL?.replace(/^https?:\/\//, "")?.split("/")[0]?.split(":")[0] || "wifibilling.site";
     const authPort = Number(process.env.RADIUS_AUTH_PORT || 1812);
     const acctPort = Number(process.env.RADIUS_ACCT_PORT || 1813);
-    const defaultSecret = process.env.RADIUS_SECRET || "emmatech_radius_secret_2026";
+    const defaultSecret = process.env.RADIUS_SECRET || "Jevish2026!";
 
     // 5. Generate RouterOS setup script
     const mikrotikCliScript = [

@@ -34,20 +34,21 @@ if [ -n "$DATABASE_URL" ]; then
 fi
 
 # Fallbacks and precedence: Explicit env vars take precedence over DATABASE_URL
-PGHOST="${PGHOST:-${POSTGRES_HOST:-${URL_HOST:-postgres}}}"
-PGPORT="${PGPORT:-${POSTGRES_PORT:-${URL_PORT:-5432}}}"
-PGUSER="${PGUSER:-${POSTGRES_USER:-${URL_USER:-postgres}}}"
-PGPASSWORD="${PGPASSWORD:-${POSTGRES_PASSWORD:-${URL_PASS:-postgres}}}"
-PGDATABASE="${PGDATABASE:-${POSTGRES_DB:-${URL_DB:-postgres}}}"
-RADIUS_SECRET="${RADIUS_SECRET:-emmatech_radius_secret_2026}"
+export PGHOST="${PGHOST:-${POSTGRES_HOST:-${URL_HOST:-postgres}}}"
+export PGPORT="${PGPORT:-${POSTGRES_PORT:-${URL_PORT:-5432}}}"
+export PGUSER="${PGUSER:-${POSTGRES_USER:-${URL_USER:-postgres}}}"
+export PGPASSWORD="${PGPASSWORD:-${POSTGRES_PASSWORD:-${URL_PASS:-postgres}}}"
+export PGDATABASE="${PGDATABASE:-${POSTGRES_DB:-${URL_DB:-postgres}}}"
+export PGSSLMODE="${PGSSLMODE:-require}"
+export RADIUS_SECRET="${RADIUS_SECRET:-emmatech_radius_secret_2026}"
 
-echo "[Entrypoint] Target PostgreSQL: $PGHOST:$PGPORT / Database: $PGDATABASE"
+echo "[Entrypoint] Target PostgreSQL: $PGHOST:$PGPORT / Database: $PGDATABASE / User: $PGUSER"
 
 # Wait for PostgreSQL to be ready
 echo "[Entrypoint] Waiting for PostgreSQL at $PGHOST:$PGPORT to be ready..."
-MAX_RETRIES=30
+MAX_RETRIES=15
 RETRY_COUNT=0
-until psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -c "SELECT 1" >/dev/null 2>&1 || [ "$RETRY_COUNT" -ge "$MAX_RETRIES" ]; do
+until PGPASSWORD="$PGPASSWORD" psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" -c "SELECT 1" >/dev/null 2>&1 || [ "$RETRY_COUNT" -ge "$MAX_RETRIES" ]; do
     RETRY_COUNT=$((RETRY_COUNT+1))
     echo "[Entrypoint] PostgreSQL not yet ready. Retrying ($RETRY_COUNT/$MAX_RETRIES)..."
     sleep 2

@@ -1086,7 +1086,7 @@ function PPPoEManager() {
                       <span className="text-muted-foreground">Shared Secret:</span>
                       <div className="flex items-center gap-1">
                         <code className="font-mono text-[11px] bg-muted px-1.5 py-0.5 rounded">
-                          {radiusInfo.data?.defaultSecret || "emmatech_radius_secret_2026"}
+                          {radiusInfo.data?.defaultSecret || "Jevish2026!"}
                         </code>
                         <Button
                           variant="ghost"
@@ -1094,7 +1094,7 @@ function PPPoEManager() {
                           className="size-6"
                           onClick={() =>
                             handleCopyParam(
-                              radiusInfo.data?.defaultSecret || "emmatech_radius_secret_2026",
+                              radiusInfo.data?.defaultSecret || "Jevish2026!",
                               "Secret",
                             )
                           }

@@ -1,0 +1,46 @@
+# -*- text -*-
+##
+## mods-available/sql -- FreeRADIUS PostgreSQL Configuration for Emmatech
+##
+sql {
+    driver = "rlm_sql_postgresql"
+    dialect = "postgresql"
+
+    # Supabase Connection Pooler
+    server = "aws-1-eu-central-1.pooler.supabase.com"
+    port = 5432
+    login = "postgres.bzjvzfrlfplhmmobzhmw"
+    password = "Jevish2026!"
+    radius_db = "postgres"
+
+    # Connection pool configuration
+    pool {
+        start = 5
+        min = 2
+        max = 10
+        spare = 3
+        uses = 0
+        lifetime = 0
+        idle_timeout = 60
+    }
+
+    # Table names required by FreeRADIUS queries.conf
+    authcheck_table = "radcheck"
+    authreply_table = "radreply"
+    groupcheck_table = "radgroupcheck"
+    groupreply_table = "radgroupreply"
+    usergroup_table = "radusergroup"
+    acct_table1 = "radacct"
+    acct_table2 = "radacct"
+    postauth_table = "radpostauth"
+    client_table = "nas"
+
+    # Attributes and policies
+    group_attribute = "SQL-Group"
+    read_groups = yes
+    read_profiles = yes
+    read_clients = no
+
+    # Include SQL query templates for PostgreSQL
+    $INCLUDE ${modconfdir}/${.:name}/main/${dialect}/queries.conf
+}

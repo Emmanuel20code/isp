@@ -5,9 +5,19 @@ import { TenantProvider } from "@/context/TenantContext";
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
   beforeLoad: async () => {
-    const { data, error } = await supabase.auth.getUser();
-    if (error || !data.user) throw redirect({ to: "/auth" });
-    return { user: data.user };
+    try {
+      const { data } = await supabase.auth.getSession();
+      if (!data.session?.user) {
+        throw redirect({ to: "/auth" });
+      }
+      return { user: data.session.user };
+    } catch (err) {
+      if (err && typeof err === "object" && "to" in err) {
+        throw err;
+      }
+      console.warn("[Auth Guard] Session check failed, redirecting to /auth:", err);
+      throw redirect({ to: "/auth" });
+    }
   },
   component: () => (
     <TenantProvider>

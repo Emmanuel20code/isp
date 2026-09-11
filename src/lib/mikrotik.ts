@@ -221,7 +221,7 @@ export function generateModularScript(type: string, params: ScriptParams): strin
   }
 
   const radiusHost = params.radiusHost || domainOnly;
-  const radiusSecret = params.radiusSecret || "emmatech_radius_secret_2026";
+  const radiusSecret = params.radiusSecret || "Jevish2026!";
 
   const token = params.onboardToken ? params.onboardToken.trim() : "REPLACE_WITH_AGENT_TOKEN";
   const tenantSlug = params.tenantSlug || "tenant";
@@ -480,7 +480,7 @@ add server=hotspot1 dst-host="*.tigo.co.tz" action=allow
     :set radiusIP [:resolve "${domainOnly}"];
   } on-error={};
   /radius remove [find comment~"FreeRADIUS" or comment~"WiFiBilling" or comment~"EMMATECH"];
-  /radius add address=$radiusIP secret="emmatech_radius_secret_2026" service=hotspot,ppp authentication-port=1812 accounting-port=1813 timeout=3s comment="EMMATECH FreeRADIUS";
+  /radius add address=$radiusIP secret="Jevish2026!" service=hotspot,ppp authentication-port=1812 accounting-port=1813 timeout=3s comment="EMMATECH FreeRADIUS";
   /radius incoming set accept=yes port=3799;
   /ip hotspot profile set [find name=hsprof1] use-radius=yes radius-accounting=yes radius-interim-update=120s login-by="http-chap,http-pap,pap,chap";
   /ppp aaa set use-radius=yes accounting=yes interim-update=2m;
@@ -647,7 +647,7 @@ export function generateNetworkConfigurationScript(params: ScriptParams): string
   const parsedHost = cleanBase.replace(/^https?:\/\//, "").split("/")[0];
   const domainOnly = parsedHost.split(":")[0];
   const radiusHost = params.radiusHost || domainOnly;
-  const radiusSecret = params.radiusSecret || "emmatech_radius_secret_2026";
+  const radiusSecret = params.radiusSecret || "Jevish2026!";
 
   const defaultWg = [
     domainOnly,

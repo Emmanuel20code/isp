@@ -1,4 +1,5 @@
 import { useTheme } from "@/context/ThemeContext";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -20,6 +21,11 @@ export function ThemeToggle({
   size = "sm",
 }: ThemeToggleProps) {
   const { theme, resolvedTheme, setTheme, toggleTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   if (variant === "button") {
     return (
@@ -31,7 +37,7 @@ export function ThemeToggle({
         title={`Switch to ${resolvedTheme === "dark" ? "Light" : "Dark"} mode`}
         aria-label="Toggle theme mode"
       >
-        {resolvedTheme === "dark" ? (
+        {mounted && resolvedTheme === "dark" ? (
           <>
             <Moon className="size-3.5 text-sky-400" />
             <span className="hidden sm:inline">Dark</span>
@@ -39,7 +45,7 @@ export function ThemeToggle({
         ) : (
           <>
             <Sun className="size-3.5 text-amber-500" />
-            <span className="hidden sm:inline">Light</span>
+            <span className="hidden sm:inline">{mounted ? "Light" : ""}</span>
           </>
         )}
       </Button>
@@ -56,13 +62,13 @@ export function ThemeToggle({
           title="Change theme (Light / Dark / System)"
           aria-label="Select theme"
         >
-          {resolvedTheme === "dark" ? (
+          {mounted && resolvedTheme === "dark" ? (
             <Moon className="size-3.5 text-sky-400" />
           ) : (
             <Sun className="size-3.5 text-amber-500" />
           )}
           <span className="font-medium capitalize hidden sm:inline">
-            {theme === "system" ? "System" : resolvedTheme === "dark" ? "Dark" : "Light"}
+            {mounted ? (theme === "system" ? "System" : resolvedTheme === "dark" ? "Dark" : "Light") : "Theme"}
           </span>
         </Button>
       </DropdownMenuTrigger>

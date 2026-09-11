@@ -214,7 +214,7 @@ function RadiusLogsPage() {
                     <div className="bg-slate-950 text-slate-50 p-2.5 rounded font-mono text-[9px] break-all border border-slate-800 whitespace-pre">
                       {`client mikrotik {
   ipaddr = 0.0.0.0/0
-  secret = emmatech_radius_secret_2026
+  secret = Jevish2026!
   limit {
     max_connections = 2048
   }

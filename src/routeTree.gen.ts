@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as ConfigCheckRouteImport } from './routes/config-check'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/admin'
 import { Route as AuthenticatedAiOperationsRouteImport } from './routes/_authenticated/ai-operations'
 import { Route as AuthenticatedCustomersRouteImport } from './routes/_authenticated/customers'
@@ -64,6 +65,11 @@ const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ConfigCheckRoute = ConfigCheckRouteImport.update({
+  id: '/config-check',
+  path: '/config-check',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
@@ -279,6 +285,7 @@ const ApiPublicMikrotikPortalFileTokenFileRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/config-check': typeof ConfigCheckRoute
   '/admin': typeof AuthenticatedAdminRoute
   '/ai-operations': typeof AuthenticatedAiOperationsRoute
   '/customers': typeof AuthenticatedCustomersRoute
@@ -322,6 +329,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/config-check': typeof ConfigCheckRoute
   '/admin': typeof AuthenticatedAdminRoute
   '/ai-operations': typeof AuthenticatedAiOperationsRoute
   '/customers': typeof AuthenticatedCustomersRoute
@@ -367,6 +375,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/config-check': typeof ConfigCheckRoute
   '/_authenticated/admin': typeof AuthenticatedAdminRoute
   '/_authenticated/ai-operations': typeof AuthenticatedAiOperationsRoute
   '/_authenticated/customers': typeof AuthenticatedCustomersRoute
@@ -412,6 +421,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/auth'
+    | '/config-check'
     | '/admin'
     | '/ai-operations'
     | '/customers'
@@ -455,6 +465,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/auth'
+    | '/config-check'
     | '/admin'
     | '/ai-operations'
     | '/customers'
@@ -499,6 +510,7 @@ export interface FileRouteTypes {
     | '/'
     | '/_authenticated'
     | '/auth'
+    | '/config-check'
     | '/_authenticated/admin'
     | '/_authenticated/ai-operations'
     | '/_authenticated/customers'
@@ -544,6 +556,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  ConfigCheckRoute: typeof ConfigCheckRoute
   ApiHealthRoute: typeof ApiHealthRoute
   PortalSlugRoute: typeof PortalSlugRoute
   ApiMikrotikActionRoute: typeof ApiMikrotikActionRoute
@@ -588,6 +601,13 @@ declare module '@tanstack/react-router' {
       path: '/auth'
       fullPath: '/auth'
       preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/config-check': {
+      id: '/config-check'
+      path: '/config-check'
+      fullPath: '/config-check'
+      preLoaderRoute: typeof ConfigCheckRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/admin': {
@@ -940,6 +960,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  ConfigCheckRoute: ConfigCheckRoute,
   ApiHealthRoute: ApiHealthRoute,
   PortalSlugRoute: PortalSlugRoute,
   ApiMikrotikActionRoute: ApiMikrotikActionRoute,

@@ -23,7 +23,15 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     return "light"; // Default to light mode, fully switchable by tenants
   });
 
-  const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark">("light");
+  const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark">(() => {
+    if (typeof window === "undefined") return "light";
+    const saved = localStorage.getItem(THEME_KEY) as Theme | null;
+    const currentTheme = saved === "light" || saved === "dark" || saved === "system" ? saved : "light";
+    if (currentTheme === "system") {
+      return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    }
+    return currentTheme === "dark" ? "dark" : "light";
+  });
 
   useEffect(() => {
     const root = document.documentElement;
@@ -37,7 +45,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
         active = theme;
       }
 
-      setResolvedTheme(active);
+      setResolvedTheme((prev) => (prev !== active ? active : prev));
 
       if (active === "dark") {
         root.classList.add("dark");

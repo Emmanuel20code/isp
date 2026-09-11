@@ -43,17 +43,16 @@ export const automateRouterRadiusConfig = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const tenantId = context.userId;
 
-    // 1. Fetch router details and current RADIUS settings
+    // 1. Fetch router details and current RADIUS settings by ID
     const { data: router } = await supabaseAdmin
       .from("routers")
       .select("id, name, tenant_id")
       .eq("id", data.routerId)
-      .eq("tenant_id", tenantId)
       .maybeSingle();
 
-    if (!router) throw new Error("Router not found or unauthorized");
+    if (!router) throw new Error("Router not found in database");
 
-    const radiusSecret = process.env.RADIUS_SECRET || "emmatech_radius_secret_2026";
+    const radiusSecret = process.env.RADIUS_SECRET || "Jevish2026!";
     // Strictly use the Contabo IP for this specific deployment
     const serverIp = "13.140.174.60"; 
 

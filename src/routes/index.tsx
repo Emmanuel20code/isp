@@ -43,9 +43,20 @@ export const Route = createFileRoute("/")({
     };
   },
   loader: async () => {
-    return {
-      settings: await getPublicSettings(),
-    };
+    try {
+      return {
+        settings: await getPublicSettings(),
+      };
+    } catch (err) {
+      console.warn("[Landing] Error loading public settings, using fallback:", err);
+      return {
+        settings: {
+          subscriptionPriceKes: 100,
+          trialDays: 90,
+          supportPhone: "254768926965",
+        },
+      };
+    }
   },
   component: Landing,
 });
