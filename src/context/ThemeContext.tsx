@@ -15,22 +15,22 @@ const THEME_KEY = "wifi_billing_theme";
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(() => {
-    if (typeof window === "undefined") return "dark";
+    if (typeof window === "undefined") return "light";
     const saved = localStorage.getItem(THEME_KEY) as Theme | null;
     if (saved === "light" || saved === "dark" || saved === "system") {
       return saved;
     }
-    return "dark"; // Default to dark for network NOC aesthetic, but fully switchable
+    return "light"; // Default to light mode, fully switchable by tenants
   });
 
-  const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark">("dark");
+  const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark">("light");
 
   useEffect(() => {
     const root = document.documentElement;
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
     const applyTheme = () => {
-      let active: "light" | "dark" = "dark";
+      let active: "light" | "dark" = "light";
       if (theme === "system") {
         active = mediaQuery.matches ? "dark" : "light";
       } else {

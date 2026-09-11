@@ -140,7 +140,7 @@ function RootShell({ children }: { children: ReactNode }) {
                 try {
                   var t = localStorage.getItem('wifi_billing_theme');
                   var d = window.matchMedia('(prefers-color-scheme: dark)').matches;
-                  if (t === 'dark' || (!t && true) || (t === 'system' && d)) {
+                  if (t === 'dark' || (t === 'system' && d)) {
                     document.documentElement.classList.add('dark');
                     document.documentElement.style.colorScheme = 'dark';
                   } else {
