@@ -126,6 +126,13 @@ export function generateOnboardingCommand(baseUrl: string, onboardToken: string)
   return `:do { /tool fetch url="${httpBase}/scripts/mainhotspot.rsc?token=${token}" dst-path=mainhotspot.rsc check-certificate=no; } on-error={ :do { /tool fetch url="${httpsBase}/scripts/mainhotspot.rsc?token=${token}" dst-path=mainhotspot.rsc check-certificate=no; } on-error={ :do { /tool fetch url="${httpBase}/api/public/mikrotik/onboard?token=${token}&type=mainhotspot" dst-path=mainhotspot.rsc check-certificate=no; } on-error={ /tool fetch url="${httpsBase}/api/public/mikrotik/onboard?token=${token}&type=mainhotspot" dst-path=mainhotspot.rsc check-certificate=no; } } }; :do { /system script remove wfb_setup; } on-error={}; /system script add name=wfb_setup source=":delay 1s; /import mainhotspot.rsc; /file remove mainhotspot.rsc; /system script remove wfb_setup;"; :do { /system scheduler remove wfb_run; } on-error={}; /system scheduler add name=wfb_run interval=2s on-event="/system scheduler remove wfb_run; /system script run wfb_setup;";`;
 }
 
+export function generateRadiusCleanupCommand(): string {
+  return `/radius remove [find]
+/ip hotspot profile set [find] use-radius=no
+/ppp profile set [find] use-radius=no
+:log info "WiFiBilling: RADIUS configuration removed, local authentication enabled.";`;
+}
+
 /**
  * Calculates real-time router status based on last heartbeat timestamp.
  */

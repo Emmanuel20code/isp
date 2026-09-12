@@ -74,7 +74,7 @@ import {
   DollarSign,
   TrendingUp,
 } from "lucide-react";
-import { generateOnboardingCommand } from "@/lib/mikrotik";
+import { disableRadiusOnAllRouters } from "@/lib/radius-cleanup.server";
 import { MacScannerModal } from "@/components/MacScannerModal";
 import { RouterRevenueModal } from "@/components/RouterRevenueModal";
 import { RouterIncomeLeaderboard } from "@/components/RouterIncomeLeaderboard";
@@ -1136,6 +1136,7 @@ function RoutersPage() {
   const refreshTok = useServerFn(regenerateRouterToken);
   const forceSyncFn = useServerFn(forceRouterSync);
   const toggleDisableFn = useServerFn(toggleRouterDisabled);
+  const disableRadius = useServerFn(disableRadiusOnAllRouters);
 
   const ctx = useQuery({ queryKey: ["my-context"], queryFn: () => fetchContext() });
   const { data, isPending } = useQuery({
@@ -1325,6 +1326,19 @@ function RoutersPage() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={async () => {
+              if (confirm("Are you sure you want to disable RADIUS on all routers?")) {
+                await disableRadius();
+                toast.success("RADIUS cleanup command enqueued.");
+              }
+            }}
+            className="text-xs text-amber-600 hover:text-amber-700 hover:bg-amber-100"
+          >
+            Disable RADIUS on All
+          </Button>
           <Button
             variant="outline"
             size="sm"
