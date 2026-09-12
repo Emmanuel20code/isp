@@ -126,23 +126,38 @@ export default {
         }
       }
 
-      if (url.pathname === "/api/radius/auth" && request.method === "POST") {
-        const { username, password } = await request.json();
-        const { supabaseAdmin } = await import("./integrations/supabase/client.server");
-        const { data, error } = await supabaseAdmin.auth.signInWithPassword({
-          email: username,
-          password: password,
-        });
-        if (error) {
-          return new Response(JSON.stringify({ status: "reject" }), {
-            status: 401,
+      if (url.pathname === "/api/vouchers" && request.method === "POST") {
+        try {
+          const { code, durationHours, price } = await request.json();
+          const { generateVoucher } = await import("./lib/voucher-manager");
+          const newVoucher = await generateVoucher(code, durationHours, price);
+          return new Response(JSON.stringify({ status: "success", voucher: newVoucher }), {
+            status: 201,
+            headers: { "content-type": "application/json" },
+          });
+        } catch (error) {
+          return new Response(JSON.stringify({ error: "Failed to generate voucher", message: error instanceof Error ? error.message : String(error) }), {
+            status: 500,
             headers: { "content-type": "application/json" },
           });
         }
-        return new Response(JSON.stringify({ status: "accept" }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        });
+      }
+
+      if (url.pathname === "/api/mikrotik/enable" && request.method === "POST") {
+        try {
+          const { username } = await request.json();
+          const { enableUser } = await import("./services/mikrotik");
+          await enableUser(username);
+          return new Response(JSON.stringify({ status: "success" }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        } catch (error) {
+          return new Response(JSON.stringify({ error: "Failed to enable user", message: error instanceof Error ? error.message : String(error) }), {
+            status: 500,
+            headers: { "content-type": "application/json" },
+          });
+        }
       }
 
       const handler = await getServerEntry();
