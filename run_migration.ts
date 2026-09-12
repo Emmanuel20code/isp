@@ -6,7 +6,7 @@ async function check() {
   await client.connect();
 
   try {
-    const sql = fs.readFileSync('supabase/migrations/20260908000000_freeradius_pppoe_integration.sql', 'utf8');
+    const sql = fs.readFileSync('supabase/migrations/20260912000001_remove_duplicate_tenantid.sql', 'utf8');
     await client.query(sql);
     console.log("Migration applied successfully!");
   } catch (err) {

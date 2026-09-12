@@ -41,6 +41,7 @@ import { Route as ApiPublicMikrotikConfigRouteImport } from './routes/api/public
 import { Route as ApiPublicMikrotikConfigResultRouteImport } from './routes/api/public/mikrotik/config-result'
 import { Route as ApiPublicMikrotikHeartbeatRouteImport } from './routes/api/public/mikrotik/heartbeat'
 import { Route as ApiPublicMikrotikOnboardRouteImport } from './routes/api/public/mikrotik/onboard'
+import { Route as ApiPublicMikrotikOnboardtokenRouteImport } from './routes/api/public/mikrotik/onboardtoken'
 import { Route as ApiPublicMikrotikPortalFileRouteImport } from './routes/api/public/mikrotik/portal-file'
 import { Route as ApiPublicMikrotikRegisterRouteImport } from './routes/api/public/mikrotik/register'
 import { Route as ApiPublicMikrotikScanReportRouteImport } from './routes/api/public/mikrotik/scan-report'
@@ -218,6 +219,12 @@ const ApiPublicMikrotikOnboardRoute =
     path: '/api/public/mikrotik/onboard',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicMikrotikOnboardtokenRoute =
+  ApiPublicMikrotikOnboardtokenRouteImport.update({
+    id: '/api/public/mikrotik/onboardtoken',
+    path: '/api/public/mikrotik/onboardtoken',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicMikrotikPortalFileRoute =
   ApiPublicMikrotikPortalFileRouteImport.update({
     id: '/api/public/mikrotik/portal-file',
@@ -314,6 +321,7 @@ export interface FileRoutesByFullPath {
   '/api/public/mikrotik/config-result': typeof ApiPublicMikrotikConfigResultRoute
   '/api/public/mikrotik/heartbeat': typeof ApiPublicMikrotikHeartbeatRoute
   '/api/public/mikrotik/onboard': typeof ApiPublicMikrotikOnboardRouteWithChildren
+  '/api/public/mikrotik/onboardtoken': typeof ApiPublicMikrotikOnboardtokenRoute
   '/api/public/mikrotik/portal-file': typeof ApiPublicMikrotikPortalFileRouteWithChildren
   '/api/public/mikrotik/register': typeof ApiPublicMikrotikRegisterRoute
   '/api/public/mikrotik/scan-report': typeof ApiPublicMikrotikScanReportRoute
@@ -358,6 +366,7 @@ export interface FileRoutesByTo {
   '/api/public/mikrotik/config-result': typeof ApiPublicMikrotikConfigResultRoute
   '/api/public/mikrotik/heartbeat': typeof ApiPublicMikrotikHeartbeatRoute
   '/api/public/mikrotik/onboard': typeof ApiPublicMikrotikOnboardRouteWithChildren
+  '/api/public/mikrotik/onboardtoken': typeof ApiPublicMikrotikOnboardtokenRoute
   '/api/public/mikrotik/portal-file': typeof ApiPublicMikrotikPortalFileRouteWithChildren
   '/api/public/mikrotik/register': typeof ApiPublicMikrotikRegisterRoute
   '/api/public/mikrotik/scan-report': typeof ApiPublicMikrotikScanReportRoute
@@ -404,6 +413,7 @@ export interface FileRoutesById {
   '/api/public/mikrotik/config-result': typeof ApiPublicMikrotikConfigResultRoute
   '/api/public/mikrotik/heartbeat': typeof ApiPublicMikrotikHeartbeatRoute
   '/api/public/mikrotik/onboard': typeof ApiPublicMikrotikOnboardRouteWithChildren
+  '/api/public/mikrotik/onboardtoken': typeof ApiPublicMikrotikOnboardtokenRoute
   '/api/public/mikrotik/portal-file': typeof ApiPublicMikrotikPortalFileRouteWithChildren
   '/api/public/mikrotik/register': typeof ApiPublicMikrotikRegisterRoute
   '/api/public/mikrotik/scan-report': typeof ApiPublicMikrotikScanReportRoute
@@ -450,6 +460,7 @@ export interface FileRouteTypes {
     | '/api/public/mikrotik/config-result'
     | '/api/public/mikrotik/heartbeat'
     | '/api/public/mikrotik/onboard'
+    | '/api/public/mikrotik/onboardtoken'
     | '/api/public/mikrotik/portal-file'
     | '/api/public/mikrotik/register'
     | '/api/public/mikrotik/scan-report'
@@ -494,6 +505,7 @@ export interface FileRouteTypes {
     | '/api/public/mikrotik/config-result'
     | '/api/public/mikrotik/heartbeat'
     | '/api/public/mikrotik/onboard'
+    | '/api/public/mikrotik/onboardtoken'
     | '/api/public/mikrotik/portal-file'
     | '/api/public/mikrotik/register'
     | '/api/public/mikrotik/scan-report'
@@ -539,6 +551,7 @@ export interface FileRouteTypes {
     | '/api/public/mikrotik/config-result'
     | '/api/public/mikrotik/heartbeat'
     | '/api/public/mikrotik/onboard'
+    | '/api/public/mikrotik/onboardtoken'
     | '/api/public/mikrotik/portal-file'
     | '/api/public/mikrotik/register'
     | '/api/public/mikrotik/scan-report'
@@ -569,6 +582,7 @@ export interface RootRouteChildren {
   ApiPublicMikrotikConfigResultRoute: typeof ApiPublicMikrotikConfigResultRoute
   ApiPublicMikrotikHeartbeatRoute: typeof ApiPublicMikrotikHeartbeatRoute
   ApiPublicMikrotikOnboardRoute: typeof ApiPublicMikrotikOnboardRouteWithChildren
+  ApiPublicMikrotikOnboardtokenRoute: typeof ApiPublicMikrotikOnboardtokenRoute
   ApiPublicMikrotikPortalFileRoute: typeof ApiPublicMikrotikPortalFileRouteWithChildren
   ApiPublicMikrotikRegisterRoute: typeof ApiPublicMikrotikRegisterRoute
   ApiPublicMikrotikScanReportRoute: typeof ApiPublicMikrotikScanReportRoute
@@ -806,6 +820,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicMikrotikOnboardRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/mikrotik/onboardtoken': {
+      id: '/api/public/mikrotik/onboardtoken'
+      path: '/api/public/mikrotik/onboardtoken'
+      fullPath: '/api/public/mikrotik/onboardtoken'
+      preLoaderRoute: typeof ApiPublicMikrotikOnboardtokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/mikrotik/portal-file': {
       id: '/api/public/mikrotik/portal-file'
       path: '/api/public/mikrotik/portal-file'
@@ -973,6 +994,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicMikrotikConfigResultRoute: ApiPublicMikrotikConfigResultRoute,
   ApiPublicMikrotikHeartbeatRoute: ApiPublicMikrotikHeartbeatRoute,
   ApiPublicMikrotikOnboardRoute: ApiPublicMikrotikOnboardRouteWithChildren,
+  ApiPublicMikrotikOnboardtokenRoute: ApiPublicMikrotikOnboardtokenRoute,
   ApiPublicMikrotikPortalFileRoute:
     ApiPublicMikrotikPortalFileRouteWithChildren,
   ApiPublicMikrotikRegisterRoute: ApiPublicMikrotikRegisterRoute,
