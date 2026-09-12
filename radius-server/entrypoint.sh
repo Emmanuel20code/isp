@@ -1,44 +1,32 @@
 #!/bin/bash
 
-# Ensure required environment variables are set
-if [ -z "$RADIUS_DOMAIN" ] || [ -z "$ADMIN_EMAIL" ]; then
-    echo "ERROR: RADIUS_DOMAIN and ADMIN_EMAIL environment variables must be set."
+# Debug: Print all environment variables
+echo "DEBUG: Environment variables:"
+env
+
+# Ensure required environment variable is set
+if [ -z "$TAILSCALE_AUTH_KEY" ]; then
+    echo "ERROR: TAILSCALE_AUTH_KEY must be set."
     exit 1
 fi
 
-echo "Starting entrypoint script..."
+echo "Starting Tailscale..."
+# --tun=userspace-networking is required for Railway containers
+tailscaled --tun=userspace-networking &
 
-# 1. Obtain/Renew certificate
-if [ ! -f /etc/letsencrypt/live/${RADIUS_DOMAIN}/fullchain.pem ]; then
-    echo "Attempting to obtain certificate for ${RADIUS_DOMAIN}..."
-    # Ensure directory exists for certbot
-    mkdir -p /etc/letsencrypt
-    
-    certbot certonly --standalone \
-      --non-interactive \
-      --agree-tos \
-      --email "${ADMIN_EMAIL}" \
-      -d "${RADIUS_DOMAIN}" \
-      --http-01-port 8080
-      
-    if [ $? -ne 0 ]; then
-        echo "ERROR: Certbot failed to obtain certificate."
-        exit 1
-    fi
-    echo "Certificate obtained successfully."
-else
-    echo "Certificate already exists."
-fi
+echo "Waiting for tailscaled to start..."
+sleep 5
 
-# Ensure radius user can read the certificates
-chown -R freerad:freerad /etc/letsencrypt
+echo "Authenticating Tailscale..."
+tailscale up --authkey="$TAILSCALE_AUTH_KEY"
 
-# 2. Start FreeRADIUS in foreground
-echo "Starting FreeRADIUS..."
-if [ -x /usr/sbin/radiusd ]; then
-    # -X for extensive debugging, remove once stable
-    /usr/sbin/radiusd -f -X
-else
-    echo "ERROR: radiusd executable not found at /usr/sbin/radiusd"
+echo "Tailscale connected. Starting FreeRADIUS..."
+# Check for FreeRADIUS in the correct location (often /usr/sbin/freeradius or /usr/sbin/radiusd depending on Debian version)
+# Using `which` to find the correct path dynamically
+RADIUS_PATH=$(which radiusd)
+if [ -z "$RADIUS_PATH" ]; then
+    echo "ERROR: radiusd executable not found."
     exit 1
 fi
+
+$RADIUS_PATH -f -X

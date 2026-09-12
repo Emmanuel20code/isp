@@ -353,81 +353,85 @@ export async function stkPushQuery(
 
     const url = `${HOSTS[creds.environment]}/mpesa/stkpushquery/v1/query`;
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000);
+    const MAX_RETRIES = 2;
+    let lastError: Error | null = null;
 
-    let res: Response;
-    try {
-      res = await fetch(url, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          BusinessShortCode: creds.shortcode,
-          Password: password,
-          Timestamp: timestamp,
-          CheckoutRequestID: checkoutRequestId,
-        }),
-        signal: controller.signal,
-      });
-    } catch (e: any) {
-      clearTimeout(timeout);
-      if (e.name === "AbortError") {
-        throw new Error(`[mpesa] stkPushQuery timed out after 30s: ${checkoutRequestId}`);
+    for (let i = 0; i <= MAX_RETRIES; i++) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30000);
+
+      try {
+        const res = await fetch(url, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            BusinessShortCode: creds.shortcode,
+            Password: password,
+            Timestamp: timestamp,
+            CheckoutRequestID: checkoutRequestId,
+          }),
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+        
+        let data: Record<string, unknown> = {};
+        try {
+          data = await res.json();
+        } catch {
+          return { resultCode: "pending", resultDesc: "Invalid JSON from Safaricom query", raw: {} };
+        }
+
+        if (!res.ok) {
+          return {
+            resultCode: "pending",
+            resultDesc:
+              (data.errorMessage as string) ||
+              (data.ResultDesc as string) ||
+              "Transaction is being processed",
+            raw: data,
+          };
+        }
+
+        const rawCode = String(data.ResultCode ?? "pending");
+        const rawDesc = String(data.ResultDesc ?? "");
+        const descLower = rawDesc.toLowerCase();
+
+        const isStillProcessing =
+          rawCode === "pending" ||
+          rawCode === "1001" ||
+          rawCode === "1019" ||
+          rawCode === "1025" ||
+          descLower.includes("processing") ||
+          descLower.includes("being processed") ||
+          descLower.includes("in process") ||
+          descLower.includes("unable to lock") ||
+          descLower.includes("pending");
+
+        if (isStillProcessing) {
+          return {
+            resultCode: "pending",
+            resultDesc: rawDesc || "Transaction is being processed",
+            raw: data,
+          };
+        }
+
+        return {
+          resultCode: rawCode,
+          resultDesc: rawDesc,
+          raw: data,
+        };
+      } catch (e: any) {
+        clearTimeout(timeout);
+        lastError = e;
+        console.warn(`[mpesa] stkPushQuery attempt ${i + 1} failed: ${e.message}`);
+        if (i < MAX_RETRIES) continue;
       }
-      throw new Error(`[mpesa] Network connection error during stkPushQuery: ${e.message}`);
     }
-    clearTimeout(timeout);
-
-    let data: Record<string, unknown> = {};
-    try {
-      data = await res.json();
-    } catch {
-      return { resultCode: "pending", resultDesc: "Invalid JSON from Safaricom query", raw: {} };
-    }
-
-    if (!res.ok) {
-      return {
-        resultCode: "pending",
-        resultDesc:
-          (data.errorMessage as string) ||
-          (data.ResultDesc as string) ||
-          "Transaction is being processed",
-        raw: data,
-      };
-    }
-
-    const rawCode = String(data.ResultCode ?? "pending");
-    const rawDesc = String(data.ResultDesc ?? "");
-    const descLower = rawDesc.toLowerCase();
-
-    // Safaricom status codes representing in-flight / processing states
-    const isStillProcessing =
-      rawCode === "pending" ||
-      rawCode === "1001" ||
-      rawCode === "1019" ||
-      rawCode === "1025" ||
-      descLower.includes("processing") ||
-      descLower.includes("being processed") ||
-      descLower.includes("in process") ||
-      descLower.includes("unable to lock") ||
-      descLower.includes("pending");
-
-    if (isStillProcessing) {
-      return {
-        resultCode: "pending",
-        resultDesc: rawDesc || "Transaction is being processed",
-        raw: data,
-      };
-    }
-
-    return {
-      resultCode: rawCode,
-      resultDesc: rawDesc,
-      raw: data,
-    };
+    
+    throw lastError;
   } catch (err) {
     console.debug(
       `[mpesa] Network connection timeout or error during stkPushQuery:`,
