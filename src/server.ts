@@ -109,6 +109,23 @@ export default {
         return await handleOnboardRequest(token, newRequest);
       }
 
+      if (url.pathname === "/api/users" && request.method === "POST") {
+        try {
+          const { username, plan } = await request.json();
+          const { createUser } = await import("./lib/user-manager");
+          const newUser = await createUser(username, plan);
+          return new Response(JSON.stringify({ status: "success", user: newUser }), {
+            status: 201,
+            headers: { "content-type": "application/json" },
+          });
+        } catch (error) {
+          return new Response(JSON.stringify({ error: "Failed to create user", message: error instanceof Error ? error.message : String(error) }), {
+            status: 500,
+            headers: { "content-type": "application/json" },
+          });
+        }
+      }
+
       if (url.pathname === "/api/radius/auth" && request.method === "POST") {
         const { username, password } = await request.json();
         const { supabaseAdmin } = await import("./integrations/supabase/client.server");
