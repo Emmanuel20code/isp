@@ -74,6 +74,7 @@ import {
   DollarSign,
   TrendingUp,
 } from "lucide-react";
+import { generateOnboardingCommand } from "@/lib/mikrotik";
 import { disableRadiusOnAllRouters } from "@/lib/radius-cleanup.server";
 import { MacScannerModal } from "@/components/MacScannerModal";
 import { RouterRevenueModal } from "@/components/RouterRevenueModal";

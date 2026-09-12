@@ -353,6 +353,9 @@ export async function stkPushQuery(
 
     const url = `${HOSTS[creds.environment]}/mpesa/stkpushquery/v1/query`;
 
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+
     const res = await fetch(url, {
       method: "POST",
       headers: {
@@ -365,7 +368,9 @@ export async function stkPushQuery(
         Timestamp: timestamp,
         CheckoutRequestID: checkoutRequestId,
       }),
+      signal: controller.signal,
     });
+    clearTimeout(timeout);
 
     let data: Record<string, unknown> = {};
     try {
