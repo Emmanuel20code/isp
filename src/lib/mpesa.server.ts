@@ -354,22 +354,31 @@ export async function stkPushQuery(
     const url = `${HOSTS[creds.environment]}/mpesa/stkpushquery/v1/query`;
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
+    const timeout = setTimeout(() => controller.abort(), 30000);
 
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        BusinessShortCode: creds.shortcode,
-        Password: password,
-        Timestamp: timestamp,
-        CheckoutRequestID: checkoutRequestId,
-      }),
-      signal: controller.signal,
-    });
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          BusinessShortCode: creds.shortcode,
+          Password: password,
+          Timestamp: timestamp,
+          CheckoutRequestID: checkoutRequestId,
+        }),
+        signal: controller.signal,
+      });
+    } catch (e: any) {
+      clearTimeout(timeout);
+      if (e.name === "AbortError") {
+        throw new Error(`[mpesa] stkPushQuery timed out after 30s: ${checkoutRequestId}`);
+      }
+      throw new Error(`[mpesa] Network connection error during stkPushQuery: ${e.message}`);
+    }
     clearTimeout(timeout);
 
     let data: Record<string, unknown> = {};
