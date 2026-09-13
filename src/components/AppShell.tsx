@@ -56,7 +56,6 @@ function useMenu(isSuperAdmin: boolean): Item[] {
       { label: "AI Operations", icon: Bot, to: "/ai-operations" },
       { label: "Data Grid", icon: Layers, to: "/datagrid" },
       { label: "PPPoE Manager", icon: Zap, to: "/pppoe" },
-      { label: "RADIUS Logs", icon: History, to: "/radius-logs" },
       { label: "Customers", icon: Users, to: "/customers" },
       { label: "Bound Devices", icon: Tv, to: "/devices" },
       { label: "Vouchers", icon: Ticket, to: "/vouchers" },
